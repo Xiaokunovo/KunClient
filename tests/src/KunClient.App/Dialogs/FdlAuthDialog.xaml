@@ -1,0 +1,145 @@
+﻿<Window x:Class="KunFlashTool.App.Dialogs.FdlAuthDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="FDL Auth" Height="660" Width="540"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Theme.Bg}"
+        ResizeMode="NoResize">
+
+    <Border x:Name="RootBorder" Background="{DynamicResource Theme.Bg}">
+        <Grid Background="{DynamicResource Theme.Bg}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>  <!-- 头部 -->
+                <RowDefinition Height="Auto"/>  <!-- blob 标签行 -->
+                <RowDefinition Height="Auto"/>  <!-- blob 框 -->
+                <RowDefinition Height="Auto"/>  <!-- 平台账号 + 计算 -->
+                <RowDefinition Height="Auto"/>  <!-- 账户条（常驻余额） -->
+                <RowDefinition Height="Auto"/>  <!-- 操作状态（临时） -->
+                <RowDefinition Height="Auto"/>  <!-- sig 标签行 -->
+                <RowDefinition Height="*"/>     <!-- sig 框 -->
+                <RowDefinition Height="Auto"/>  <!-- 底部 -->
+            </Grid.RowDefinitions>
+
+            <!-- 头部 -->
+            <Border Grid.Row="0" Padding="20,14" MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                    Background="{DynamicResource Theme.Accent}">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="FDL Auth" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock Text="blob 交给平台算 sig" Foreground="#CCFFFFFF" FontSize="11"
+                               VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- blob（设备读到的，只读） -->
+            <Grid Grid.Row="1" Margin="20,14,20,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Blob（设备读到的 token，只读）" FontSize="12"
+                           Foreground="{DynamicResource Theme.TextPrimary}" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="复制" Style="{StaticResource ThemedFlatButton}" Height="28"
+                        Padding="12,0" Click="BtnCopy_Click" ToolTip="把 blob 复制到剪贴板"/>
+            </Grid>
+            <Border Grid.Row="2" Margin="20,6,20,0" Background="{DynamicResource Theme.Surface}"
+                    BorderBrush="{DynamicResource Theme.BorderSubtle}" BorderThickness="1"
+                    CornerRadius="{StaticResource R.Control}" Padding="4">
+                <TextBox x:Name="TxtBlob" Style="{StaticResource ThemedInputBox}" Height="96"
+                         IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         BorderThickness="0" Background="Transparent"/>
+            </Border>
+
+            <!-- 平台账号 + 计算（2026-10-03 对接平台 FDL 接口：tool_login → tool_calc） -->
+            <Grid Grid.Row="3" Margin="20,14,20,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" MinWidth="0"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="平台账号" FontSize="12" Margin="0,0,8,0"
+                           Foreground="{DynamicResource Theme.TextPrimary}" VerticalAlignment="Center"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBox x:Name="TxtFdlUser" Style="{StaticResource ThemedInputBox}"
+                             Padding="8,3" FontSize="12" Width="120" ToolTip="平台普通用户账号，不要填管理员账号"/>
+                    <PasswordBox x:Name="TxtFdlPass" Style="{StaticResource ThemedPasswordBox}"
+                                 Padding="8,3" FontSize="12" Width="120" Margin="6,0,0,0"
+                                 ToolTip="平台账号密码，仅本机加密留存（DPAPI），不会写进程序"/>
+                </StackPanel>
+                <Button Grid.Column="2" x:Name="BtnFdlLogin" Content="登录" Margin="6,0,0,0"
+                        Style="{StaticResource ThemedFlatButton}" Height="28" Padding="12,0"
+                        Click="BtnFdlLogin_Click" ToolTip="换取 24 小时有效的受限令牌"/>
+                <Button Grid.Column="3" x:Name="BtnFdlCalc" Content="计算签名" Margin="6,0,0,0"
+                        Style="{StaticResource ThemedPrimaryButton}" Height="28" Padding="14,0"
+                        Click="BtnFdlCalc_Click" ToolTip="把上面的 blob 提交给平台，换回 FDL 签名"/>
+            </Grid>
+
+            <!-- 账户条（**常驻**）：余额与令牌状态不参与"操作状态"的轮换，
+                 否则每次算完签名，行内就变成「消耗/耗时」，余额被冲掉了。 -->
+            <Border Grid.Row="4" Margin="20,6,20,0" Background="{DynamicResource Theme.SurfaceAlt}"
+                    BorderBrush="{DynamicResource Theme.BorderSubtle}" BorderThickness="1"
+                    CornerRadius="{StaticResource R.Control}" Padding="10,7">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" x:Name="TxtFdlAccount" FontSize="11.5"
+                               Foreground="{DynamicResource Theme.TextSecondary}" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Text="未登录平台账号 · 登录后显示余额"/>
+                    <Button Grid.Column="1" x:Name="BtnFdlBalance" Content="刷新余额" Height="24" Padding="10,0"
+                            Style="{StaticResource ThemedFlatButton}" Click="BtnFdlBalance_Click"
+                            ToolTip="重新登录取回余额（令牌 24 小时有效）"/>
+                </Grid>
+            </Border>
+
+            <!-- 操作状态（临时）：进度 / 结果 / 错误 -->
+            <TextBlock Grid.Row="5" x:Name="TxtFdlStatus" Margin="20,6,20,0" FontSize="11"
+                       Foreground="{DynamicResource Theme.TextTertiary}" TextWrapping="Wrap"
+                       Text="也可以直接粘贴别人算好的 sig。"/>
+
+            <!-- sig（平台算出来的结果，也可手工粘贴覆盖） -->
+            <Grid Grid.Row="6" Margin="20,12,20,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Sig（平台返回的签名，十六进制 / Base64 都行）" FontSize="12"
+                           Foreground="{DynamicResource Theme.TextPrimary}" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="粘贴" Style="{StaticResource ThemedFlatButton}" Height="28"
+                        Padding="12,0" Click="BtnPaste_Click" ToolTip="从剪贴板粘贴签名数据"/>
+            </Grid>
+            <Border Grid.Row="7" Margin="20,6,20,0" Background="{DynamicResource Theme.Surface}"
+                    BorderBrush="{DynamicResource Theme.BorderSubtle}" BorderThickness="1"
+                    CornerRadius="{StaticResource R.Control}" Padding="4">
+                <TextBox x:Name="TxtSig" Style="{StaticResource ThemedInputBox}" Height="96"
+                         AcceptsReturn="True" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" VerticalContentAlignment="Top"
+                         TextChanged="TxtSig_TextChanged"
+                         BorderThickness="0" Background="Transparent"/>
+            </Border>
+
+            <!-- 底部 -->
+            <Border Grid.Row="8" VerticalAlignment="Bottom" Background="{DynamicResource Theme.SurfaceAlt}"
+                    CornerRadius="{StaticResource R.DialogBottom}" Padding="20,13" Margin="0,16,0,0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="10"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock Grid.Row="0" x:Name="TxtHint" Text="点「计算签名」自动获取，或粘贴 sig 后点「写入」" FontSize="11"
+                               Foreground="{DynamicResource Theme.TextTertiary}"/>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="取消" Width="80" Height="32" Click="BtnCancel_Click" Cursor="Hand" Margin="0,0,8,0"
+                                Style="{StaticResource ThemedFlatButton}"/>
+                        <Button x:Name="BtnWrite" Content="写入" Width="88" Height="32" Click="BtnWrite_Click" Cursor="Hand"
+                                Style="{StaticResource ThemedPrimaryButton}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

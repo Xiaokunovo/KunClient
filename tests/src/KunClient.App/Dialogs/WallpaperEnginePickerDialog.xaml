@@ -1,0 +1,85 @@
+<Window x:Class="KunFlashTool.App.Dialogs.WallpaperEnginePickerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Wallpaper Engine 动态壁纸" Height="612" Width="720"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource Theme.Bg}"
+        ResizeMode="NoResize">
+
+    <Border x:Name="RootBorder" Background="{DynamicResource Theme.Bg}">
+        <Grid Background="{DynamicResource Theme.Bg}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 头部：窗口已是原生窗口，圆角与投影交给系统 -->
+            <Border Grid.Row="0" Padding="20,14"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                    Background="{DynamicResource Theme.Accent}">
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Wallpaper Engine 动态壁纸" Foreground="White" FontSize="16" FontWeight="Bold" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtSubtitle" Text="自动扫描本机创意工坊；视频类用原片，场景/网页类用官方预览素材"
+                               Foreground="#CCFFFFFF" FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
+                </StackPanel>
+            </Border>
+
+            <!-- 说明 + 操作栏 -->
+            <Grid Grid.Row="1" Margin="20,14,20,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="TxtHintTop" Grid.Column="0" VerticalAlignment="Center" FontSize="11.5"
+                           TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextTertiary}"
+                           Text="「视频」类壁纸用原始视频，画质最好；「场景(scene.pkg)/网页」是 Wallpaper Engine 私有格式，第三方无法还原渲染，这里改用它自带的官方预览素材（preview.gif 会动、preview.jpg 是静态图），清晰度有限。"/>
+                <Button Grid.Column="1" Content="手动指定文件夹" Style="{StaticResource ThemedFlatButton}" Height="30"
+                        Padding="12,0" Margin="8,0,0,0" Click="BtnPickFolder_Click"
+                        ToolTip="如果 Wallpaper Engine 装在非默认位置，可以直接选它的 projects\myprojects 或创意工坊 431960 目录"/>
+                <Button Grid.Column="2" Content="重新扫描" Style="{StaticResource ThemedFlatButton}" Height="30"
+                        Padding="12,0" Margin="8,0,0,0" Click="BtnRefresh_Click"/>
+            </Grid>
+
+            <!-- 列表 -->
+            <Border Grid.Row="2" Margin="20,0,20,0" Background="{DynamicResource Theme.Surface}"
+                    BorderBrush="{DynamicResource Theme.BorderSubtle}" BorderThickness="1"
+                    CornerRadius="{StaticResource R.Control}" Padding="4">
+                <Grid>
+                    <DataGrid x:Name="DgItems" Style="{StaticResource ThemedDataGrid}" AutoGenerateColumns="False"
+                              IsReadOnly="True" HeadersVisibility="Column" SelectionMode="Single"
+                              GridLinesVisibility="None" CanUserAddRows="False" CanUserDeleteRows="False"
+                              FontSize="11.5" MouseDoubleClick="DgItems_MouseDoubleClick"
+                              SelectionChanged="DgItems_SelectionChanged">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="壁纸名称" Binding="{Binding Title}" Width="*"/>
+                            <DataGridTextColumn Header="类型" Binding="{Binding TypeText}" Width="210"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                    <TextBlock x:Name="TxtEmpty" Text="正在扫描本机的 Wallpaper Engine 壁纸…"
+                               HorizontalAlignment="Center" VerticalAlignment="Center" FontSize="12"
+                               TextWrapping="Wrap" TextAlignment="Center" MaxWidth="460"
+                               Foreground="{DynamicResource Theme.TextTertiary}"/>
+                </Grid>
+            </Border>
+
+            <!-- 底部 -->
+            <Border Grid.Row="3" Background="{DynamicResource Theme.SurfaceAlt}"
+                    CornerRadius="{StaticResource R.DialogBottom}" Padding="20,13" Margin="0,16,0,0">
+                <Grid>
+                    <TextBlock x:Name="TxtHint" Text="双击一行即可直接使用" FontSize="11" VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" Margin="0,0,12,0"
+                               Foreground="{DynamicResource Theme.TextTertiary}"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <Button Content="取消" Width="80" Height="32" Click="CloseButton_Click" Cursor="Hand" Margin="0,0,8,0"
+                                Style="{StaticResource ThemedFlatButton}"/>
+                        <Button x:Name="BtnConfirm" Content="使用该壁纸" Width="112" Height="32" Click="BtnConfirm_Click"
+                                Cursor="Hand" Style="{StaticResource ThemedPrimaryButton}" IsEnabled="False"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

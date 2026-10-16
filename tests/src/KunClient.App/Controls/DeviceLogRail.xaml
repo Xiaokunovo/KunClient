@@ -1,0 +1,58 @@
+<UserControl x:Class="KunFlashTool.App.Controls.DeviceLogRail"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Width="316" Margin="8,8,0,8">
+    <!-- 外壳共用左栏：设备信息 + 日志
+         （参考稿里「设备信息 / 日志」不是某一页的私有布局，而是三个页签共用同一列 ——
+          所以它属于外壳。页签内容挂在它右侧；页面自带左栏时外壳把这一列整块收起。）
+         日志框由 PageLog.GlobalMirror 汇聚**所有页面**的输出。 -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" MinHeight="120" />
+        </Grid.RowDefinitions>
+
+        <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="24" />
+                    <RowDefinition Height="24" />
+                    <RowDefinition Height="24" />
+                </Grid.RowDefinitions>
+
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="序列号:" Style="{StaticResource ToolFieldLabel}" />
+                <TextBlock x:Name="TxtDevice" Grid.Row="0" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                <TextBlock Grid.Row="0" Grid.Column="3" Text="设备模式:" Style="{StaticResource ToolFieldLabel}" />
+                <TextBlock x:Name="TxtMode" Grid.Row="0" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}" />
+
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="任务:" Style="{StaticResource ToolFieldLabel}" />
+                <TextBlock x:Name="TxtTask" Grid.Row="1" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                <TextBlock Grid.Row="1" Grid.Column="3" Text="进度:" Style="{StaticResource ToolFieldLabel}" />
+                <TextBlock x:Name="TxtPercent" Grid.Row="1" Grid.Column="4" Text="0%" Style="{StaticResource ToolFieldValue}" />
+
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="状态:" Style="{StaticResource ToolFieldLabel}" />
+                <TextBlock x:Name="TxtHint" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4"
+                           Text="就绪" Style="{StaticResource ToolFieldValue}" />
+            </Grid>
+        </HeaderedContentControl>
+
+        <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="日志">
+            <RichTextBox x:Name="TxtRailLog" Style="{StaticResource LogRichTextBox}"
+                         FontSize="11" VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Disabled">
+                <RichTextBox.Resources>
+                    <Style TargetType="Paragraph">
+                        <Setter Property="Margin" Value="0" />
+                    </Style>
+                </RichTextBox.Resources>
+            </RichTextBox>
+        </HeaderedContentControl>
+    </Grid>
+</UserControl>

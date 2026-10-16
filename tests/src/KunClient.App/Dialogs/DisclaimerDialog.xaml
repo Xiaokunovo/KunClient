@@ -1,0 +1,157 @@
+<Window x:Class="KunFlashTool.App.Dialogs.DisclaimerDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="使用条款与隐私说明" Height="712" Width="580"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Theme.Bg}"
+        ResizeMode="NoResize"
+        Closing="OnClosing">
+
+    <!-- 说明：本窗口是**原生窗口**（不再 WindowStyle=None / AllowsTransparency），
+         圆角与投影都由 Windows 自己画，和「合规确认」「登录」窗口一致。
+         标题只保留系统标题栏那一处，避免与下面的彩色头部重复。 -->
+    <Border x:Name="RootBorder" Background="{DynamicResource Theme.Bg}">
+        <Grid Background="{DynamicResource Theme.Bg}">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+
+            <!-- 彩色头部（视觉分区用，不再是标题栏） -->
+            <Border Grid.Row="0" Padding="20,15"
+                    MouseLeftButtonDown="TitleBar_MouseLeftButtonDown"
+                    Background="{DynamicResource Theme.Accent}">
+                <TextBlock Text="使用条款与隐私说明" Foreground="White" FontSize="18" FontWeight="Bold" VerticalAlignment="Center"/>
+            </Border>
+
+            <!-- Content -->
+            <ScrollViewer x:Name="DisclaimerScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto" Background="{DynamicResource Theme.Bg}">
+                <StackPanel Margin="25">
+                    <TextBlock Text="⚠️" FontSize="48" HorizontalAlignment="Center" Margin="0,10,0,15"/>
+
+                    <!-- 提示横幅：不要把 Opacity 加在外层 Border 上 —— WPF 里容器的 Opacity
+                         会**连带子元素一起**乘，之前 Opacity="0.15" 把这段提示文字压到 15%
+                         不透明度，实际等于隐形（横幅看着是空的）。
+                         正确做法：底色和文字分成两层，只让底层半透明。 -->
+                    <Grid Margin="0,0,0,15">
+                        <Border Background="{DynamicResource Theme.LogWarning}"
+                                CornerRadius="{StaticResource R.Card}"
+                                BorderThickness="1" BorderBrush="{DynamicResource Theme.LogWarning}"
+                                Opacity="0.18"/>
+                        <TextBlock Text="使用本工具前，请仔细阅读以下免责声明与个人信息处理说明"
+                                   TextWrapping="Wrap" Foreground="{DynamicResource Theme.LogWarning}"
+                                   FontSize="12" FontWeight="SemiBold" Margin="15,12"/>
+                    </Grid>
+
+                    <Border Style="{StaticResource CardBorder}" Padding="15" Margin="0,0,0,15">
+                        <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextSecondary}"
+                                   FontSize="11.5" LineHeight="20">
+                            <Run Text="1. 本工具仅供学习交流与个人设备维护使用，不得用于任何商业用途。" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="2. 仅限对本人合法所有、或已获得所有者明确授权的设备使用本工具；严禁用于来历不明、遗失或被盗的设备，严禁用于绕开设备的防盗与账号保护机制。" FontWeight="SemiBold" Foreground="{DynamicResource Theme.LogWarning}"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="3. 法律责任：下列行为不只是违约，还可能构成违法甚至犯罪，责任由您本人独立承担 ——" FontWeight="SemiBold" Foreground="{DynamicResource Theme.LogWarning}"/>
+                            <LineBreak/>
+                            <Run Text="   ① 未经授权获取、修改他人设备数据或对其实施控制：涉嫌《刑法》第285条（非法获取计算机信息系统数据、非法控制计算机信息系统罪；提供侵入、非法控制计算机信息系统的程序、工具罪）；"/>
+                            <LineBreak/>
+                            <Run Text="   ② 对他人设备的系统功能、数据或应用程序进行删除、修改、增加、干扰：涉嫌《刑法》第286条（破坏计算机信息系统罪）；"/>
+                            <LineBreak/>
+                            <Run Text="   ③ 恶意刷写、格式化、变砖他人设备：涉嫌《刑法》第275条（故意毁坏财物罪），并须依《民法典》承担赔偿责任；"/>
+                            <LineBreak/>
+                            <Run Text="   ④ 解锁、刷机、重置后转卖或自用他人遗失、被盗设备：涉嫌《刑法》第264条（盗窃罪）；"/>
+                            <LineBreak/>
+                            <Run Text="   ⑤ 明知设备系犯罪所得仍代为刷机、改机、解锁、销赃：涉嫌《刑法》第312条（掩饰、隐瞒犯罪所得、犯罪所得收益罪）；"/>
+                            <LineBreak/>
+                            <Run Text="   ⑥ 读取、收集、出售或提供他人设备中的个人信息：涉嫌《刑法》第253条之一（侵犯公民个人信息罪）；"/>
+                            <LineBreak/>
+                            <Run Text="   ⑦ 明知他人利用信息网络实施犯罪仍提供技术支持、工具、账号等帮助：涉嫌《刑法》第287条之二（帮助信息网络犯罪活动罪）。"/>
+                            <LineBreak/>
+                            <Run Text="   另：《反电信网络诈骗法》第14条禁止制造、买卖、提供或使用「批量账号、网络地址自动切换系统」等设备、软件；批量改机、批量注册、批量登录即落入该禁止情形（第42条：没收违法所得、罚款，情节严重者可行政拘留）。"/>
+                            <LineBreak/>
+                            <Run Text="   未达刑事标准的，仍可能依《网络安全法》第27条、《治安管理处罚法》关于侵入、干扰计算机信息系统的规定被行政处罚。" Foreground="{DynamicResource Theme.TextTertiary}"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="4. 刷机操作存在风险，包括但不限于：" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                            <LineBreak/>
+                            <Run Text="   • 设备变砖（无法正常启动）"/>
+                            <LineBreak/>
+                            <Run Text="   • 数据丢失（个人文件、应用、设置等）"/>
+                            <LineBreak/>
+                            <Run Text="   • 失去官方保修资格"/>
+                            <LineBreak/>
+                            <Run Text="   • 硬件损坏（极端情况下）"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="5. 使用本工具即表示您已了解并接受上述风险。" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="6. 开发者不对任何因使用本工具造成的直接或间接损失承担责任（法律强制性规定不得排除的除外）。" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="7. 操作前务必备份重要数据，并确保了解操作步骤。"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="8. 请在操作过程中保持设备电量充足，避免中途断电。"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="9. 个人信息：本工具仅收集账号运行所必需的最少信息（用户名、邮箱、登录记录、功能调用记录），" FontWeight="SemiBold" Foreground="{DynamicResource Theme.TextPrimary}"/>
+                            <LineBreak/>
+                            <Run Text="   不会读取或上传您设备中的照片、通讯录、短信、应用列表等任何内容，也不会回传您处理的固件与分区镜像。"/>
+                            <LineBreak/>
+                            <Run Text="   登录记录中会包含本次登录的来源 IP 地址，仅用于识别盗号、异常登录与滥用行为；"/>
+                            <LineBreak/>
+                            <Run Text="   该字段只有最高权限的开发者账号可以查看，不会下发给其它管理角色，也不会向第三方提供。本工具不含第三方统计与广告组件。"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="10. 账号与注销：您可随时联系我们查询、更正、删除个人信息或申请注销账号，我们将在核验后依法处理。"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="11. 未成年人：本工具面向成年人。未满 18 周岁请在监护人陪同下使用；未满 14 周岁须由监护人代为同意。"/>
+                            <LineBreak/><LineBreak/>
+                            <Run Text="完整条款请查阅官网《免责声明》《用户协议》《隐私政策》（可在「设置」页随时重新查看）。"/>
+                        </TextBlock>
+                    </Border>
+
+                    <!-- 同「提示横幅」：Opacity 必须只加在底层色块上，否则整卡文字隐形 -->
+                    <Grid Margin="0,0,0,15">
+                        <Border Background="{DynamicResource Theme.LogSuccess}"
+                                CornerRadius="{StaticResource R.Card}"
+                                BorderThickness="1" BorderBrush="{DynamicResource Theme.LogSuccess}"
+                                Opacity="0.14"/>
+                        <StackPanel Margin="15,12">
+                            <TextBlock Text="✅ 作者承诺" FontSize="13" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.LogSuccess}" Margin="0,0,0,8"/>
+                            <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       FontSize="11.5" LineHeight="20">
+                                <Run Text="作者：小坤ovo　　联系方式：2089449185@qq.com"/>
+                                <LineBreak/><LineBreak/>
+                                <Run Text="承诺不会在工具中植入任何恶意代码，不会收集与功能无关的个人信息，"/>
+                                <LineBreak/>
+                                <Run Text="也不会以任何方式向您索要账号密码；不会为任何违法用途提供帮助或规避手段。"/>
+                                <LineBreak/><LineBreak/>
+                                <Run Text="本工具与任何设备厂商无隶属、代理或合作关系；相关商标归各自权利人所有。"/>
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+
+                    <TextBlock x:Name="TxtLegalVersionNote" Text="条款版本：v3 · 更新日期 2026-09-24"
+                               TextAlignment="Center" Foreground="{DynamicResource Theme.TextTertiary}"
+                               FontSize="11" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+
+            <!-- Bottom Buttons -->
+            <Border Grid.Row="2" Background="{DynamicResource Theme.SurfaceAlt}" CornerRadius="{StaticResource R.DialogBottom}" Padding="20,15">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="TxtFooterHint" Grid.Column="0"
+                               Text="点击「同意」即表示您已阅读并接受以上条款"
+                               Foreground="{DynamicResource Theme.TextTertiary}" FontSize="11"
+                               TextWrapping="Wrap" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Button x:Name="BtnDisagree" Content="不同意" Width="100" Height="36" Click="Disagree_Click" Cursor="Hand" Margin="0,0,10,0"
+                                Style="{StaticResource ThemedFlatButton}"/>
+                        <Button x:Name="BtnAgree" Content="同意" Width="100" Height="36" Click="Agree_Click" Cursor="Hand"
+                                Style="{StaticResource ThemedPrimaryButton}"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

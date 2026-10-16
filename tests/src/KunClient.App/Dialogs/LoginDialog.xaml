@@ -1,0 +1,217 @@
+﻿<Window x:Class="KunFlashTool.App.Dialogs.LoginDialog"
+         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+         Title="登录 · KunClient" Height="608" Width="460"
+         WindowStartupLocation="CenterScreen"
+         WindowStyle="SingleBorderWindow"
+         Background="{DynamicResource Theme.Bg}"
+         ResizeMode="NoResize"
+         KeyDown="Window_KeyDown">
+
+    <!-- ① 外层：只负责给页面底色留一圈边，卡片感靠这圈留白 + 内层描边 -->
+    <Border x:Name="RootBorder" Background="{DynamicResource Theme.Bg}" Padding="16">
+        <!-- ② 卡片本体：1px 描边 + R.Dialog(12) 圆角，与所有弹窗同一档 -->
+        <Border Background="{DynamicResource Theme.Surface}"
+                BorderBrush="{DynamicResource Theme.Border}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource R.Dialog}"
+                Padding="28,24,28,18">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 表单区 —— 内容超高时必须能滚：
+                     注册页是四个页签里最高的一页，ApplyModeHeight 在小屏上会把窗口压到工作区高度以内；
+                     没有滚动条的话，注册页最下面的确认密码与法务勾选行会被**静默裁掉**。
+                     外层 Grid 的 MinHeight 绑到 ViewportHeight，是为了让内容比视口矮时仍保留
+                     「垂直居中」的观感 —— ScrollViewer 以无限高度测量子元素，
+                     若直接把 StackPanel 放进去，它的 VerticalAlignment=Center 会失效变成顶对齐。 -->
+                <ScrollViewer x:Name="FormScroll" Grid.Row="0"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <Grid MinHeight="{Binding ViewportHeight, ElementName=FormScroll}">
+                        <StackPanel VerticalAlignment="Center" Margin="0,2,0,2">
+
+                            <!-- 品牌头：纯文字彩色品牌（客户端已全面弃用图形 logo） -->
+                            <StackPanel Margin="0,0,0,22">
+                                <TextBlock HorizontalAlignment="Center" FontSize="16" FontWeight="Bold">
+                                    <Run Text="Kun" Foreground="{DynamicResource Theme.TextPrimary}" /><Run Text="Client" Foreground="{DynamicResource Theme.AccentText2}" />
+                                </TextBlock>
+                                <TextBlock Text="高通EDL线刷工具" FontSize="11"
+                                           Foreground="{DynamicResource Theme.TextTertiary}"
+                                           HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                            </StackPanel>
+
+                            <!-- 标题区：左对齐，与下面字段的左边界对齐（原来居中，视觉上会漂） -->
+                            <TextBlock x:Name="TitleText" Text="欢迎回来" FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,0,0,4"/>
+                            <TextBlock x:Name="SubText" Text="登录你的账户以继续使用" FontSize="11.5"
+                                       Foreground="{DynamicResource Theme.TextTertiary}" TextWrapping="Wrap" Margin="0,0,0,20"/>
+
+                            <!-- 模式切换：下划线页签。四等分 + 足够宽的点击区（Padding 0,10），
+                                 整行下方一条 1px 分隔线把「页签」与「表单」在视觉上分开 ——
+                                 比原来只有选中项一条短线更清楚，也不必靠药丸容器做分组。 -->
+                            <Border BorderThickness="0,0,0,1" BorderBrush="{DynamicResource Theme.Border}" Margin="0,0,0,20">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Border x:Name="LoginTab" Grid.Column="0" BorderThickness="0,0,0,2"
+                                            BorderBrush="{DynamicResource Theme.Accent}" Padding="0,10"
+                                            Cursor="Hand" MouseLeftButtonDown="LoginTab_Click">
+                                        <TextBlock x:Name="LoginTabText" Text="密码登录" Foreground="{DynamicResource Theme.TextPrimary}" FontWeight="Bold"
+                                                   FontSize="12" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <Border x:Name="KeyTab" Grid.Column="1" BorderThickness="0,0,0,2"
+                                            BorderBrush="Transparent" Padding="0,10"
+                                            Cursor="Hand" MouseLeftButtonDown="KeyTab_Click">
+                                        <TextBlock x:Name="KeyTabText" Text="密钥登录" Foreground="{DynamicResource Theme.TextTertiary}"
+                                                   FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <Border x:Name="EmailTab" Grid.Column="2" BorderThickness="0,0,0,2"
+                                            BorderBrush="Transparent" Padding="0,10"
+                                            Cursor="Hand" MouseLeftButtonDown="EmailTab_Click">
+                                        <TextBlock x:Name="EmailTabText" Text="邮箱登录" Foreground="{DynamicResource Theme.TextTertiary}"
+                                                   FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <Border x:Name="RegisterTab" Grid.Column="3" BorderThickness="0,0,0,2"
+                                            BorderBrush="Transparent" Padding="0,10"
+                                            Cursor="Hand" MouseLeftButtonDown="RegisterTab_Click">
+                                        <TextBlock x:Name="RegisterTabText" Text="注册" Foreground="{DynamicResource Theme.TextTertiary}"
+                                                   FontWeight="SemiBold" FontSize="12" HorizontalAlignment="Center"/>
+                                    </Border>
+                                </Grid>
+                            </Border>
+
+                            <!-- 状态提示：放在标题与表单之间，出错时一眼能看到，不必往下找 -->
+                            <Border x:Name="StatusBorder" CornerRadius="{StaticResource R.Control}" Padding="12,9" Margin="0,0,0,16"
+                                    Visibility="Collapsed">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock x:Name="StatusIcon" FontSize="13" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                                    <TextBlock x:Name="StatusText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </Border>
+
+                            <!-- 登录：用户名 / 密码 / 记住登录状态（密码不再落盘，见 LoginStorage） -->
+                            <StackPanel x:Name="LoginPanel">
+                                <TextBlock Text="用户名" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <TextBox x:Name="UsernameBox" Style="{StaticResource ThemedInputBox}"
+                                         FontSize="12.5" Margin="0,0,0,16" KeyDown="TextBox_KeyDown"/>
+
+                                <TextBlock Text="密码" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <PasswordBox x:Name="PasswordBox" Style="{StaticResource ThemedPasswordBox}"
+                                             FontSize="12.5" Margin="0,0,0,4" KeyDown="PasswordBox_KeyDown"/>
+
+                                <CheckBox x:Name="RememberMe" Content="记住登录状态"
+                                          Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12"
+                                          VerticalAlignment="Center" Margin="0,8,0,0"
+                                          Style="{StaticResource ThemedCheckBox}"/>
+                            </StackPanel>
+
+                            <!-- 密钥登录 -->
+                            <StackPanel x:Name="KeyPanel" Visibility="Collapsed">
+                                <TextBlock Text="密钥" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <TextBox x:Name="KeyBox" Style="{StaticResource ThemedInputBox}"
+                                         FontSize="12.5" Tag="KUN-XXXX-XXXX-XXXX" KeyDown="KeyBox_KeyDown"/>
+                                <TextBlock Text="形如 KUN-XXXX-XXXX-XXXX，可在控制台「我的密钥」里生成"
+                                           FontSize="11" Foreground="{DynamicResource Theme.TextTertiary}"
+                                           TextWrapping="Wrap" Margin="0,8,0,0"/>
+                            </StackPanel>
+
+                            <!-- 邮箱登录 -->
+                            <StackPanel x:Name="EmailPanel" Visibility="Collapsed">
+                                <TextBlock Text="邮箱" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <TextBox x:Name="EmailBox" Style="{StaticResource ThemedInputBox}"
+                                         FontSize="12.5" Margin="0,0,0,16"/>
+
+                                <TextBlock Text="验证码" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" x:Name="CodeBox" Style="{StaticResource ThemedInputBox}"
+                                             FontSize="12.5" Margin="0,0,10,0" KeyDown="CodeBox_KeyDown"/>
+                                    <Button Grid.Column="1" x:Name="SendCodeBtn" Content="发送验证码" Click="SendCode_Click"
+                                            Style="{StaticResource ThemedFlatButton}" Height="34" MinWidth="104"/>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- 注册 -->
+                            <StackPanel x:Name="RegisterPanel" Visibility="Collapsed">
+                                <TextBlock Text="邮箱" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <TextBox x:Name="RegEmailBox" Style="{StaticResource ThemedInputBox}"
+                                         FontSize="12.5" Margin="0,0,0,14"/>
+
+                                <TextBlock Text="验证码" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <Grid Margin="0,0,0,14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" x:Name="RegCodeBox" Style="{StaticResource ThemedInputBox}"
+                                             FontSize="12.5" Margin="0,0,10,0"/>
+                                    <Button Grid.Column="1" x:Name="RegSendCodeBtn" Content="发送验证码" Click="RegSendCode_Click"
+                                            Style="{StaticResource ThemedFlatButton}" Height="34" MinWidth="104"/>
+                                </Grid>
+
+                                <TextBlock Text="用户名（不能是纯数字）" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <TextBox x:Name="RegUsernameBox" Style="{StaticResource ThemedInputBox}"
+                                         FontSize="12.5" Margin="0,0,0,14"/>
+
+                                <TextBlock Text="密码（至少 6 位）" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <PasswordBox x:Name="RegPasswordBox" Style="{StaticResource ThemedPasswordBox}"
+                                             FontSize="12.5" Margin="0,0,0,14"/>
+
+                                <TextBlock Text="确认密码" Style="{StaticResource ThemedFieldLabel}" Margin="0,0,0,7"/>
+                                <PasswordBox x:Name="RegConfirmBox" Style="{StaticResource ThemedPasswordBox}"
+                                             FontSize="12.5"/>
+
+                                <!-- 法务合规：不勾选不允许注册。服务端 /api/auth/code-register
+                                     还会独立再拦一次，前端勾选不是唯一门槛。
+                                     勾选框与条款文字**并列**（不是把文字当 Content）—— 否则点条款链接会顺带把勾选切换掉。 -->
+                                <StackPanel Orientation="Horizontal" Margin="0,16,0,0">
+                                    <CheckBox x:Name="RegAgree" Style="{StaticResource ThemedCheckBox}"
+                                              VerticalAlignment="Center" Margin="0,0,4,0"/>
+                                    <TextBlock VerticalAlignment="Center" FontSize="11.5" TextWrapping="Wrap"
+                                               Foreground="{DynamicResource Theme.TextTertiary}">
+                                        <Run Text="我已阅读并同意" />
+                                        <Hyperlink Click="OpenTerms_Click" Foreground="{DynamicResource Theme.AccentText2}"><Run Text="《用户协议》"/></Hyperlink><Hyperlink Click="OpenPrivacy_Click" Foreground="{DynamicResource Theme.AccentText2}"><Run Text="《隐私政策》"/></Hyperlink><Hyperlink Click="OpenDisclaimer_Click" Foreground="{DynamicResource Theme.AccentText2}"><Run Text="《免责声明》"/></Hyperlink>
+                                    </TextBlock>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </Grid>
+                </ScrollViewer>
+
+                <!-- ③ 底部动作区：主按钮 + 页脚，固定在卡片底部 -->
+                <StackPanel Grid.Row="1" Margin="0,16,0,0">
+                    <Button x:Name="LoginButton" Content="登 录" Click="Login_Click" Cursor="Hand"
+                            Style="{StaticResource ThemedPrimaryButton}"
+                            Height="38" FontSize="12.5" FontWeight="SemiBold"/>
+                    <Button x:Name="KeyLoginButton" Content="密钥登录" Click="KeyLogin_Click" Cursor="Hand"
+                            Style="{StaticResource ThemedPrimaryButton}"
+                            Height="38" FontSize="12.5" FontWeight="SemiBold" Visibility="Collapsed"/>
+                    <Button x:Name="EmailLoginButton" Content="邮箱登录" Click="EmailLogin_Click" Cursor="Hand"
+                            Style="{StaticResource ThemedPrimaryButton}"
+                            Height="38" FontSize="12.5" FontWeight="SemiBold" Visibility="Collapsed"/>
+                    <Button x:Name="RegisterButton" Content="创建账户" Click="Register_Click" Cursor="Hand"
+                            Style="{StaticResource ThemedPrimaryButton}" Height="38" FontSize="12.5" FontWeight="SemiBold"
+                            Visibility="Collapsed"
+                            Background="{DynamicResource Theme.SuccessBg}"
+                            BorderBrush="{DynamicResource Theme.LogSuccess}"
+                            Foreground="{DynamicResource Theme.LogSuccess}"/>
+
+                    <!-- 版本号 + 署名 + 当前时间。由代码按秒刷新 -->
+                    <TextBlock x:Name="TxtFooter" HorizontalAlignment="Center" Margin="0,14,0,0"
+                               FontSize="10.5" Foreground="{DynamicResource Theme.TextTertiary}"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Border>
+</Window>

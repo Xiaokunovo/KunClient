@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <UseWPF>true</UseWPF>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="PlatformTools\README.md" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 单测要驱动 FlashSession 的 OPLUS 签名通道序列（digest/verify/signature/sha256init 的
+         顺序与原始二进制包），不为测试扩大公共 API。 -->
+    <InternalsVisibleTo Include="KunFlashTool.Core.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LibUsbDotNet" Version="3.0.224" />
+    <PackageReference Include="System.Management" Version="10.0.0" />
+    <PackageReference Include="System.IO.Ports" Version="10.0.0" />
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
+    <PackageReference Include="Google.Protobuf" Version="3.33.2" />
+  </ItemGroup>
+
+</Project>

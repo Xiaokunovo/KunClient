@@ -1,0 +1,9 @@
+# 统一行尾：仓库内一律存 LF，检出也是 LF。
+# 源码当前就是 LF，这样可避免受全局 core.autocrlf 影响而在检出时被批量改写。
+* text=auto eol=lf
+
+# 二进制文件不做行尾转换
+*.png  binary
+*.ico  binary
+*.jpg  binary
+*.zip  binary

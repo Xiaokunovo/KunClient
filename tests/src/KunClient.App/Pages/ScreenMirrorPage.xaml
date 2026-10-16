@@ -1,0 +1,221 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.ScreenMirrorPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ═══════════════════════════════════════════════════════════════════
+         投屏 · 经典桌面工具箱版式（换肤改排）
+         ───────────────────────────────────────────────────────────────────
+         改排要点（参考稿的两列配方：左列 316 = 信息 + 日志，右列 = 主操作）：
+           ① 删掉页头标题栏 PageHeaderBar（页签名「投屏」就是标题），
+              页面根改成 Grid + Theme.BgTint + Tool.PagePad；
+           ② 四张卡片（投屏设置 / 投屏控制 / 快捷操作 / 日志）全部换成 ToolGroup 分组框，
+              原来每张卡片里的 <TextBlock Style="SectionHeader"/> 标题行删掉（标题已变成 Header）；
+           ③ 左列 316px（本页在 MainWindow 页表里标了 OwnRail:true，外壳共用左栏让位，
+              所以「设备信息 + 日志」由页面自己出）：
+                ·「设备信息」分组框 —— 本页自己不探测设备，读数与外壳左栏同源：
+                  设备/模式 ← DeviceStateHub（谁探测谁汇报），任务/进度/状态 ← ShellStatus
+                  （本页各操作的 PageLog.Section 已把任务名上报），由代码后置的
+                  SyncRailDevice / SyncRailStatus 刷新（只做了加法）；
+                ·「投屏设置」分组框（分辨率 / 比特率 / 帧率 + 4 个勾选框 + 重新下载 scrcpy）；
+                ·「日志」分组框（TxtLog 撑满左列剩余高度，与外壳左栏 DeviceLogRail 同形）；
+           ④ 右列：主操作分组框「投屏控制」（USB / 无线 / 停止 + 设备IP 连接）与其下的「快捷操作」，
+              整列套一个 ScrollViewer（VerticalScrollBarVisibility="Auto"）—— 窗口矮时右列自己滚。
+           ⑤ 两列之间的 8px 间隔用独立列给，不写进分组框 Margin（分组框间距统一由 ToolGroup 的 8px 决定）。
+           ⑥ 外壳四层（菜单栏 / 页签 / 通栏双进度条 / 分段状态栏）由 MainWindow 承担，
+              本页因此不再放 PageHeaderBar、页内进度条、页内状态栏；
+              控件高度一律字面 26（三个下拉与「重新下载 scrcpy」原为 30/32，已收口），
+              间距一律字面 6/8/10。
+         🔴 隐形契约（重构布局时不得破坏）：
+            · TxtLog 的 x:Name 一个字不能改 —— BasePage.LogTarget / PageLog 按名字找日志框；
+            · NotifyBar / NotifyIcon / NotifyText 三件套结构不可改 —— BasePage 靠名字弹提示；
+            · CmbResolution / CmbBitrate / CmbFps / ChkAudio / ChkCrop / ChkStayAwake / ChkOtori /
+              TxtDeviceIp 由各 Click 处理器直接读；左栏新增的 TxtRail* 读数名只被本页 .cs 的同步方法引用。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="{StaticResource Tool.PagePad}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />                <!-- 通知条 -->
+            <!-- 主区地板 300：左列「投屏设置 + 日志」至少要这么高才不挤 -->
+            <RowDefinition Height="*" MinHeight="300" />
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：BasePage 用 FindName("NotifyBar") 取它，且要求
+             Border > StackPanel > TextBlock#NotifyIcon / #NotifyText，结构不可改。
+             底色/描边走主题（经典外观：淡蓝底 + 蓝描边）；显示时由 ShowNotify/Notify.Show 按成败覆写。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed"
+                CornerRadius="{StaticResource R.Control}" Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center" />
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- 左列 316：与外壳左栏（DeviceLogRail）同宽 —— 两者不会同时出现 -->
+                <ColumnDefinition Width="316" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" MinWidth="0" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ── 左列：设备信息 + 投屏参数 + 日志 ── -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="140" />
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备信息（本页自己不探测设备，读数与外壳左栏同源：
+                     设备/模式 ← DeviceStateHub，任务/进度/状态 ← ShellStatus，
+                     由代码后置的 SyncRailDevice / SyncRailStatus 刷新 —— 只做了加法） -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="26" />
+                            <RowDefinition Height="26" />
+                            <RowDefinition Height="26" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="序列号:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailDevice" Grid.Row="0" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="模式:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailMode" Grid.Row="0" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="任务:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailTask" Grid.Row="1" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="1" Grid.Column="3" Text="进度:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailPercent" Grid.Row="1" Grid.Column="4" Text="0%" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="状态:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailHint" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4"
+                                   Text="就绪" Style="{StaticResource ToolFieldValue}" />
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 分组框：投屏设置（scrcpy 参数） -->
+                <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="投屏设置">
+                    <StackPanel>
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="62" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="分辨率:" Style="{StaticResource ToolFieldLabel}" />
+                            <ComboBox x:Name="CmbResolution" Grid.Column="1" Style="{StaticResource ThemedComboPill}" Height="26" FontSize="12">
+                                <ComboBoxItem Content="原始分辨率" IsSelected="True" />
+                                <ComboBoxItem Content="1920x1080" />
+                                <ComboBoxItem Content="1280x720" />
+                                <ComboBoxItem Content="800x480" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="62" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="比特率:" Style="{StaticResource ToolFieldLabel}" />
+                            <ComboBox x:Name="CmbBitrate" Grid.Column="1" Style="{StaticResource ThemedComboPill}" Height="26" FontSize="12">
+                                <ComboBoxItem Content="8M" IsSelected="True" />
+                                <ComboBoxItem Content="4M" />
+                                <ComboBoxItem Content="16M" />
+                                <ComboBoxItem Content="32M" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="62" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="帧率:" Style="{StaticResource ToolFieldLabel}" />
+                            <ComboBox x:Name="CmbFps" Grid.Column="1" Style="{StaticResource ThemedComboPill}" Height="26" FontSize="12">
+                                <ComboBoxItem Content="60" IsSelected="True" />
+                                <ComboBoxItem Content="30" />
+                                <ComboBoxItem Content="25" />
+                            </ComboBox>
+                        </Grid>
+
+                        <WrapPanel Margin="0,2,0,0">
+                            <CheckBox x:Name="ChkAudio" Content="录制音频" IsChecked="True" Style="{StaticResource ThemedCheckBox}" Margin="0,0,16,6" VerticalAlignment="Center" />
+                            <CheckBox x:Name="ChkCrop" Content="裁剪屏幕" Style="{StaticResource ThemedCheckBox}" Margin="0,0,16,6" VerticalAlignment="Center" />
+                            <CheckBox x:Name="ChkStayAwake" Content="保持唤醒" IsChecked="True" Style="{StaticResource ThemedCheckBox}" Margin="0,0,16,6" VerticalAlignment="Center" />
+                            <CheckBox x:Name="ChkOtori" Content="OTG控制" Style="{StaticResource ThemedCheckBox}" Margin="0,0,16,6" VerticalAlignment="Center" />
+                        </WrapPanel>
+
+                        <Button Content="下载 scrcpy" Style="{StaticResource ThemedFlatButton}"
+                                Click="BtnDownloadScrcpy_Click" Height="26" HorizontalAlignment="Left" Margin="0,4,0,0" />
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- 分组框：日志（参考稿左列底部那块，撑满左列剩余高度） -->
+                <HeaderedContentControl Grid.Row="2" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 FontSize="11"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Auto"
+                                 IsReadOnly="True" IsUndoEnabled="False" IsDocumentEnabled="False">
+                        <RichTextBox.Resources>
+                            <!-- RichTextBox 的段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0" />
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：主操作（投屏控制 + 快捷操作） ── -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- 分组框：投屏控制（本页主操作） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="投屏控制">
+                        <StackPanel>
+                            <WrapPanel>
+                                <Button Content="USB 投屏" Style="{StaticResource ThemedPrimaryButton}" Click="BtnStartUsb_Click" Height="26" Margin="0,0,8,8" />
+                                <Button Content="无线投屏" Style="{StaticResource ThemedPrimaryButton}" Click="BtnStartWifi_Click" Height="26" Margin="0,0,8,8" />
+                                <Button Content="停止投屏" Style="{StaticResource ThemedFlatButton}" Click="BtnStopMirror_Click" Height="26" Margin="0,0,8,8" />
+                            </WrapPanel>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="62" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="设备IP:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBox Grid.Column="1" x:Name="TxtDeviceIp" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Margin="0,0,8,0" Text="192.168." />
+                                <Button Grid.Column="2" Content="连接" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnConnectWifi_Click" />
+                            </Grid>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：快捷操作（按键与系统动作） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="快捷操作">
+                        <WrapPanel>
+                            <Button Content="截图" Style="{StaticResource ThemedFlatButton}" Click="BtnScreenshot_Click" Height="26" Margin="0,0,8,8" />
+                            <Button Content="录屏" Style="{StaticResource ThemedFlatButton}" Click="BtnRecord_Click" Height="26" Margin="0,0,8,8" />
+                            <Button Content="全屏" Style="{StaticResource ThemedFlatButton}" Click="BtnFullscreen_Click" Height="26" Margin="0,0,8,8" />
+                            <Button Content="息屏投屏" Style="{StaticResource ThemedFlatButton}" Click="BtnTurnOff_Click" Height="26" Margin="0,0,8,8" />
+                            <Button Content="返回" Style="{StaticResource ThemedFlatButton}" Click="BtnBack_Click" Height="26" Margin="0,0,8,8" />
+                            <Button Content="Home" Style="{StaticResource ThemedFlatButton}" Click="BtnHome_Click" Height="26" Margin="0,0,8,8" />
+                            <Button Content="最近任务" Style="{StaticResource ThemedFlatButton}" Click="BtnRecent_Click" Height="26" />
+                        </WrapPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</services:BasePage>

@@ -1,0 +1,128 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    内存加载壳（#97）。这是**真正被发布的入口程序集**：它把混淆后的
+    KunClient.dll / KunClient.Core.dll 以**密文**内嵌，运行期解密后 Assembly.Load(byte[])，
+    于是静态提取工具（dotnet-bundle 解包器、binwalk 式字节雕刻）拿不到可加载的程序集。
+
+    为什么要做（以及为什么收益只有这一条）：
+      · 单文件包**本来就**把托管程序集从内存加载，不落盘（DOTNET_BUNDLE_EXTRACT_BASE_DIR 实测为空）。
+        所以「防止 dll 落盘被替换」这个理由**不成立**。
+      · 但 EnableCompressionInSingleFile 被禁（NETSDK1176）→ KunClient.dll 的字节是**原样**躺在
+        exe 里的，能被直接 carve 出来。加密解决的就是这一条。
+      · 诚实说明：XOR 只是「混淆」不是「密码学保护」——密钥必须随程序走，任何人逆向 loader 都能拿到。
+        它挡住的是**自动化工具**，挡不住有耐心的分析者（对方还能从内存 dump）。不要高估它。
+
+    ⚠️ 入口程序集名**必须**不同于 KunClient，否则：
+      · Assembly.Load("KunClient")（pack URI 就是这么找类型的）会直接命中壳自己，真正的程序集永不加载；
+      · 相对 pack URI 会解析到壳身上（壳里没有 BAML）。
+      所以用 KunClientLoader，运行期再反射强制 Application.ResourceAssembly。
+
+    ⚠️ 发布文件名由 obfuscate-build.js 改成 KunClient.exe（用户下载的是这个名字）。
+
+    构建方式：**只能**通过 `node tools/obfuscate-build.js`。
+    它负责「混淆 → 生成加密载荷 → 构建壳」，缺一步都会得到错误的产物。
+  -->
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <RollForward>LatestMajor</RollForward>
+    <UseWPF>true</UseWPF>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>KunClientLoader</AssemblyName>
+    <RootNamespace>KunFlashTool.Shell</RootNamespace>
+    <StartupObject>KunFlashTool.Shell.ShellMain</StartupObject>
+    <ApplicationIcon>..\KunClient.App\Assets\logo.ico</ApplicationIcon>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+    <NoWarn>$(NoWarn);MSB3270;NU1701</NoWarn>
+  </PropertyGroup>
+
+  <!-- 🔴 反调试后门的编译期闸门（2026-10-09 逆向报告 D1 之后加）。
+       原来 KUN_ALLOW_DEBUG=1 这个环境变量在**发行包**里也能关掉全部反调试/反 dump 检测
+       —— 等于把保护的开关留在了攻击者手里（设个环境变量即可，不需要碰 exe）。
+       现在只有显式带 KUNCLIENT_DEV 符号的构建（Debug，或 -p:DefineConstants=KUNCLIENT_DEV）
+       才编译进那段判定；发行构建里 BackdoorAllowed() 恒为 false。 -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);KUNCLIENT_DEV</DefineConstants>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <!-- ⚠️ 版本号第 5 处（另 4 处：KunClient.App.csproj、UpdateService.CurrentVersion、
+         website data.ts FALLBACK_VERSION、线上 app_settings.version）。改版本时别漏这里，
+         否则 exe 的文件属性会显示成旧版本。
+         ⚠️ 2026-10-07 追加：文件属性**不跟随 <Version>** —— 发布的 exe 是**本工程**的产物，
+         它读的是 FileVersion / ProductVersion 这两个显式属性，没有就回落成 1.1.x.0。
+         所以发版时这里要跟着 <Version> 一起改（这次 1.1.3 → 1.1.3.1 就差点漏掉）。 -->
+    <Version>1.1.4.1</Version>
+    <FileVersion>1.1.4.1</FileVersion>
+    <AssemblyVersion>1.1.4.1</AssemblyVersion>
+    <ProductVersion>1.1.4.1</ProductVersion>
+    <Authors>小坤ovo</Authors>
+    <Description>KunClient - EDL Flash Tool</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ⭐ 这里**必须**是普通 ProjectReference（不能加 ReferenceOutputAssembly="false"）。
+         实测：加上它之后整张依赖图都会被掐掉 —— 壳的 deps.json 变成**空**，
+         HandyControl / CommunityToolkit / LibUsbDotNet / Google.Protobuf / SharpCompress /
+         Newtonsoft.Json / System.IO.Ports / System.Management 一个都不进包，
+         exe 只有 2.0 MB（正常 ~6.5 MB），程序一启动就 FileNotFoundException。
+         （清单里原来还有 Ookii.Dialogs.Wpf —— 已于 2026-09-28 移除，选目录改用
+          .NET 8+ 自带的 Microsoft.Win32.OpenFolderDialog，见 App 的 csproj 注释。）
+
+         所以：**用普通引用拿依赖，再用下面两个 Target 把自家那两个程序集从发布列表里摘掉。**
+         否则它俩会以**明文**进包，与密文载荷同时存在 → 加密彻底白做。 -->
+    <ProjectReference Include="..\KunClient.App\KunClient.App.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 加密载荷由 obfuscate-build.js 生成到临时目录，靠属性传进来（不污染仓库）。
+         LogicalName 用不带目录的文件名，C# 侧按 "KunClient.dll.enc" 取。 -->
+    <EmbeddedResource Include="$(ShellPayloadDir)\*.enc" Condition="'$(ShellPayloadDir)' != ''">
+      <LogicalName>%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+    <!-- 摘要（2026-09-30 增强）：明文的 SHA-256，运行期解密后逐字节比对。
+         它解决的是**可靠性**而不是保密 —— 摘要在包里是可见的，想改的人连摘要一起改就行；
+         真正的价值是能把「密钥算错 / 载荷坏了 / 被替换」和「程序本身有 bug」分开，
+         上次换算法时最缺的就是这个（当时只能用 'MZ' 两个字节猜）。 -->
+    <EmbeddedResource Include="$(ShellPayloadDir)\*.sha" Condition="'$(ShellPayloadDir)' != ''">
+      <LogicalName>%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <!-- 缺载荷就报错退出：否则会静默产出一个「一启动就说找不到内嵌资源」的壳。 -->
+  <Target Name="EnsureShellPayload" BeforeTargets="BeforeBuild;BeforePublish">
+    <Error Condition="'$(ShellPayloadDir)' == ''"
+           Text="ShellPayloadDir 未设置。壳**必须**用 `node tools/obfuscate-build.js` 构建（它生成加密载荷并传入本属性）；直接 dotnet build 是错的。" />
+    <Error Condition="!Exists('$(ShellPayloadDir)\KunClient.dll.enc')"
+           Text="找不到载荷 $(ShellPayloadDir)\KunClient.dll.enc" />
+    <Error Condition="!Exists('$(ShellPayloadDir)\KunClient.Core.dll.enc')"
+           Text="找不到载荷 $(ShellPayloadDir)\KunClient.Core.dll.enc" />
+    <Error Condition="!Exists('$(ShellPayloadDir)\KunClient.dll.sha')"
+           Text="找不到摘要 $(ShellPayloadDir)\KunClient.dll.sha —— 载荷与摘要必须由同一版 obfuscate-build.js 一起生成" />
+  </Target>
+
+  <!-- ⭐ 把 KunClient.dll / KunClient.Core.dll 从发布产物与单文件包里摘掉。
+       两个 Target 分别对应「发布文件列表」和「单文件打包清单」两道 —— 只摘一处，
+       另一处仍会把明文塞进包。obfuscate-build.js 的 assertShellExcludesModules 会独立复核，
+       摘不干净就直接 fail，不会静默发出明文。 -->
+  <Target Name="StripAppAssembliesFromPublish" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <ResolvedFileToPublish Remove="@(ResolvedFileToPublish)"
+                             Condition="'%(Filename)' == 'KunClient' or '%(Filename)' == 'KunClient.Core'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="StripAppAssembliesFromBundle" BeforeTargets="_ComputeFilesToBundleForBundle;GenerateBundle">
+    <ItemGroup>
+      <FilesToBundle Remove="@(FilesToBundle)"
+                     Condition="'%(Filename)' == 'KunClient' or '%(Filename)' == 'KunClient.Core'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

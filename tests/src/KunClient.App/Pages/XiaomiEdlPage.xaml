@@ -1,0 +1,173 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.XiaomiEdlPage"
+              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ⚠️ 本页无页内进度条：进度/状态一律上报 ShellStatus，由外壳 ③ 通栏双进度条 + ④ 分段状态栏承担。 -->
+    <!-- ═══════════════════════════════════════════════════════════════════
+         小米 EDL 通道（照 FDL 计算端的流程）：
+         fastboot getvar unlocked → yes 直接 oem edl；
+         no → getvar token 取 blob → FDL Auth 窗填 sig → 把 sig 落成临时 bin（**只含 sig**）
+              → fastboot stage <文件> → 删临时文件 → oem edl → 检测 9008
+         命令（getvar token / stage / oem edl）不再上界面：
+         它们是内部知识，值仍从 settings.json 读（改过的老配置继续生效）。
+
+         ── 工具箱版式（照 UI_SKIN_SPEC.md 配方）──────────────────────────
+         ① 页头删除：<ctrl:PageHeaderBar/> 去掉，页签名「小米 EDL」就是标题。
+         ② 页面根改成 Grid（Background=Theme.BgTint + Margin=Tool.PagePad）。
+         ③ 两列：左 316 = 「设备信息」读数 +「日志」；右 * = 「一键进入 EDL」主操作分组框。
+            左列读数与外壳左栏同源但不重复：Fastboot / 机型·BL 两格由本页探测后直接写
+            （本页自己检测设备，探测结论同时 DeviceStateHub.Report 广播给外壳）；
+            任务 / 进度 / 状态 三格 ← ShellStatus（由代码后置 SyncRailStatus 刷新，只做了加法）。
+         ④ 3 张 CardBorder → 分组框 HeaderedContentControl + ToolGroup：卡片标题变 Header，
+            原来的 <TextBlock Style="SectionHeader"/> 标题行删掉；分组框内不再套 Padding。
+         ⑤ 条件显隐（ResultBox / NotifyBar）仍由代码控制，XAML 里保持 Visibility="Collapsed"。
+         ⑥ 硬规矩：x:Name / Click / 绑定路径一字未改；右列自带 ScrollViewer（结果框出现时也不挤）。
+         🔴 隐形契约（重构布局时不得破坏）：
+            · TxtLog 的 x:Name 一个字不能改 —— BasePage.LogTarget / PageLog 按名字找日志框；
+            · NotifyBar / NotifyIcon / NotifyText 三件套结构不可改 —— BasePage 靠名字弹提示；
+            · TxtDevice / TxtProduct / TxtStep / ResultBox(TxtResultIcon/TxtResult/TxtResultSub)
+              由代码后置按名字写值；BtnRun / BtnRefresh / BtnAuth 由 WithBusy 改 IsEnabled。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="{StaticResource Tool.PagePad}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="320"/>
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：BasePage 靠 FindName 取这三个名字，结构不可改（经典外观：InfoBg + Info 描边；
+             字号/内边距对齐参考稿页面的通知条 12.5 / 12）。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed" CornerRadius="{StaticResource R.Control}"
+                Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══ 主区：左列（设备状态 + 执行日志） + 右列（一键进入 EDL） ═══ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="316"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ── 左列：设备信息（标签:值 两列读数）+ 日志 ── -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="140"/>
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备信息（标题对齐外壳左栏的叫法）。
+                     前两格是本页自己的探测读数（代码后置直接写 TxtDevice / TxtProduct）；
+                     后三格 任务/进度/状态 ← ShellStatus，由代码后置的 SyncRailStatus 刷新 ——
+                     与外壳左栏同源，只显示不汇报，本页不探测设备的部分不重复造读数。 -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*" MinWidth="0"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="24"/>
+                            <RowDefinition Height="24"/>
+                            <RowDefinition Height="24"/>
+                            <RowDefinition Height="24"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="Fastboot:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtDevice" Text="未检测"
+                                   Style="{StaticResource ToolFieldValue}"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="机型 / BL:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="4" x:Name="TxtProduct" Text="-"
+                                   Style="{StaticResource ToolFieldValue}"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="任务:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtRailTask" Grid.Row="2" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="3" Text="进度:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtRailPercent" Grid.Row="2" Grid.Column="4" Text="0%" Style="{StaticResource ToolFieldValue}"/>
+
+                        <TextBlock Grid.Row="3" Grid.Column="0" Text="状态:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtRailHint" Grid.Row="3" Grid.Column="1" Grid.ColumnSpan="4"
+                                   Text="就绪" Style="{StaticResource ToolFieldValue}"/>
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 日志：占满左列剩余高度（标题对齐参考稿左栏那块，就叫「日志」） -->
+                <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                 IsReadOnly="True">
+                        <RichTextBox.Resources>
+                            <!-- 段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：一键流程（说明 + 命令按钮带 + 当前步骤 + 结果框） ── -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="一键进入 EDL">
+                        <StackPanel>
+                            <TextBlock FontSize="12" Foreground="{DynamicResource Theme.TextSecondary}"
+                                       TextWrapping="Wrap" Margin="0,0,0,6">
+                                手机先进 Fastboot 模式并连上电脑。BL 已解锁会直接进 EDL；未解锁则先读 token（blob）并弹出
+                                「FDL Auth」窗 —— 你把 sig 粘贴进去点「写入」，剩下的打包、stage、进 EDL、检测 9008 全自动。
+                            </TextBlock>
+                            <TextBlock FontSize="11" Foreground="{DynamicResource Theme.TextTertiary}"
+                                       TextWrapping="Wrap" Margin="0,0,0,10">
+                                sig 由厂商私钥算出，本工具不计算（交给设备的 bin 只含 sig）。
+                            </TextBlock>
+
+                            <WrapPanel>
+                                <Button x:Name="BtnRun" Content="一键进入 EDL" Style="{StaticResource ThemedPrimaryButton}"
+                                        Click="BtnRun_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnRefresh" Content="刷新设备" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnRefresh_Click" Margin="0,0,8,8"/>
+                                <Button x:Name="BtnAuth" Content="FDL Auth" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnAuth_Click" Margin="0,0,8,8"
+                                        ToolTip="手动单独填一次 sig（不跑全流程）"/>
+                                <Button Content="工作目录" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnOpenDir_Click" Margin="0,0,8,8"/>
+                                <Button Content="清日志" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnClearLog_Click" Margin="0,0,8,8"/>
+                            </WrapPanel>
+
+                            <TextBlock x:Name="TxtStep" Text="就绪" FontSize="12" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Theme.AccentText2}" Margin="0,6,0,0"/>
+
+                            <!-- 结果：出现 9008 就绿勾，没出现就红叉（显隐由代码控制 —— 保持 Collapsed）。
+                                 注意：.cs 会直接写 ResultBox.Background / ResultBox.BorderBrush（见 xaml.cs:625），
+                                 所以这里的初始底色/描边只是首帧值，代码随后会覆盖。 -->
+                            <Border x:Name="ResultBox" Visibility="Collapsed" CornerRadius="{StaticResource R.Control}"
+                                    Padding="12,10" Margin="0,10,0,0"
+                                    Background="{DynamicResource Theme.Surface}"
+                                    BorderBrush="{DynamicResource Theme.BorderSubtle}" BorderThickness="1">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <TextBlock x:Name="TxtResultIcon" FontSize="30" FontWeight="Bold"
+                                               FontFamily="Segoe UI Symbol, Segoe UI" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                    <StackPanel VerticalAlignment="Center">
+                                        <TextBlock x:Name="TxtResult" FontSize="14" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                        <TextBlock x:Name="TxtResultSub" FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"
+                                                   Foreground="{DynamicResource Theme.TextTertiary}"/>
+                                    </StackPanel>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</services:BasePage>

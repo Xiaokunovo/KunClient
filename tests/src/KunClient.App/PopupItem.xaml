@@ -1,0 +1,11 @@
+<UserControl x:Class="KunFlashTool.App.PopupItem"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Cursor="Hand">
+    <Border x:Name="Bd" CornerRadius="{StaticResource R.Control}" Padding="12,6" Margin="0,1"
+            Background="Transparent" MouseLeftButtonDown="OnClicked"
+            MouseEnter="OnHover" MouseLeave="OnLeave">
+        <TextBlock x:Name="Label" FontSize="11.5"
+                   Foreground="{DynamicResource Theme.TextPrimary}" />
+    </Border>
+</UserControl>

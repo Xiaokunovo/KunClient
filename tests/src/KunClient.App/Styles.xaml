@@ -1,0 +1,1079 @@
+﻿<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         KunFlashTool — 全局控件样式（E 方案 · 仪器面板）
+         血统：桌面工具面板（IDA / BootICE / Rufus / 数据库客户端），不是 Web 后台。
+         三条硬规矩：
+           1. 圆角只取 DesignTokens 的五档（4/6/10/12/999）；直角留给格线与 1px 分隔线。
+           2. 不加胶囊徽标/阴影/光晕；按钮 hover 只换底色，不缩放。
+           3. 间距靠像素网格，不靠 padding 撑。
+         颜色/圆角令牌位于 DesignTokens.xaml。
+         ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ========== 分隔线原语（E 方案比卡片更常用的划区手段） ========== -->
+    <Style x:Key="HRule" TargetType="Border">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="VRule" TargetType="Border">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Background" Value="{DynamicResource Theme.BorderSubtle}" />
+        <!-- 上下各留 10：分隔线不该顶到圆角面板的圆角上，否则转角处会出现硬直角 -->
+        <Setter Property="Margin" Value="0,10,0,10" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- ========== 卡片 / 面板 ==========
+         圆角制（五档见 DesignTokens）：这里是**容器级** —— R.Card(10) 圆角 + 1px 柔描边 + 面底色。
+         全项目 91 处引用共用这一份定义，改这一处即全局生效。 -->
+    <Style x:Key="CardBorder" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Theme.Surface}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource R.Card}" />
+        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- 仪表带里的分区格：**不自己画底色/圆角** —— 底色与圆角统一由外面那一个面板给。
+         格子自己画的话，方角会盖住面板的圆角，边缘露出直角；同色叠同色也是白画一层。 -->
+    <Style x:Key="PanelCell" TargetType="Border">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Padding" Value="14,11" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <!-- 面板格小标题：全大写等效的等宽小字 + 右侧延伸细线（对齐 `.cell .cap`） -->
+    <Style x:Key="CellCap" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+    </Style>
+
+    <!-- ========== 标题 / 标签 ========== -->
+    <Style x:Key="SectionHeader" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <Style x:Key="PageHeader" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="13" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+    </Style>
+
+    <Style x:Key="PageSubtitle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="Margin" Value="0,0,0,12" />
+    </Style>
+
+    <Style x:Key="SubLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+
+    <Style x:Key="ThemedFieldLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="Margin" Value="0,0,0,4" />
+    </Style>
+
+    <!-- 读数行：键在左（三级色）、值在右（等宽、右对齐）—— 仪表读数的排布 -->
+    <Style x:Key="ReadKey" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="ReadValue" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="TextAlignment" Value="Right" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ========== 输入框 ========== -->
+    <Style x:Key="ThemedInputBox" TargetType="TextBox">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Background" Value="{DynamicResource Theme.InputBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.InputBorder}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Theme.Accent}" />
+        <Setter Property="SelectionBrush" Value="{DynamicResource Theme.AccentSoft}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource R.Input}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.InputHover}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.InputFocus}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== 密码框（与输入框同款外观，统一直角/边框/聚焦态） ========== -->
+    <Style x:Key="ThemedPasswordBox" TargetType="PasswordBox">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Background" Value="{DynamicResource Theme.InputBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Glass.InputEdge}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Theme.Accent}" />
+        <Setter Property="VerticalContentAlignment" Value="Center" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="PasswordBox">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource R.Input}">
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      VerticalAlignment="Center" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.InputHover}" />
+                        </Trigger>
+                        <Trigger Property="IsKeyboardFocused" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.InputFocus}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== 复选框（直角方框，仪器面板的勾选风格） ========== -->
+    <Style x:Key="ThemedCheckBox" TargetType="CheckBox">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="CheckBox">
+                    <StackPanel Orientation="Horizontal" Background="Transparent">
+                        <Border x:Name="Box" Width="15" Height="15" CornerRadius="{StaticResource R.Micro}" VerticalAlignment="Center"
+                                Background="{DynamicResource Theme.InputBg}"
+                                BorderBrush="{DynamicResource Theme.InputBorder}" BorderThickness="1">
+                            <TextBlock x:Name="Check" Text="&#xE73E;" FontFamily="Segoe MDL2 Assets" FontSize="9"
+                                       Foreground="{DynamicResource Theme.AccentText}"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                                       Visibility="Collapsed" />
+                        </Border>
+                        <ContentPresenter Margin="7,0,0,0" VerticalAlignment="Center" RecognizesAccessKey="True" />
+                    </StackPanel>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter TargetName="Box" Property="Background" Value="{DynamicResource Theme.Accent}" />
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.Accent}" />
+                            <Setter TargetName="Check" Property="Visibility" Value="Visible" />
+                        </Trigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Box" Property="BorderBrush" Value="{DynamicResource Theme.InputHover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== 下拉框（扁平直角） ========== -->
+    <ControlTemplate x:Key="ComboBoxToggleButtonTemplate" TargetType="ToggleButton">
+        <Border Background="Transparent" />
+    </ControlTemplate>
+
+    <Style x:Key="ThemedComboPill" TargetType="ComboBox">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="Background" Value="{DynamicResource Theme.InputBg}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Glass.InputEdge}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="8,6" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ComboBox">
+                    <Grid>
+                        <!-- ⚠️ Style="{x:Null}" + 四个对齐/尺寸本地值**绝不能删**：
+                             HandyControl 的 SkinDefault/Theme 里带一个**隐式** ToggleButton 样式
+                             （它自家的开关按钮），会把 HorizontalAlignment/VerticalAlignment 设成
+                             Center、Height 设成 28。而 ToggleButton 是本模板里**唯一可点击**的元素
+                             （Border#Bd / ContentPresenter / ▾ 箭头全都 IsHitTestVisible="False"），
+                             被隐式样式居中且不给宽度 → 实际尺寸 0x28 → 整条下拉框点不动。
+                             症状：全应用所有 ComboBox（投屏页、EDL 引导类型/存储器/LUN/Slot、设置页…）
+                             鼠标怎么点都不弹，但键盘/代码设置 IsDropDownOpen 却正常。
+                             本地值优先级高于样式 Setter，所以就地钉死 Stretch；Style=x:Null 顺手切断依赖。 -->
+                        <ToggleButton x:Name="Toggle" Background="Transparent" BorderThickness="0" Focusable="False"
+                                      ClickMode="Press"
+                                      Style="{x:Null}"
+                                      HorizontalAlignment="Stretch" VerticalAlignment="Stretch"
+                                      Width="Auto" Height="Auto"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                                      Template="{StaticResource ComboBoxToggleButtonTemplate}" />
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource R.Input}" IsHitTestVisible="False" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                          HorizontalAlignment="Left" IsHitTestVisible="False"
+                                          Content="{TemplateBinding SelectionBoxItem}"
+                                          ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                          ContentTemplateSelector="{TemplateBinding ItemTemplateSelector}" />
+                        <TextBlock Text="&#xE76C;" FontFamily="Segoe MDL2 Assets" FontSize="9"
+                                   Foreground="{DynamicResource Theme.TextSecondary}" Margin="0,0,8,0"
+                                   HorizontalAlignment="Right" VerticalAlignment="Center" IsHitTestVisible="False"
+                                   RenderTransformOrigin="0.5,0.5">
+                            <TextBlock.RenderTransform>
+                                <RotateTransform Angle="90" />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                        <Popup x:Name="PART_Popup" AllowsTransparency="True" Placement="Bottom"
+                               PopupAnimation="Fade" IsOpen="{TemplateBinding IsDropDownOpen}">
+                            <!-- 下拉浮层在窗口之外（独立 Popup 窗），底下是桌面不是壁纸：
+                                 底色用近不透明的 GlassSolid，否则列表文字会和桌面糊在一起 -->
+                            <Border Background="{DynamicResource Theme.GlassSolid}"
+                                    BorderBrush="{DynamicResource Glass.Edge}" BorderThickness="1"
+                                    CornerRadius="{StaticResource R.Control}" Margin="0,2,0,0" Padding="0,3"
+                                    MinWidth="{TemplateBinding ActualWidth}"
+                                    MaxHeight="{TemplateBinding MaxDropDownHeight}">
+                                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                                    <ItemsPresenter />
+                                </ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Resources>
+                        <Style TargetType="ComboBoxItem">
+                            <Setter Property="Padding" Value="9,6" />
+                            <Setter Property="FontSize" Value="11.5" />
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ComboBoxItem">
+                                        <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource R.Control}"
+                                                Padding="{TemplateBinding Padding}" Margin="3,1">
+                                            <ContentPresenter VerticalAlignment="Center" />
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.Hover}" />
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.AccentSubtle}" />
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ControlTemplate.Resources>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.InputHover}" />
+                        </Trigger>
+                        <Trigger Property="IsDropDownOpen" Value="True">
+                            <Setter TargetName="Bd" Property="BorderBrush" Value="{DynamicResource Theme.InputFocus}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter TargetName="Bd" Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         按钮（E 方案）
+         —— 全部去掉 ScaleTransform 缩放微交互。UI 约定：按钮 hover 只换底色。
+         —— 纵向 Padding 必须为 0：各页面大量写死 Height="32"，若样式再给纵向内边距，
+            内容区只剩 32-18=14px，而 12px 中文行高约 16px，文字上下被裁。
+         —— 强调按钮与普通按钮的区别只有「有色/无色」，没有第三种形态。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Style x:Key="ThemedPrimaryButton" TargetType="Button">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.AccentText}" />
+        <Setter Property="Background" Value="{DynamicResource Theme.Accent}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <!-- 实心按钮：底色是冻结的强调色画刷，改不了它的 Color；
+                         于是用一层**深色遮罩**做 hover/press —— 只动 Opacity，主题无关。 -->
+                    <Grid>
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource R.Button}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" RecognizesAccessKey="True" />
+                        </Border>
+                        <Border x:Name="BdShade" Background="#000000"
+                                CornerRadius="{StaticResource R.Button}" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <EventTrigger RoutedEvent="Mouse.MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdShade"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0.10" Duration="0:0:0.13"
+                                                     EasingFunction="{StaticResource Ease.Out}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="Mouse.MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdShade"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0" Duration="0:0:0.17"
+                                                     EasingFunction="{StaticResource Ease.In}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="BdShade" Property="Opacity" Value="0.16" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 次级按钮：无底色、无描边，hover 才出面 —— 工具面板的常态按钮 -->
+    <Style x:Key="ThemedFlatButton" TargetType="Button">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderBrush" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="12,0" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="BdHover" Background="{DynamicResource Theme.Hover}"
+                                CornerRadius="{StaticResource R.Button}" Opacity="0" IsHitTestVisible="False" />
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="{StaticResource R.Button}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" RecognizesAccessKey="True" />
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <EventTrigger RoutedEvent="Mouse.MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="1" Duration="0:0:0.13"
+                                                     EasingFunction="{StaticResource Ease.Out}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="Mouse.MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0" Duration="0:0:0.17"
+                                                     EasingFunction="{StaticResource Ease.In}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="BdHover" Property="Background" Value="{DynamicResource Theme.Press}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 危险按钮：错误红（hover/pressed 用透明度区分，随主题安全） -->
+    <Style x:Key="ThemedDangerButton" TargetType="Button">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource Theme.Danger}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Padding" Value="14,0" />
+        <Setter Property="MinHeight" Value="30" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Grid>
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource R.Button}" SnapsToDevicePixels="True">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Margin="{TemplateBinding Padding}" RecognizesAccessKey="True" />
+                        </Border>
+                        <Border x:Name="BdShade" Background="#000000"
+                                CornerRadius="{StaticResource R.Button}" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <EventTrigger RoutedEvent="Mouse.MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdShade"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0.12" Duration="0:0:0.13"
+                                                     EasingFunction="{StaticResource Ease.Out}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="Mouse.MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdShade"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0" Duration="0:0:0.17"
+                                                     EasingFunction="{StaticResource Ease.In}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="BdShade" Property="Opacity" Value="0.20" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.45" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         工具条按钮（E 方案新增）
+         —— 方形图标按钮 30×26 与带字按钮共用一套模板，靠 .Wide 变体区分。
+         —— 选中态（On）为实心强调色，是工具栏唯一允许的「一块颜色」。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Style x:Key="ToolButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Width" Value="30" />
+        <Setter Property="Height" Value="26" />
+        <Setter Property="Cursor" Value="Arrow" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <!-- 🔴 hover 走「叠加层 Opacity 补间」，不是直接改 Bd.Background。
+                         原因：Theme.* 画刷在 ThemeManager 里 **Freeze 过**，冻结画刷无法做
+                         ColorAnimation；而叠加层只动 Opacity，用冻结画刷也安全。
+                         也不做缩放微交互（工具条按钮缩放会显得廉价）。
+                         🔴 叠加层必须在**底层**（Bd 之前）：选中态由代码把 Bd.Background 设成
+                         不透明的强调色，压在上面正好盖住 hover 层 —— 选中项悬停不会再变灰。 -->
+                    <Grid>
+                        <Border x:Name="BdHover" Background="{DynamicResource Theme.Hover}"
+                                CornerRadius="{StaticResource R.Control}"
+                                Opacity="0" IsHitTestVisible="False" />
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource R.Control}" />
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Margin="{TemplateBinding Padding}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <!-- 进比出快：指向感跟手，移开时缓慢收，不闪。 -->
+                        <EventTrigger RoutedEvent="Mouse.MouseEnter">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="1" Duration="0:0:0.13"
+                                                     EasingFunction="{StaticResource Ease.Out}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <EventTrigger RoutedEvent="Mouse.MouseLeave">
+                            <BeginStoryboard>
+                                <Storyboard>
+                                    <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                     Storyboard.TargetProperty="Opacity"
+                                                     To="0" Duration="0:0:0.17"
+                                                     EasingFunction="{StaticResource Ease.In}" />
+                                </Storyboard>
+                            </BeginStoryboard>
+                        </EventTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="BdHover" Property="Background" Value="{DynamicResource Theme.Press}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.35" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 工具条带字按钮变体：宽度自适应 + 图标/文字之间 6px -->
+    <Style x:Key="ToolButtonWide" TargetType="Button" BasedOn="{StaticResource ToolButton}">
+        <Setter Property="Width" Value="Auto" />
+        <Setter Property="Padding" Value="0,0,10,0" />
+        <Setter Property="FontSize" Value="11.5" />
+    </Style>
+
+    <!-- 工具按钮里的图标字（Segoe MDL2），统一字号 15 -->
+    <Style x:Key="ToolGlyph" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 工具条分隔线：18px 高的竖线 -->
+    <Style x:Key="ToolSep" TargetType="Border">
+        <Setter Property="Width" Value="1" />
+        <Setter Property="Height" Value="18" />
+        <Setter Property="Margin" Value="5,0" />
+        <Setter Property="Background" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 工具条右侧小字标注 -->
+    <Style x:Key="ToolLabel" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="10.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="8,0,6,0" />
+    </Style>
+
+    <Style x:Key="EdlMenuItem" TargetType="Button">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Padding" Value="10,8" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <Border x:Name="Bd" Background="{TemplateBinding Background}"
+                            CornerRadius="{StaticResource R.Button}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter VerticalAlignment="Center" Content="{TemplateBinding Content}" />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.Hover}" />
+                        </Trigger>
+                        <Trigger Property="IsEnabled" Value="False">
+                            <Setter Property="Opacity" Value="0.35" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== 进度条（纯色、细、直角） ========== -->
+    <Style x:Key="RoundedProgressBar" TargetType="ProgressBar">
+        <Setter Property="Height" Value="6" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+        <Setter Property="Background" Value="{DynamicResource Theme.ProgTrack}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ProgressBar">
+                    <Grid>
+                        <!-- 圆角回到 R.Control：用户明确「圆角还是要的」（2026-10-08 二次修订）。
+                             6px 高的条配 6 → 就是 iOS 那种胶囊观感。 -->
+                        <Border x:Name="PART_Track" Background="{TemplateBinding Background}"
+                                CornerRadius="{StaticResource R.Control}" />
+                        <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}"
+                                CornerRadius="{StaticResource R.Control}" HorizontalAlignment="Left" />
+                    </Grid>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== 日志框 ========== -->
+    <!-- RichTextBox 版日志：PageLog 会按级别给每一行着色（时间戳压暗、[LEVEL] 着级别色、
+         WARN/ERROR 连正文一起着色）。TextBox 只能存纯文本，所以着色必须换成 RichTextBox。
+         这里沿用 RichTextBox 的默认模板（自带 Border 与 PART_ContentHost 滚动宿主），
+         只覆盖配色与排版 —— 自写模板反而容易漏绑滚动条可见性。 -->
+    <Style x:Key="LogRichTextBox" TargetType="RichTextBox">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Background" Value="{DynamicResource Theme.SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="IsUndoEnabled" Value="False" />
+        <Setter Property="IsDocumentEnabled" Value="False" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Disabled" />
+        <Setter Property="Padding" Value="9,7" />
+    </Style>
+
+    <Style x:Key="LogTextBox" TargetType="TextBox">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Background" Value="{DynamicResource Theme.SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="CaretBrush" Value="{DynamicResource Theme.Accent}" />
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="VerticalScrollBarVisibility" Value="Auto" />
+        <Setter Property="HorizontalScrollBarVisibility" Value="Auto" />
+        <Setter Property="Padding" Value="9,7" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="TextBox">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="{StaticResource R.Input}">
+                        <!-- 必须把滚动条可见性显式绑到 PART_ContentHost 上：
+                             自定义模板里裸放一个 ScrollViewer 时，TextBox 的
+                             HorizontalScrollBarVisibility 不会自动生效 → 长日志行
+                             右侧被裁掉且没有横向滚动条，用户只能看到行首的时间戳。 -->
+                        <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"
+                                      HorizontalScrollBarVisibility="{TemplateBinding HorizontalScrollBarVisibility}"
+                                      VerticalScrollBarVisibility="{TemplateBinding VerticalScrollBarVisibility}"
+                                      Focusable="False"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="LogListBoxStyle" TargetType="ListBoxItem">
+        <Setter Property="Padding" Value="6,3" />
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ListBoxItem">
+                    <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource R.Control}"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter />
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.RowHover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource Theme.RowSelected}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- ========== 数据表格（E 方案：真表格 + 斑马纹 + 列头） ==========
+         仪器面板里的字段表不是「每行一个 Grid」，而是有列头、偶数行压深一档、
+         行高固定 22px 的表格；表尾补空行填满剩余高度，不留白。 -->
+    <Style x:Key="ThemedDataGrid" TargetType="DataGrid">
+        <Setter Property="Background" Value="{DynamicResource Theme.Surface}" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="RowBackground" Value="Transparent" />
+        <Setter Property="AlternatingRowBackground" Value="{DynamicResource Theme.SurfaceAlt}" />
+        <Setter Property="GridLinesVisibility" Value="Horizontal" />
+        <Setter Property="HorizontalGridLinesBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="VerticalGridLinesBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="HeadersVisibility" Value="Column" />
+        <Setter Property="RowHeaderWidth" Value="0" />
+        <Setter Property="RowHeight" Value="22" />
+        <Setter Property="ColumnHeaderHeight" Value="24" />
+        <Setter Property="CanUserResizeRows" Value="False" />
+        <Setter Property="CanUserAddRows" Value="False" />
+        <Setter Property="SelectionUnit" Value="FullRow" />
+        <Setter Property="AutoGenerateColumns" Value="False" />
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="ColumnHeaderStyle">
+            <Setter.Value>
+                <Style TargetType="DataGridColumnHeader">
+                    <Setter Property="Background" Value="{DynamicResource Theme.SurfaceAlt}" />
+                    <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+                    <Setter Property="FontWeight" Value="Bold" />
+                    <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+                    <Setter Property="FontSize" Value="10" />
+                    <Setter Property="Padding" Value="8,0" />
+                    <Setter Property="HorizontalContentAlignment" Value="Left" />
+                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                    <Setter Property="BorderThickness" Value="0,0,0,1" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource Theme.Border}" />
+                    <Setter Property="SeparatorBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+                </Style>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="RowStyle">
+            <Setter.Value>
+                <Style TargetType="DataGridRow">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource Theme.RowHover}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource Theme.RowSelected}" />
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Setter.Value>
+        </Setter>
+        <Setter Property="CellStyle">
+            <Setter.Value>
+                <Style TargetType="DataGridCell">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Padding" Value="8,0" />
+                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                    <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="DataGridCell">
+                                <Border Background="{TemplateBinding Background}"
+                                        Padding="{TemplateBinding Padding}">
+                                    <ContentPresenter VerticalAlignment="Center" />
+                                </Border>
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <!-- 表头行（用于「表尾补空行」的表头，放在 ScrollViewer 外常驻） -->
+    <Style x:Key="TableHeadText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 表格里的一行：真表格的行，靠 Border 底边线分隔，不吃 Margin -->
+    <Style x:Key="TableRow" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="0,0,0,1" />
+        <Setter Property="Height" Value="22" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="TableKey" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <Style x:Key="TableValue" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+
+    <!-- ========== 导航（E 方案改为工具条图标 + 页签，以下原语保留） ========== -->
+    <Style x:Key="NavIcon" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <Style x:Key="NavSeparator" TargetType="Border">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Width" Value="22" />
+        <Setter Property="Margin" Value="0,4" />
+        <Setter Property="Background" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 工具按钮（主题 / 检查更新 / 缩放）—— 无缩放微交互，hover 只淡入底色。
+         🔴 这里曾有 ScaleTransform 缩放动画（To="1.08"），已整体删除（2026-10-01 第四轮）。 -->
+    <Style x:Key="NavToolButton" TargetType="Button">
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Button">
+                    <!-- hover 底单独一层：靠 Opacity 淡入淡出，与 NavBtnLabel / RailZoomItem 同一套做法
+                         （直接切 Background 是硬跳，且 Theme.* 画刷冻结做不了颜色动画）。 -->
+                    <Grid>
+                        <Border x:Name="BdHover" Width="30" Height="26" CornerRadius="{StaticResource R.Control}"
+                                Background="{DynamicResource Theme.Hover}" Opacity="0" />
+                        <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                          Content="{TemplateBinding Content}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                         Storyboard.TargetProperty="Opacity" To="1"
+                                                         Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                         Storyboard.TargetProperty="Opacity" To="0"
+                                                         Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                        </Trigger>
+                        <!-- 按下反馈：IsPressed 时 BdHover 必然已淡入（Opacity=1），直接换底色即可；
+                             释放后 Trigger 失效，Setter 自动还原为 Theme.Hover。 -->
+                        <Trigger Property="IsPressed" Value="True">
+                            <Setter TargetName="BdHover" Property="Background" Value="{DynamicResource Theme.Press}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="NavLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="8,0,0,0" />
+    </Style>
+
+    <Style x:Key="NavBtnLabel" TargetType="RadioButton">
+        <Setter Property="GroupName" Value="Nav" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="Margin" Value="0,0,0,2" />
+        <Setter Property="Padding" Value="8,0,10,0" />
+        <Setter Property="HorizontalContentAlignment" Value="Left" />
+        <Setter Property="MinHeight" Value="28" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid MinHeight="{TemplateBinding MinHeight}">
+                        <!-- hover 背景：用 Opacity 淡入淡出，避免直接切冻结画刷导致颜色跳变 -->
+                        <Border x:Name="BdHover" Background="{DynamicResource Theme.Hover}" CornerRadius="{StaticResource R.Control}" Opacity="0" />
+                        <ContentPresenter Margin="{TemplateBinding Padding}" VerticalAlignment="Center"
+                                          HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"
+                                          Content="{TemplateBinding Content}" />
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                         Storyboard.TargetProperty="Opacity" To="1"
+                                                         Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="BdHover"
+                                                         Storyboard.TargetProperty="Opacity" To="0"
+                                                         Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="NavGroupLabel" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="FontWeight" Value="Bold" />
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="Margin" Value="8,7,0,0" />
+    </Style>
+
+    <Style x:Key="RailZoomItem" TargetType="RadioButton">
+        <Setter Property="GroupName" Value="RailZoom" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="Cursor" Value="Hand" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="RadioButton">
+                    <Grid>
+                        <Border x:Name="BdSel" Background="{DynamicResource Theme.Surface}"
+                                CornerRadius="{StaticResource R.Control}" Opacity="0" />
+                        <Border x:Name="Bd" Background="Transparent" CornerRadius="{StaticResource R.Control}"
+                                Padding="6,3">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"
+                                              Content="{TemplateBinding Content}" />
+                        </Border>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}" />
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                            <Trigger.EnterActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="BdSel"
+                                                         Storyboard.TargetProperty="Opacity" To="1"
+                                                         Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.EnterActions>
+                            <Trigger.ExitActions>
+                                <BeginStoryboard>
+                                    <Storyboard>
+                                        <DoubleAnimation Storyboard.TargetName="BdSel"
+                                                         Storyboard.TargetProperty="Opacity" To="0"
+                                                         Duration="0:0:0.18" />
+                                    </Storyboard>
+                                </BeginStoryboard>
+                            </Trigger.ExitActions>
+                            <Setter Property="Foreground" Value="{DynamicResource Theme.Accent}" />
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
+    <Style x:Key="RailZoomBox" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource Theme.SurfaceAlt}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="CornerRadius" Value="{StaticResource R.Control}" />
+        <Setter Property="Padding" Value="3" />
+    </Style>
+
+    <!-- ========== 状态栏（E 方案：分段方格，不是一行散字） ========== -->
+    <Style x:Key="StatusSeg" TargetType="Border">
+        <Setter Property="BorderBrush" Value="{DynamicResource Theme.BorderSubtle}" />
+        <Setter Property="BorderThickness" Value="0,0,1,0" />
+        <Setter Property="Padding" Value="10,0" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+    </Style>
+
+    <Style x:Key="StatusText" TargetType="TextBlock">
+        <Setter Property="FontFamily" Value="{StaticResource F.Mono}" />
+        <Setter Property="FontSize" Value="10" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- 状态格里的方点（替代圆形徽标）：8×8 实心方块 -->
+    <Style x:Key="StatusDot" TargetType="Border">
+        <Setter Property="Width" Value="7" />
+        <Setter Property="Height" Value="7" />
+        <Setter Property="CornerRadius" Value="{StaticResource R.Control}" />
+        <Setter Property="Background" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+
+    <!-- ========== 布局原语（UI 重构统一用：一致的间距节奏与留白） ========== -->
+    <!-- 间距令牌（4 的倍数，统一替换散落的魔法数字边距） -->
+    <Thickness x:Key="Space.Page">16,0,16,0</Thickness>
+    <Thickness x:Key="Space.Section">0,0,0,10</Thickness>
+    <Thickness x:Key="Space.Row">0,0,0,10</Thickness>
+    <Thickness x:Key="Space.Tight">0,0,0,6</Thickness>
+    <Thickness x:Key="Space.BtnRow">10,0,0,0</Thickness>
+
+    <!-- 工具栏行：左侧说明 + 右侧操作，统一纵向间距 -->
+    <Style x:Key="ToolbarRow" TargetType="StackPanel">
+        <Setter Property="Orientation" Value="Horizontal" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <!-- 字段行：标签在上、控件在下 -->
+    <Style x:Key="FieldRow" TargetType="StackPanel">
+        <Setter Property="Margin" Value="0,0,0,10" />
+    </Style>
+
+    <!-- 空状态提示 -->
+    <Style x:Key="EmptyHint" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="11.5" />
+        <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}" />
+        <Setter Property="HorizontalAlignment" Value="Center" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+        <Setter Property="Margin" Value="0,16" />
+    </Style>
+</ResourceDictionary>

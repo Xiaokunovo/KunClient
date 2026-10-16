@@ -1,0 +1,17 @@
+<UserControl x:Class="KunFlashTool.App.Controls.ToolProgressBar"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+    <!-- 参考稿底部的进度条：整条通栏、填充上**居中显示百分比**。
+         ProgressBar 自己画不了文字（模板里没有文本宿主），所以这里是「进度条 + 文字」两层叠加。
+         ⚠️ 文字颜色要跟着填充比例走：填充过半 → 压在蓝底上用白字；否则蓝字压在浅灰轨道上。
+            写死白字的话，0% 时百分比会整段隐形。 -->
+    <Grid x:Name="Host">
+        <ProgressBar x:Name="Bar" Style="{StaticResource RoundedProgressBar}"
+                     Minimum="0" Maximum="100" Value="0" />
+        <TextBlock x:Name="Txt" Text="0.00%"
+                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                   FontSize="11.5" FontWeight="SemiBold" IsHitTestVisible="False"
+                   Foreground="{DynamicResource Theme.TextSecondary}" />
+    </Grid>
+</UserControl>

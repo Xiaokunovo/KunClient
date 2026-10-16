@@ -1,0 +1,11 @@
+﻿<Solution>
+  <Folder Name="/src/">
+    <Project Path="tests/src/KunClient.App/KunClient.App.csproj" />
+    <Project Path="tests/src/KunClient.Core/KunClient.Core.csproj" />
+    <Project Path="tests/src/KunClient.Diag/KunClient.Diag.csproj" />
+    <Project Path="tests/src/KunClient.Lsusb/KunClient.Lsusb.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/KunFlashTool.Core.Tests/KunFlashTool.Core.Tests.csproj" />
+  </Folder>
+</Solution>

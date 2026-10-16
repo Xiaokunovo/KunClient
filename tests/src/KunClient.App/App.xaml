@@ -1,0 +1,48 @@
+<Application x:Class="KunFlashTool.App.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:local="clr-namespace:KunFlashTool.App"
+             xmlns:hc="https://handyorg.github.io/handycontrol"
+             xmlns:sys="clr-namespace:System;assembly=System.Runtime"
+             ShutdownMode="OnExplicitShutdown">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <!-- 🔴 2026-10-08 删掉 HandyControl（1.43 MB）：
+                     全项目 hc: 前缀元素数 = **0**，只有这里合并了它的 SkinDefault/Theme。
+                     它的唯一作用是提供一套 UI 框架的隐式样式，而本项目已经有自己的
+                     DesignTokens/Styles/ToolboxStyles 全套（注释里反而在讲「要显式套自己的样式
+                     躲开 HandyControl 的隐式 ToggleButton 样式」）—— 等于花钱买麻烦。
+                     删掉它 exe 少 1.43 MB。⚠️ 以后不要加回来，新增控件请走本项目自己的样式键。 -->
+                <ResourceDictionary Source="/DesignTokens.xaml"/>
+                <ResourceDictionary Source="/Localization/Strings.zh-CN.xaml"/>
+                <ResourceDictionary Source="/Styles.xaml"/>
+                <!-- 工具箱皮肤必须**最后**合并：它用同名键覆盖 Styles.xaml 里的
+                     卡片/按钮/表格/输入框/日志框定义（WPF 后合并的字典优先），
+                     页面源码不用逐个改就能整站换观感。 -->
+                <ResourceDictionary Source="/ToolboxStyles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <Style x:Key="HeaderTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="24"/>
+                <Setter Property="FontWeight" Value="Bold"/>
+                <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+            </Style>
+
+            <Style x:Key="BodyTextStyle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="14"/>
+                <Setter Property="Foreground" Value="{DynamicResource Theme.TextSecondary}"/>
+            </Style>
+
+            <!-- 所有窗口统一带品牌图标（隐式样式，只设 Icon，不影响各窗口自己的 Style）。
+                 不设的话对话框会沿用宿主进程的图标：直接用 exe 启动时是 KunClient 图标，
+                 但 `dotnet KunClient.dll` 启动时会变成 dotnet 的图标，看着就像「logo 没了」。
+                 ⚠️ 这里必须写**程序集限定的 pack URI**，不能写 "/Assets/logo.ico"：
+                 相对 URI 是按入口程序集解析的，宿主程序集一变（单元测试壳、UI 预览壳）
+                 就会 XamlParseException 起不来。 -->
+            <Style TargetType="{x:Type Window}">
+                <Setter Property="Icon" Value="pack://application:,,,/KunClient;component/Assets/logo.ico"/>
+            </Style>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>

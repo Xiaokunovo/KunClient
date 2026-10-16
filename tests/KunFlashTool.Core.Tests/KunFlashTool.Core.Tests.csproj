@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 测试策略 A（2026-10-07）：引用 App 工程，让 4 条用例全写
+         （①登录态 AuthSession ②ServerGate 401 可见性 ③Sahara _pending ④gzip 进度）。
+         代价是测试工程挂上 WPF 依赖 —— KunClient.Core 本身已 UseWPF=true，实际没有新增
+         运行时前置条件。 -->
+    <ProjectReference Include="..\src\KunClient.Core\KunClient.Core.csproj" />
+    <ProjectReference Include="..\src\KunClient.App\KunClient.App.csproj" />
+  </ItemGroup>
+
+</Project>

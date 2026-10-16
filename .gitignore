@@ -1,0 +1,48 @@
+# ════════════════════════════════════════════════════════════════════════
+#  KunClient —— 开源仓库忽略规则（白名单模式）
+#
+#  本仓库只公开 **C# 客户端源码**（tests/** 下的 .cs / .xaml / .csproj）。
+#  除下方显式放行的条目外，仓库内其余一切默认不纳入版本控制。
+#
+#  未开源的组件（仅存在于本机，不随仓库分发）：
+#    · C++/Qt6 版 EDL 引擎 —— third_party/swt-edl/（第三方组件）、src/cpp/
+#    · Rust 刷写栈（已冻结）—— src/rust/
+#    · 服务端 / 官网 / 机器人 —— server/、website/、qqbot/
+#    · 构建与部署脚本 —— tools/、*.ps1、*.bat
+#    · 设计文档与原型 —— docs/、prototype/、*.miora、logo-design*
+#    · 构建产物与临时目录 —— publish/、publish_obf/、tmp/、Testing/
+# ════════════════════════════════════════════════════════════════════════
+
+# ── 默认忽略仓库根下的一切，再按白名单放行 ──
+/*
+!/.gitignore
+!/.gitattributes
+!/LICENSE
+!/README.md
+!/KunFlashTool.slnx
+!/tests/
+
+# ── 白名单内仍需排除：构建产物 ──
+tests/**/bin/
+tests/**/obj/
+*.user
+
+# ── 白名单内仍需排除：本机私有配置与运行期日志 ──
+tests/src/KunClient.App/KunClient.config.json
+tests/src/KunClient.App/KunClient.config.local.json
+**/*.local.json
+*.log
+crash.log
+
+# ── 白名单内仍需排除：第三方二进制（运行期由 PlatformToolsManager 自动下载，
+#    详见 tests/src/KunClient.Core/PlatformTools/README.md）──
+tests/src/KunClient.Core/PlatformTools/adb.exe
+tests/src/KunClient.Core/PlatformTools/fastboot.exe
+tests/src/KunClient.Core/PlatformTools/AdbWinApi.dll
+tests/src/KunClient.Core/PlatformTools/AdbWinUsbApi.dll
+
+# ── 通用兜底（供未来在白名单内新增目录时沿用）──
+node_modules/
+.env
+.env.*
+!.env.example

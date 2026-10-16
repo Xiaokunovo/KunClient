@@ -1,0 +1,60 @@
+﻿<Window x:Class="KunFlashTool.App.Dialogs.DownloadDialog"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="下载工具" Height="200" Width="480"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource Theme.BgTint}"
+        WindowStyle="SingleBorderWindow"
+        ResizeMode="NoResize"
+        Topmost="True">
+
+    <!--
+        液态玻璃（2026-10-08 改，用户反馈「液态玻璃效果没有实现」）
+        ────────────────────────────────────────────────────────────
+        这个窗原来是 Background=Theme.Bg（**实色** #FAFBFF）+ 同样的实色 Grid ——
+        两层不透明把什么底都盖死了，看起来就是一块死白，这就是「玻璃没实现」的外观病根。
+
+        现在的分工：
+          · 窗口底 = Theme.BgTint（alpha 0xA0/0xB0 的半透明令牌）
+          · App.OnAnyWindowLoaded → ApplyGlassBackdrop 给它挂 **Win11 Acrylic**：
+              挂上了 → 窗口底色被清成 Transparent，DWM 的磨砂从后面透出来；
+              挂不上（Win10 / 关了透明效果）→ 底色退回不透明 Theme.Bg，观感就是改动前那样。
+          · 四周压一圈 Glass.Edge（顶高光 → 中段主题描边 → 底暗影），玻璃才有「厚度」。
+        ⚠️ 别再把这个窗口或内容区写回 Theme.Bg —— 实色会立刻把磨砂盖死。
+    -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- 玻璃描边：Margin 负到 -12 是为了铺满**整个客户区**（外面那圈 12 留白也是玻璃的一部分） -->
+        <Border Grid.RowSpan="2" Margin="-12"
+                BorderBrush="{DynamicResource Glass.Edge}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource R.Square}"
+                IsHitTestVisible="False"
+                SnapsToDevicePixels="True" />
+
+        <!-- Title（纯文字品牌，不用独立图形 logo） -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12" VerticalAlignment="Center">
+            <TextBlock Foreground="{DynamicResource Theme.TextPrimary}" FontSize="14" FontWeight="Bold" VerticalAlignment="Center">
+                <Run Text="Kun"/><Run Text="Client" Foreground="{DynamicResource Theme.AccentText2}"/>
+            </TextBlock>
+        </StackPanel>
+
+        <!-- Content -->
+        <StackPanel Grid.Row="1" VerticalAlignment="Center">
+            <TextBlock x:Name="StatusText" Text="正在加载工具..." FontSize="13" FontWeight="SemiBold"
+                       Foreground="{DynamicResource Theme.TextPrimary}" Margin="0,0,0,10" HorizontalAlignment="Center"/>
+
+            <!-- 进度条：圆角走 RoundedProgressBar 里的 R.Square(2)。原来是半圆头的胶囊观感，
+                 用户明确不要「圆形/椭圆」。 -->
+            <ProgressBar x:Name="ProgressBar" Style="{StaticResource RoundedProgressBar}" Height="20"
+                         Value="0" Minimum="0" Maximum="100"/>
+
+            <TextBlock x:Name="DetailText" Text="" FontSize="11" Foreground="{DynamicResource Theme.TextTertiary}"
+                       Margin="0,8,0,0" HorizontalAlignment="Center"/>
+        </StackPanel>
+    </Grid>
+</Window>

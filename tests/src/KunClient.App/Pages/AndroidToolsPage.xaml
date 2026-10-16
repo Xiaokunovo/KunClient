@@ -1,0 +1,208 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.AndroidToolsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ═══════════════════════════════════════════════════════════════════
+         安卓工具 · 经典桌面工具箱版式（换肤改排）
+         ───────────────────────────────────────────────────────────────────
+         改排要点（上一版是「单列分组框自上而下」；本页在 MainWindow 的页表里标了
+         OwnRail:true —— 外壳共用左栏（Controls/DeviceLogRail）对本页整列让位，
+         所以「设备信息 + 日志」必须由页面自己出，版式随之改成标准的两列）：
+           ① 页根 = Grid + Theme.BgTint + Tool.PagePad（页签名「安卓工具」就是标题）。
+           ② 左列 316（与外壳左栏同宽，两者不会同时出现）：
+                ·「设备信息」分组框 —— 读数来源与外壳左栏完全一致：
+                  设备/模式 ← DeviceStateHub（谁探测谁汇报，本页自己不探测），
+                  任务/进度/状态 ← ShellStatus（本页操作的 PageLog.Section 已把任务上报）。
+                  这 5 个读数由代码后置的 SyncRailDevice / SyncRailStatus 刷新（只做了加法）。
+                ·「日志」分组框 —— TxtLog 占满剩余高度（从原单列尾部挪进左列）。
+           ③ 右列 *：原 5 个工具分组框（OPLUS Super / OFP·OPS / Payload / OCDT / TWRP）
+              原样收进一个 ScrollViewer（VerticalScrollBarVisibility=Auto）。
+           ④ 分组框自带 Margin="0,0,0,8"（ToolGroup 样式给的），页面里不再写间距魔法数；
+              分组框内也不套 Padding（ToolGroup 模板已留 10,16,10,10）。
+           ⑤ 外壳四层（菜单栏 / 页签 / 通栏双进度条 / 分段状态栏）由 MainWindow 承担，
+              本页因此不再放 PageHeaderBar、页内进度条、页内状态栏；
+              控件高度一律字面 26，间距一律字面 6/8/10。
+         🔴 隐形契约（重构布局时不得破坏）：
+            · TxtLog 的 x:Name 一个字不能改 —— BasePage.LogTarget / PageLog 按名字找日志框；
+            · NotifyBar / NotifyIcon / NotifyText 三件套结构不可改 —— BasePage 靠名字弹提示；
+            · TxtSuperInput / TxtOfpInput / TxtPayloadInput / TxtTwrpPartition 由各 Click
+              处理器直接读 .Text；左栏新增的 TxtRail* 读数名只被本页 .cs 的同步方法引用。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="{StaticResource Tool.PagePad}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />                     <!-- ① 通知条 -->
+            <!-- ② 主区（两列）：左＝设备信息 + 日志，右＝工具分组框（可滚） -->
+            <RowDefinition Height="*" MinHeight="280" />
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：BasePage 用 FindName("NotifyBar") 取它，且要求
+             Border > StackPanel > TextBlock#NotifyIcon / #NotifyText，结构不可改。
+             底色/描边走主题（经典外观：淡蓝底 + 蓝描边）；显示时由 Notify.Show 按成败覆写。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed"
+                CornerRadius="{StaticResource R.Control}" Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center" />
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <!-- ═══════════ ② 主区：左列（设备信息 + 日志） + 右列（工具分组框） ═══════════ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- 左列 316：与外壳左栏（DeviceLogRail）同宽 —— 两者不会同时出现 -->
+                <ColumnDefinition Width="316" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" MinWidth="0" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ── 左列：设备信息（Auto）+ 日志（*） ── -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="120" />
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备信息（读数与外壳左栏同源：DeviceStateHub + ShellStatus，
+                     由代码后置的 SyncRailDevice / SyncRailStatus 刷新 —— 本页不探测设备） -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="26" />
+                            <RowDefinition Height="26" />
+                            <RowDefinition Height="26" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="序列号:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailDevice" Grid.Row="0" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="模式:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailMode" Grid.Row="0" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="任务:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailTask" Grid.Row="1" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="1" Grid.Column="3" Text="进度:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailPercent" Grid.Row="1" Grid.Column="4" Text="0%" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="状态:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailHint" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4"
+                                   Text="就绪" Style="{StaticResource ToolFieldValue}" />
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 分组框：日志（从原单列尾部挪进左列，占满剩余高度；本页的操作日志落在这里） -->
+                <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Auto"
+                                 IsReadOnly="True" IsUndoEnabled="False" IsDocumentEnabled="False">
+                        <RichTextBox.Resources>
+                            <!-- RichTextBox 的段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0" />
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：工具分组框（单列自上而下，内容变高时右列自己滚） ── -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- 分组框：OPLUS Super 合并 -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="OPLUS Super 合并">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtSuperInput" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="选择" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowseSuper_Click" />
+                            </Grid>
+                            <Button Content="合并 Super" Style="{StaticResource ThemedPrimaryButton}"
+                                    Height="26" Click="BtnMergeSuper_Click" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：OFP / OPS 解包 -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="OFP / OPS 解包">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtOfpInput" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="选择" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowseOfp_Click" />
+                            </Grid>
+                            <WrapPanel>
+                                <Button Content="解包 OFP" Style="{StaticResource ThemedPrimaryButton}"
+                                        Height="26" Click="BtnUnpackOfp_Click" Margin="0,0,6,0" />
+                                <Button Content="解包 OPS" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnUnpackOps_Click" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：Payload 转 Fastboot -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="Payload 转 Fastboot">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtPayloadInput" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="选择" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowsePayload_Click" />
+                            </Grid>
+                            <Button Content="转 Fastboot 脚本" Style="{StaticResource ThemedPrimaryButton}"
+                                    Height="26" Click="BtnConvertPayload_Click" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：OCDT 生成 -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="OCDT 生成">
+                        <Button Content="生成 OCDT" Style="{StaticResource ThemedPrimaryButton}"
+                                Height="26" Click="BtnGenerateOcdt_Click" HorizontalAlignment="Left" />
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：TWRP 刷写 -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="TWRP 刷写">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtTwrpPartition" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Text="分区文件(以boot为例)" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="选择文件" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowseTwrpImage_Click" />
+                            </Grid>
+                            <WrapPanel>
+                                <Button Content="读取分区" Style="{StaticResource ThemedFlatButton}" Height="26" Click="BtnTwrpRead_Click" Margin="0,0,8,0" />
+                                <Button Content="写入分区" Style="{StaticResource ThemedPrimaryButton}" Height="26" Click="BtnTwrpWrite_Click" Margin="0,0,8,0" />
+                                <Button Content="擦除分区" Style="{StaticResource ThemedFlatButton}" Height="26" Click="BtnTwrpErase_Click" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</services:BasePage>

@@ -1,0 +1,156 @@
+<Window x:Class="KunFlashTool.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="clr-namespace:KunFlashTool.App.Controls"
+        Title="{DynamicResource App.Title}"
+        Icon="pack://application:,,,/KunClient;component/Assets/logo.ico"
+        Width="1280" Height="820" MinWidth="1000" MinHeight="640"
+        WindowStartupLocation="CenterScreen"
+        FontFamily="{StaticResource F.Body}" FontSize="12"
+        TextOptions.TextFormattingMode="Display"
+        Background="{DynamicResource Theme.Bg}">
+
+    <!-- ═══════════════════════════════════════════════════════════════════
+         工具箱版式骨架（四层，与参考稿一一对应）
+           ① 菜单栏 27px   EDL操作 / 快捷操作 / 其他操作 —— **分组入口**，
+                          点分组切换下面那一排页签；右侧是全局动作（读取设备信息 / 更新 / 主题 / 版本）
+           ② 页签区  *     Qualcomm | FASTBOOT | Payload …（每个分组一组页签）
+                          页签条下方是「共用左栏 + 页面内容」两列：
+                           左栏由 MainTabs.Tag 挂载（挂一次；页面自带左栏时切 _rail.Visibility → 整列收起）
+           ③ 进度区        两条通栏进度条（总进度 / 当前分区），百分比居中显示
+           ④ 状态栏       分段读数：任务 / 分区名 / 速度 / 总大小 / 进度 / 设备
+         ⚠️ 导航只有这一层菜单 + 页签：原先那条图标工具条与它完全是重复导航，已删除；
+            版本号与会员信息仍在**窗口标题**里（用户要求保留），这里只补一个版本小字。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid>
+        <!-- 🔴 响应式缩放（2026-10-03）：窗口小的时候**整体等比缩小** —— 字号、行距、内边距、
+             表格行高一起缩。逐处调 FontSize 必然漏（用户一次数出 12 处），而且每处都要单独回归；
+             LayoutTransform 是**一处生效、全局一致**。
+             WPF 在变换**之后**才光栅化文字，所以缩放后的字仍是矢量清晰的（不像位图缩放那样糊）。
+             档位由 MainWindow.UpdateUiScale() 按客户区尺寸决定，阈值附近有 20px 死区防抖。 -->
+        <Grid.LayoutTransform>
+            <ScaleTransform x:Name="UiScale" ScaleX="1" ScaleY="1" />
+        </Grid.LayoutTransform>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 动态背景层（用户自定义背景；无背景图时保持折叠不影响交互） -->
+        <controls:DynamicBackground x:Name="DynamicBg" Grid.RowSpan="4" Visibility="Collapsed" />
+
+        <!-- ① 菜单栏 -->
+        <Border Grid.Row="0" Background="{DynamicResource Theme.Surface}"
+                BorderBrush="{DynamicResource Glass.Edge}" BorderThickness="0,0,0,1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <Menu x:Name="MainMenu" Grid.Column="0" Style="{StaticResource ToolMenu}"
+                      BorderThickness="0" Background="Transparent">
+                    <MenuItem x:Name="MenuEdl" Header="刷机" Tag="edl" IsCheckable="True"
+                              Style="{StaticResource ToolMenuItem}" Click="MenuGroup_Click" />
+                    <MenuItem x:Name="MenuQuick" Header="工具" Tag="quick" IsCheckable="True"
+                              Style="{StaticResource ToolMenuItem}" Click="MenuGroup_Click" />
+                    <MenuItem x:Name="MenuOther" Header="其他" Tag="other" IsCheckable="True"
+                              Style="{StaticResource ToolMenuItem}" Click="MenuGroup_Click" />
+                    <Separator Style="{StaticResource ToolMenuSeparator}" Width="1" Height="15" Margin="6,0" />
+                    <MenuItem x:Name="MenuRefresh" Header="读取设备信息"
+                              Style="{StaticResource ToolMenuItem}" Click="ToolbarRefresh_Click" />
+                    <MenuItem x:Name="MenuUpdate" Header="检查更新"
+                              Style="{StaticResource ToolMenuItem}" Click="NavUpdate_Click" />
+                    <MenuItem x:Name="MenuTheme" Header="切换主题"
+                              Style="{StaticResource ToolMenuItem}" Click="ThemeToggle_Click" />
+                </Menu>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock x:Name="TxtVersion" Text="KunClient v1.1.3.1" FontSize="11.5"
+                               Foreground="{DynamicResource Theme.TextTertiary}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- ② 页签区（页签由代码按分组动态生成；Tag = 共用左栏） -->
+        <TabControl x:Name="MainTabs" Grid.Row="1"
+                    Style="{StaticResource ToolTabControl}"
+                    SelectionChanged="MainTabs_SelectionChanged" />
+
+        <!-- ③ 进度区：总进度 + 当前分区进度。
+             底色走 StatusBarBg（半透明玻璃带）而不是 Theme.Bg：Theme.Bg 是窗底实色，
+             它会把这一整条下的壁纸盖死，四行里就这一行不是玻璃。 -->
+        <Border Grid.Row="2" Background="{DynamicResource Theme.StatusBarBg}"
+                BorderBrush="{DynamicResource Glass.Edge}" BorderThickness="0,1,0,0"
+                Padding="6,6,6,6">
+            <StackPanel>
+                <controls:ToolProgressBar x:Name="BarTotal" />
+                <controls:ToolProgressBar x:Name="BarPart" Margin="0,4,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- ④ 状态栏：分段读数 -->
+        <Border Grid.Row="3" Height="26" Background="{DynamicResource Theme.StatusBarBg}"
+                BorderBrush="{DynamicResource Glass.Edge}" BorderThickness="0,1,0,0">
+            <Grid Margin="10,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" MinWidth="60" />
+                    <ColumnDefinition Width="2*" MinWidth="60" />
+                    <ColumnDefinition Width="1.4*" MinWidth="50" />
+                    <ColumnDefinition Width="1.4*" MinWidth="50" />
+                    <ColumnDefinition Width="1.2*" MinWidth="40" />
+                    <ColumnDefinition Width="2*" MinWidth="60" />
+                </Grid.ColumnDefinitions>
+
+                <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                    <!-- 状态方点：8px 见方 + R.Square(2)。原来 7×7 配 R.Chip(999) 是正圆，
+                         用户明确不要圆形（2026-10-08）。 -->
+                    <Border x:Name="StatusDot" Width="8" Height="8" CornerRadius="{StaticResource R.Square}" Margin="0,0,6,0"
+                            Background="{DynamicResource Theme.TextTertiary}" VerticalAlignment="Center" />
+                    <TextBlock Text="任务:" Style="{StaticResource ToolStatusLabel}" />
+                    <TextBlock x:Name="StatusTaskText" Text="-" Style="{StaticResource ToolStatusValue}"
+                               Margin="2,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="分区名:" Style="{StaticResource ToolStatusLabel}" />
+                    <TextBlock x:Name="StatusPartitionText" Text="-" Style="{StaticResource ToolStatusValue}"
+                               Margin="2,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="速度:" Style="{StaticResource ToolStatusLabel}" />
+                    <TextBlock x:Name="StatusSpeedText" Text="-" Style="{StaticResource ToolStatusValue}"
+                               Margin="2,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="总大小:" Style="{StaticResource ToolStatusLabel}" />
+                    <TextBlock x:Name="StatusTotalText" Text="-" Style="{StaticResource ToolStatusValue}"
+                               Margin="2,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="进度:" Style="{StaticResource ToolStatusLabel}" />
+                    <TextBlock x:Name="StatusPercentText" Text="0%" Style="{StaticResource ToolStatusValue}"
+                               Margin="2,0,0,0" />
+                </StackPanel>
+
+                <StackPanel Grid.Column="5" Orientation="Horizontal" VerticalAlignment="Center"
+                            HorizontalAlignment="Right">
+                    <TextBlock Text="设备:" Style="{StaticResource ToolStatusLabel}" />
+                    <TextBlock x:Name="StatusDeviceText" Text="-" Style="{StaticResource ToolStatusValue}"
+                               Margin="2,0,0,0" MaxWidth="220" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 主题切换「柔洗」层：必须放在根 Grid 最后（最上层）、覆盖全部四行。
+             主题切换时用它用目标底色短促洗一遍，把整块调色板替换藏在覆盖态里，避免硬切。
+             IsHitTestVisible=False 保证它不抢点击；平时 Collapsed 不参与渲染。 -->
+        <Border x:Name="ThemeWash" Grid.RowSpan="4" IsHitTestVisible="False"
+                Opacity="0" Visibility="Collapsed" />
+    </Grid>
+</Window>

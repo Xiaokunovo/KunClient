@@ -1,0 +1,35 @@
+<UserControl x:Class="KunFlashTool.App.Controls.DynamicBackground"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             IsHitTestVisible="False" ClipToBounds="True">
+    <Grid>
+        <MediaElement x:Name="BgVideo" Stretch="UniformToFill" Opacity="0"
+                      LoadedBehavior="Manual" MediaOpened="BgVideo_MediaOpened"
+                      MediaEnded="BgVideo_MediaEnded" MediaFailed="BgVideo_MediaFailed"/>
+        <!-- ⚠️ RenderOptions.BitmapScalingMode="HighQuality" 不是可选项：
+             WPF 默认是双线性(Linear)缩放，壁纸要放大到窗口尺寸（再叠加 KenBurns 的缩放）
+             就会明显发虚 —— 用户反馈的「私人背景很模糊」就是这一条。
+             HighQuality 走 Fant 滤镜，只有背景这一层多一次采样，性能影响可忽略。
+             ⚠️ Margin 负 64：挂了模糊效果后，图像边缘的卷积会往窗内糊出一圈
+             「半透明晕」（窗底色透出来，看着像四周压暗了一圈）。
+             把图放得比窗口大，晕就落到 ClipToBounds 之外被裁掉 —— 窗内只有干净的模糊。 -->
+        <Image x:Name="BgImage" Stretch="UniformToFill" RenderTransformOrigin="0.5,0.5" Opacity="0"
+               Margin="-64"
+               RenderOptions.BitmapScalingMode="HighQuality">
+            <Image.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform x:Name="BgScale" ScaleX="1.0" ScaleY="1.0"/>
+                    <TranslateTransform x:Name="BgTranslate" X="0" Y="0"/>
+                </TransformGroup>
+            </Image.RenderTransform>
+        </Image>
+        <!-- 注意：这里**没有**网页类（WE type=web）壁纸的渲染宿主。
+             该能力曾用 WebView2CompositionControl 实现，但它依赖 Microsoft.Windows.SDK.NET.dll
+             （单项 23.6 MB，占 exe 的 74%）。2026-09-23 用户要求「体积非常小」，选择去掉
+             网页类实时渲染 —— 现在场景/网页类壁纸一律使用 WE 官方预览素材（preview.gif/jpg），
+             所以这个宿主连同整个 WebView2 依赖都已从项目移除。
+             不要再把它加回来：只要引用了那个控件，TFM 就必须带 Windows 版本号，
+             exe 立刻从 ~6.4 MB 涨到 ~31.8 MB。 -->
+        <Border x:Name="TintLayer" Background="Transparent"/>
+    </Grid>
+</UserControl>

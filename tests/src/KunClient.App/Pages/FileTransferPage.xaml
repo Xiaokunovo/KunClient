@@ -1,0 +1,237 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.FileTransferPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ═══════════════════════════════════════════════════════════════════
+         文件传输 · 经典桌面工具箱版式（换肤改排）
+         ───────────────────────────────────────────────────────────────────
+         改排要点（参考稿的两列配方：左列 316 = 信息 + 日志，右列 = 主操作）：
+           ① 删掉页头标题栏 PageHeaderBar（页签名「文件传输」就是标题），
+              页面根改成 Grid + Theme.BgTint + Tool.PagePad；
+           ② 七张卡片（推送 / 拉取 / 批量安装 / 文件浏览 / 拖放 / 传输进度 / 日志）
+              全部换成 ToolGroup 分组框，原卡片里的 <TextBlock Style="SectionHeader"/> 标题行删掉
+              —— 标题已经变成分组框 Header；
+           ③ 左列 316px（本页在 MainWindow 页表里标了 OwnRail:true，外壳共用左栏让位，
+              所以「设备信息 + 日志」由页面自己出）：
+                ·「设备信息」分组框 —— 本页自己不探测设备，读数与外壳左栏同源：
+                  设备/模式 ← DeviceStateHub（谁探测谁汇报），任务/进度/状态 ← ShellStatus
+                  （各操作的 PageLog.Section 已把任务名上报），由代码后置的
+                  SyncRailDevice / SyncRailStatus 刷新（只做了加法）；
+                ·「传输进度」分组框（进度条 + 状态文字）；
+                ·「日志」分组框（TxtLog 撑满左列剩余高度，与外壳左栏 DeviceLogRail 同形）；
+           ④ 右列：推送 / 拉取 / 批量安装 / 设备文件浏览 / 拖放传输，自上而下 5 个分组框；
+              整列套一个 ScrollViewer（VerticalScrollBarVisibility="Auto"）—— 窗口矮时右列自己滚，
+              左列的读数、进度与日志始终可见；
+           ⑤ 输入框与它的按钮并成一行（原来是「输入框一行 + 按钮一行」，一行更省高度、
+              也是参考稿里路径行的样子）；主操作按钮左对齐、内容宽度。
+           ⑥ 外壳四层（菜单栏 / 页签 / 通栏双进度条 / 分段状态栏）由 MainWindow 承担，
+              本页因此不再放 PageHeaderBar、页内状态栏；页内 ProgressBar 仅保留兼容 code-behind，
+              已收进「传输进度」分组框；控件高度一律字面 26，间距一律字面 6/8/10。
+         🔴 隐形契约（重构布局时不得破坏）：
+            · TxtLog 的 x:Name 一个字不能改 —— BasePage.LogTarget / PageLog 按名字找日志框；
+            · NotifyBar / NotifyIcon / NotifyText 三件套结构不可改 —— BasePage 靠名字弹提示；
+            · TxtPushLocal / TxtPushRemote / TxtPullRemote / TxtBatchApkDir / TxtDevicePath /
+              LstDeviceFiles / ProgressBar / TxtProgress 由各处理器直接读写；
+              左栏新增的 TxtRail* 读数名只被本页 .cs 的同步方法引用。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="{StaticResource Tool.PagePad}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />                <!-- 通知条 -->
+            <!-- 主区地板 300：左列「传输进度 + 日志」至少要这么高才不挤 -->
+            <RowDefinition Height="*" MinHeight="300" />
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：BasePage 用 FindName("NotifyBar") 取它，且要求
+             Border > StackPanel > TextBlock#NotifyIcon / #NotifyText，结构不可改。
+             底色/描边走主题（经典外观：淡蓝底 + 蓝描边）；显示时由 Notify.Show 按成败覆写。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed"
+                CornerRadius="{StaticResource R.Control}" Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center" />
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- 左列 316：与外壳左栏（DeviceLogRail）同宽 —— 两者不会同时出现 -->
+                <ColumnDefinition Width="316" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" MinWidth="0" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ── 左列：设备信息 + 传输进度 + 日志 ── -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" MinHeight="140" />
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备信息（本页自己不探测设备，读数与外壳左栏同源：
+                     设备/模式 ← DeviceStateHub，任务/进度/状态 ← ShellStatus，
+                     由代码后置的 SyncRailDevice / SyncRailStatus 刷新 —— 只做了加法） -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="26" />
+                            <RowDefinition Height="26" />
+                            <RowDefinition Height="26" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="序列号:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailDevice" Grid.Row="0" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="模式:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailMode" Grid.Row="0" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="任务:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailTask" Grid.Row="1" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="1" Grid.Column="3" Text="进度:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailPercent" Grid.Row="1" Grid.Column="4" Text="0%" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="状态:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailHint" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4"
+                                   Text="就绪" Style="{StaticResource ToolFieldValue}" />
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 分组框：传输进度
+                     ⚠️ 页内进度条已由外壳 ③（通栏双进度条）承担，保留仅为兼容 code-behind：
+                        FileTransferPage.xaml.cs 直接写它的 Value / Visibility，
+                        控件与名字都不能删；排版上收进本分组框，不再是页面级进度条。 -->
+                <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="传输进度">
+                    <StackPanel>
+                        <ProgressBar x:Name="ProgressBar" Style="{StaticResource RoundedProgressBar}" Value="0" />
+                        <TextBlock x:Name="TxtProgress" Text="等待中" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Theme.TextSecondary}" FontSize="12" Margin="0,6,0,0" />
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- 分组框：日志（参考稿左列底部那块，撑满左列剩余高度） -->
+                <HeaderedContentControl Grid.Row="2" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 FontSize="11"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Auto"
+                                 IsReadOnly="True" IsUndoEnabled="False" IsDocumentEnabled="False">
+                        <RichTextBox.Resources>
+                            <!-- RichTextBox 的段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0" />
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：主操作（推送 / 拉取 / 批量安装 / 文件浏览 / 拖放） ── -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- 分组框：推送文件到设备 -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="推送文件到设备">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtPushLocal" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="选择文件" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowsePush_Click" />
+                            </Grid>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtPushRemote" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Text="/sdcard/" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="推送" Style="{StaticResource ThemedPrimaryButton}"
+                                        Height="26" Click="BtnPushFile_Click" />
+                            </Grid>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：从设备拉取 -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="从设备拉取">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox Grid.Column="0" x:Name="TxtPullRemote" Style="{StaticResource ThemedInputBox}"
+                                     Padding="8,3" Height="26" Text="/sdcard/" Margin="0,0,6,0" />
+                            <Button Grid.Column="1" Content="拉取" Style="{StaticResource ThemedPrimaryButton}"
+                                    Height="26" Click="BtnPullFile_Click" />
+                        </Grid>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：批量安装 APK -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="批量安装 APK">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtBatchApkDir" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="选择目录" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowseBatchApk_Click" />
+                            </Grid>
+                            <Button Content="批量安装" Style="{StaticResource ThemedPrimaryButton}"
+                                    Height="26" Click="BtnBatchInstall_Click" HorizontalAlignment="Left" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：设备文件浏览（列表保持 200 高；路径行 + 刷新 / 上级目录） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="设备文件浏览">
+                        <StackPanel>
+                            <Grid Margin="0,0,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtDevicePath" Style="{StaticResource ThemedInputBox}"
+                                         Padding="8,3" Height="26" Text="/sdcard/" Margin="0,0,6,0" />
+                                <Button Grid.Column="1" Content="刷新" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnBrowseDevice_Click" Margin="0,0,6,0" />
+                                <Button Grid.Column="2" Content="上级目录" Style="{StaticResource ThemedFlatButton}"
+                                        Height="26" Click="BtnParentDir_Click" />
+                            </Grid>
+                            <!-- 设备文件列表：无专用主题样式键，直接给主题色 + 12px 字，与全应用表格/输入框同一档 -->
+                            <ListBox x:Name="LstDeviceFiles" Height="200" FontSize="12"
+                                     Background="{DynamicResource Theme.Surface}"
+                                     Foreground="{DynamicResource Theme.TextPrimary}"
+                                     BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1" />
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：拖放传输（虚线框是「可投放」的功能性提示，不是分组框，所以保留描边） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="拖放传输">
+                        <Border Background="{DynamicResource Theme.SurfaceAlt}"
+                                BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1"
+                                CornerRadius="{StaticResource R.Control}" Height="100"
+                                AllowDrop="True" Drop="DropZone_Drop" DragEnter="DropZone_DragEnter">
+                            <TextBlock Text="拖放文件到此处" HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"
+                                       Foreground="{DynamicResource Theme.TextTertiary}" FontSize="12" />
+                        </Border>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</services:BasePage>

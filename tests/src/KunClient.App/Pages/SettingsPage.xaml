@@ -1,0 +1,274 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.SettingsPage"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:services="clr-namespace:KunFlashTool.App.Services">
+
+    <!-- 工具箱皮肤（配方见 docs/ui-toolbox-skin.md）：
+         ① 页头标题栏（PageHeaderBar）已删除 —— 页签名「设置」本身就是标题；
+            页内也没有进度条与状态栏（外壳 ③ ④ 承担）。
+         ② 底色画在**页面根 Grid** 上并取 Theme.BgTint：全局「界面透明」改的就是它的 alpha，
+            画在这里所有页面才一致（原先画在 ScrollViewer 上，页面根是隐式的，容易漏掉蒙层）。
+         ③ 分区一律分组框 HeaderedContentControl + ToolGroup（标题压在边框线上、白底 + 1px 描边），
+            组内**不再套带圆角 Border，也不再套 Padding**（圆角/内边距由 ToolGroup 模板负责），
+            原来那行 SectionHeader 标题行随之删除。
+         ④ 设置项一行一个：左侧 ToolFieldLabel 标签（列宽 Auto）+ 右侧控件（列宽 *），
+            两列键值网格，行高写字面 26、行距 6 —— 列宽不再写死 88，窗口拉宽标签不会留大片空白。
+         ⑤ 下拉框（CmbAnimation / CmbBackgroundFit）、输入框、按钮统一 Height="26"；
+            间距一律字面数字（6/8/10）；颜色一律 DynamicResource Theme.*，不写死十六进制。
+         ⑥ 仍保留 ScrollViewer：设置项多，窗口不够高时要能滚动。
+
+         ⚠️ 契约（重构布局时不得破坏）：
+            1. 本页没有 NotifyBar —— 代码后置从不调 ShowSuccess/ShowError（BasePage 的 FindName
+               找不到就是 null，安全），不要凭空加；
+            2. ProfileGrid 的显隐由 LoadProfileAsync 控制（未登录/加载失败时保持 Collapsed）；
+            3. 三个滑杆 + 两个下拉的初值全部由 LoadBackgroundSettings 从配置回填，
+               XAML 里的 Value/IsSelected 只是设计器预览值。 -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="10,10,10,8">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Background="Transparent">
+            <StackPanel MaxWidth="900">
+
+                <!-- ═══════════ 用户信息 ═══════════
+                     「标签: 值」两列读数网格（Auto + *，行高 26、行距 6）。
+                     分组框之间的 8px 间距由 ToolGroup 样式自带的 Margin="0,0,0,8" 提供。 -->
+                <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="用户信息">
+                    <StackPanel>
+                        <!-- 未登录 / 正在加载 / 加载失败的提示行；登录成功后由代码折叠 -->
+                        <TextBlock x:Name="TxtProfileStatus" Text="正在加载..." FontSize="12"
+                                   Foreground="{DynamicResource Theme.TextTertiary}" />
+
+                        <!-- 登录后由代码显示（Visibility 保持由代码控制，不写死可见性） -->
+                        <Grid x:Name="ProfileGrid" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="6" />
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="6" />
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="6" />
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="6" />
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="6" />
+                                <RowDefinition Height="26" />
+                                <RowDefinition Height="6" />
+                                <!-- 个性签名可能换行，这一行给 Auto 高度 -->
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="用户名:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtUsername" Grid.Row="0" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="角色:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtRole" Grid.Row="2" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="注册时间:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtRegisterDate" Grid.Row="4" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+
+                            <TextBlock Grid.Row="6" Grid.Column="0" Text="最近登录:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtLastLogin" Grid.Row="6" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+
+                            <!-- 会员等级 + 到期时间：排在用户信息之后、个性签名之前 -->
+                            <TextBlock Grid.Row="8" Grid.Column="0" Text="会员等级:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtVipLevel" Grid.Row="8" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+
+                            <TextBlock Grid.Row="10" Grid.Column="0" Text="到期时间:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtVipExpire" Grid.Row="10" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+
+                            <!-- 个性签名：放在最后；允许换行，所以不锁 26 行高 -->
+                            <TextBlock Grid.Row="12" Grid.Column="0" Text="个性签名:" Style="{StaticResource ToolFieldLabel}"
+                                       VerticalAlignment="Top" Margin="0,4,6,0" />
+                            <TextBlock x:Name="TxtSignature" Grid.Row="12" Grid.Column="1" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" TextWrapping="Wrap" />
+                        </Grid>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- ═══════════ 自定义背景 ═══════════
+                     预览 + 取图入口 + 显示参数 + 三档透明度：沿用原来的单一分区，只换成经典分组框。
+                     全部保留原有 x:Name / 事件处理器 / ToolTip 说明文案。 -->
+                <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="自定义背景">
+                    <StackPanel>
+                        <!-- Image Preview：透明度由代码按「背景不透明度」滑杆实时同步，不在此写死 -->
+                        <Border x:Name="PreviewBorder" Height="100" ClipToBounds="True" Margin="0,0,0,8"
+                                Background="{DynamicResource Theme.Surface}"
+                                BorderBrush="{DynamicResource Theme.Border}" BorderThickness="1">
+                            <Grid>
+                                <Image x:Name="PreviewImage" Stretch="UniformToFill"
+                                       RenderOptions.BitmapScalingMode="HighQuality" />
+                                <TextBlock x:Name="PreviewHint" Text="未选择背景图片" HorizontalAlignment="Center"
+                                           VerticalAlignment="Center" FontSize="12"
+                                           Foreground="{DynamicResource Theme.TextTertiary}" />
+                            </Grid>
+                        </Border>
+
+                        <!-- Image Picker：一行 = 左标签 +（右）文件名读数 + 两个操作按钮 -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="背景文件" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock x:Name="TxtImagePath" Grid.Column="1" Text="未选择" Margin="0,0,8,0"
+                                       Style="{StaticResource ToolFieldValue}" />
+                            <Button Grid.Column="2" Content="选择文件" Style="{StaticResource ThemedFlatButton}"
+                                    Click="BtnSelectImage_Click" Height="26" Margin="0,0,6,0" />
+                            <Button Grid.Column="3" Content="清除" Style="{StaticResource ThemedFlatButton}"
+                                    Click="BtnClearImage_Click" Height="26" />
+                        </Grid>
+
+                        <!-- 动态壁纸与云端背景：两个取图入口排成一行（按钮文案与原卡片完全一致，未改字）。
+                             Wallpaper Engine 只列**视频类**（mp4/webm，能直接播、清晰度最高）。
+                             场景(scene)/网页(web) 类是 WE 私有格式，本体没有可播的视频文件，
+                             只能拿官方预览素材顶上（通常 256~512 px），铺满窗口会发虚、比例也对不上，
+                             所以自 2026-09-23 起不再列出（见 WallpaperEnginePickerDialog）。 -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="动态壁纸" Style="{StaticResource ToolFieldLabel}" />
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Right">
+                                <Button Content="从 Wallpaper Engine 选择动态壁纸" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnPickWallpaperEngine_Click" Height="26" Margin="0,0,6,0"
+                                        ToolTip="扫描本机 Steam 创意工坊(431960)里的**视频类**壁纸（mp4/webm），直接用原片播放，清晰度最高。&#x0a;场景(scene)/网页(web)类为 WE 私有格式，本工具无法真正渲染，已在列表中隐藏。" />
+                                <!-- 云端背景：清单来自服务端（控制台里由用户自己上传），
+                                     下载到 %LOCALAPPDATA%\KunClient\wallpapers\，退出客户端时随该目录一起删除。 -->
+                                <Button Content="从云端选择背景" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnPickCloudWallpaper_Click" Height="26"
+                                        ToolTip="从服务器上的共享背景库挑一张，下载到本机后设为背景。&#x0a;本地只是临时副本，关闭客户端时会自动删除。&#x0a;想要自己的图出现在库里：去控制台「账号设置 → 云端背景」上传。" />
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- Animation Type -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="动画效果" Style="{StaticResource ToolFieldLabel}" />
+                            <ComboBox x:Name="CmbAnimation" Grid.Column="1" Style="{StaticResource ThemedComboPill}"
+                                      Height="26"
+                                      SelectionChanged="CmbAnimation_SelectionChanged">
+                                <ComboBoxItem Content="Ken Burns (缩放+平移)" Tag="KenBurns" IsSelected="True" />
+                                <ComboBoxItem Content="缩放" Tag="Zoom" />
+                                <ComboBoxItem Content="平移" Tag="Pan" />
+                                <ComboBoxItem Content="无动画" Tag="None" />
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Fit Mode -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="显示方式" Style="{StaticResource ToolFieldLabel}" />
+                            <ComboBox x:Name="CmbBackgroundFit" Grid.Column="1" Style="{StaticResource ThemedComboPill}"
+                                      Height="26"
+                                      SelectionChanged="CmbBackgroundFit_SelectionChanged"
+                                      ToolTip="裁剪铺满：等比放大到盖住整个窗口，超出部分被裁掉（默认，无留白）&#x0a;完整显示：整张图都看得见，比例不匹配时上下或左右会留空&#x0a;拉伸填满：强行铺满，比例不匹配时画面会被拉变形">
+                                <ComboBoxItem Content="裁剪铺满（默认）" Tag="Fill" IsSelected="True" />
+                                <ComboBoxItem Content="完整显示" Tag="Uniform" />
+                                <ComboBoxItem Content="拉伸填满" Tag="Stretch" />
+                            </ComboBox>
+                        </Grid>
+
+                        <!-- Opacity Slider -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="44" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="背景不透明度" Style="{StaticResource ToolFieldLabel}"
+                                       ToolTip="动态背景图/视频本身的不透明度，0% 到 100% 随意调" />
+                            <!-- 0-1 即 0%-100%：下限不再写死 0.05 -->
+                            <Slider x:Name="SliderOpacity" Grid.Column="1" Minimum="0.0" Maximum="1.0" Value="0.35"
+                                    VerticalAlignment="Center" Margin="8,0" ValueChanged="SliderOpacity_ValueChanged" />
+                            <TextBlock x:Name="TxtOpacityValue" Grid.Column="2" Text="35%"
+                                       Style="{StaticResource ToolFieldValue}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <!-- 背景模糊（玻璃的磨砂底）：把壁纸先模糊，再透过半透明面板露出来 -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="44" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="背景模糊" Style="{StaticResource ToolFieldLabel}"
+                                       ToolTip="玻璃面板的磨砂强度：先把背景壁纸模糊，再透过半透明的卡片/按钮露出来&#x0a;0 = 关掉模糊（面板仍是半透明，只是背后的内容清晰）&#x0a;视频 / GIF 背景始终不模糊 —— 逐帧模糊太耗，自动降级为磨砂" />
+                            <Slider x:Name="SliderBlur" Grid.Column="1" Minimum="0.0" Maximum="48" Value="24"
+                                    VerticalAlignment="Center" Margin="8,0" ValueChanged="SliderBlur_ValueChanged" />
+                            <TextBlock x:Name="TxtBlurValue" Grid.Column="2" Text="24px"
+                                       Style="{StaticResource ToolFieldValue}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <!-- Card Opacity Slider -->
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="44" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="卡片不透明度" Style="{StaticResource ToolFieldLabel}"
+                                       ToolTip="所有卡片界面的不透明度，越低越透出背景。0% = 卡片全透明，只留背景" />
+                            <!-- 下限从写死的 0.3 放到 0，允许真正调到 0% -->
+                            <Slider x:Name="SliderCardOpacity" Grid.Column="1" Minimum="0.0" Maximum="1.0" Value="0.86"
+                                    VerticalAlignment="Center" Margin="8,0" ValueChanged="SliderCardOpacity_ValueChanged" />
+                            <TextBlock x:Name="TxtCardOpacityValue" Grid.Column="2" Text="86%"
+                                       Style="{StaticResource ToolFieldValue}" HorizontalAlignment="Right" />
+                        </Grid>
+
+                        <!-- UI Transparency Slider (全局) -->
+                        <Grid Height="26">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="44" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="界面透明" Style="{StaticResource ToolFieldLabel}"
+                                       ToolTip="全局生效：整个界面的透明度。0% = 界面完全不透明（看不到背景），100% = 界面全透明（背景全露出）" />
+                            <!-- 全局透明度：改写页面根背景 Theme.BgTint 的 alpha，所有页面同时生效 -->
+                            <Slider x:Name="SliderUiTransparency" Grid.Column="1" Minimum="0.0" Maximum="1.0" Value="0.38"
+                                    VerticalAlignment="Center" Margin="8,0" ValueChanged="SliderUiTransparency_ValueChanged" />
+                            <TextBlock x:Name="TxtUiTransparencyValue" Grid.Column="2" Text="38%"
+                                       Style="{StaticResource ToolFieldValue}" HorizontalAlignment="Right" />
+                        </Grid>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- ═══════════ 法律与合规 ═══════════ -->
+                <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="法律与合规">
+                    <StackPanel>
+                        <!-- 正文 12（规范字号档：正文 12，不用 11.5 这类半档） -->
+                        <TextBlock TextWrapping="Wrap" FontSize="12" LineHeight="19"
+                                   Foreground="{DynamicResource Theme.TextSecondary}"
+                                   Text="使用本工具即表示您已阅读并接受《免责声明》《用户协议》与《隐私政策》。本工具仅限对您本人合法拥有、或已获得所有者明确授权的设备使用；严禁用于来历不明、遗失或被盗的设备，严禁绕过设备防盗与账号保护机制，严禁用于批量改机、批量注册、批量登录等黑灰产用途。上述行为不只是违约，还可能触犯《刑法》第285条、第286条、第264条、第312条、第253条之一、第287条之二等规定，责任由行为人自负。刷机存在风险，请自行承担相应后果。" />
+                        <WrapPanel Margin="0,8,0,0">
+                            <Button Content="查看使用条款与隐私说明" Style="{StaticResource ThemedPrimaryButton}"
+                                    Click="BtnShowLegal_Click" Height="26" Margin="0,0,8,0" />
+                            <Button Content="在浏览器中打开完整条款" Style="{StaticResource ThemedFlatButton}"
+                                    Click="BtnOpenLegalSite_Click" Height="26" />
+                        </WrapPanel>
+                        <TextBlock x:Name="TxtLegalState" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Theme.TextTertiary}" />
+                    </StackPanel>
+                </HeaderedContentControl>
+
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</services:BasePage>

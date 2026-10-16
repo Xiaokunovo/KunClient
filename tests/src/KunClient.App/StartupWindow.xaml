@@ -1,0 +1,9 @@
+<Window x:Class="KunFlashTool.App.StartupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KunClient" Height="1" Width="1"
+        WindowStyle="None"
+        WindowStartupLocation="CenterScreen"
+        ShowInTaskbar="False"
+        Opacity="0">
+</Window>

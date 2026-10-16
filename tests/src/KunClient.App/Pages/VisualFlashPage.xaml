@@ -1,0 +1,202 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.VisualFlashPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ⚠️ 页内进度条（ProgressBar / PrgFlash / TxtProgress 一类）已由外壳 ③ 承担，
+         保留仅为兼容 code-behind（.cs 按名字写 Value / Text），删除需同步改 .cs。
+         排版上已收进对应分组框，做成细条 + ToolFieldValue 文字，不再是页面级进度条。 -->
+    <!-- ═══════════════════════════════════════════════════════════════════
+         可视刷写 —— 工具箱版式（照 ui-toolbox-skin.md 的版式配方）
+         ───────────────────────────────────────────────────────────────────
+         ① 页头删除：<ctrl:PageHeaderBar/> 去掉，页签名「可视刷写」就是标题。
+         ② 页面根改成 Grid：Background=Theme.BgTint（全局透明度靠它生效）
+            + Margin={StaticResource Tool.PagePad}，页面自己不再画内边距数字。
+         ③ 两列：左 316（本页在 MainWindow 页表里标了 OwnRail:true，外壳共用左栏让位，
+            所以左列由页面自己出）：「设备信息」+「刷写进度」+「日志」三个分组框 ——
+            设备信息读数与外壳左栏同源（设备/模式 ← DeviceStateHub，任务/进度/状态 ←
+            ShellStatus，由代码后置 SyncRailDevice / SyncRailStatus 刷新，只做了加法）；
+            右 * （分区表 / 刷写镜像 / GPT 操作 —— 主操作）。
+         ④ 原来的 5 张 CardBorder 全部换成分组框 HeaderedContentControl + ToolGroup：
+            卡片标题变成分组框 Header（压在边框线上）；分组框内部
+            **不再套 Padding**（ToolGroup 模板已留 10,16,10,10）。
+         ⑤ 进度/状态不再由本页画底部条：一律上报 ShellStatus（外壳底部双进度条 + 分段状态栏）。
+         ⑥ 硬规矩：x:Name / Click / 绑定路径一字未改（代码后置按名字取控件）；
+            右侧内容高，所以右列自己带一个 ScrollViewer（VerticalScrollBarVisibility=Auto）。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="{StaticResource Tool.PagePad}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*" MinHeight="320"/>
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：BasePage 靠 FindName("NotifyBar"/"NotifyIcon"/"NotifyText") 取它，
+             结构不可改；经典外观 = InfoBg 底 + Info 描边（Notify.Show 运行时再按成功/失败换色）。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed" CornerRadius="{StaticResource R.Control}"
+                Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- ═══ 主区：左列（设备信息 + 刷写进度 + 日志） + 右列（分区表 / 刷写 / GPT） ═══ -->
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <!-- 左列 316：与外壳左栏（DeviceLogRail）同宽 —— 两者不会同时出现 -->
+                <ColumnDefinition Width="316"/>
+                <ColumnDefinition Width="8"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- ── 左列：设备信息（Auto）+ 刷写进度（Auto）+ 日志（*） ── -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="120"/>
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备信息（读数与外壳左栏同源：DeviceStateHub + ShellStatus，
+                     由代码后置的 SyncRailDevice / SyncRailStatus 刷新 —— 本页读分区表时顺带汇报序列号） -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="12" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="24" />
+                            <RowDefinition Height="24" />
+                            <RowDefinition Height="24" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="序列号:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailDevice" Grid.Row="0" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="模式:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailMode" Grid.Row="0" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="任务:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailTask" Grid.Row="1" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        <TextBlock Grid.Row="1" Grid.Column="3" Text="进度:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailPercent" Grid.Row="1" Grid.Column="4" Text="0%" Style="{StaticResource ToolFieldValue}" />
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="状态:" Style="{StaticResource ToolFieldLabel}" />
+                        <TextBlock x:Name="TxtRailHint" Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="4"
+                                   Text="就绪" Style="{StaticResource ToolFieldValue}" />
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 分组框：刷写进度。ProgressBar / TxtProgress 两个 x:Name 由代码写值，位置不变只在前面插了设备信息。
+                     进度条已收进本框并压成细条（Height=6）：页面级进度条由外壳 ③ 负责，这里只做兼容读数。 -->
+                <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="刷写进度">
+                    <StackPanel>
+                        <ProgressBar x:Name="ProgressBar" Style="{StaticResource RoundedProgressBar}"
+                                     Height="6" Value="0"/>
+                        <TextBlock x:Name="TxtProgress" Text="进度: 0%" Style="{StaticResource ToolFieldValue}"
+                                   Margin="0,6,0,0"/>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- 日志：占满左列剩余高度（参考稿左列底部那块） -->
+                <HeaderedContentControl Grid.Row="2" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                 IsReadOnly="True">
+                        <RichTextBox.Resources>
+                            <!-- 段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：主操作（内容高，右列自己滚；页面整体不滚） ── -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- 分组框：分区表（顶部操作行右对齐 + 表格；表格自己有滚动条） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="分区表">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" HorizontalAlignment="Right"
+                                        Margin="0,0,0,6">
+                                <Button Content="读取分区表" Style="{StaticResource ThemedPrimaryButton}"
+                                        Click="BtnReadPartTable_Click" Margin="0,0,8,0"/>
+                                <Button Content="刷新" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnRefreshPartTable_Click"/>
+                            </StackPanel>
+
+                            <DataGrid Grid.Row="1" x:Name="DgPartitions" Style="{StaticResource ThemedDataGrid}"
+                                      Height="300">
+                                <DataGrid.Columns>
+                                    <DataGridCheckBoxColumn Header="选择" Binding="{Binding IsSelected, Mode=TwoWay}" Width="50"/>
+                                    <DataGridTextColumn Header="分区名" Binding="{Binding Name}" Width="150"/>
+                                    <DataGridTextColumn Header="大小" Binding="{Binding Size}" Width="120"/>
+                                    <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="*"/>
+                                </DataGrid.Columns>
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="读取分区" Click="CtxReadPartition_Click"/>
+                                        <MenuItem Header="写入分区" Click="CtxWritePartition_Click"/>
+                                        <MenuItem Header="擦除分区" Click="CtxErasePartition_Click"/>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+                            </DataGrid>
+                        </Grid>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：刷写镜像（镜像路径 + 浏览图标钮；目标分区 + 写入） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="刷写镜像">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="0"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtImageFile" Style="{StaticResource ThemedInputBox}"
+                                         Margin="0,0,6,0"/>
+                                <!-- 选文件：规范里的方形图标钮（Segoe MDL2 文件夹字形），文字说明进 ToolTip -->
+                                <Button Grid.Column="1" Content="&#xE8B7;" Style="{StaticResource ToolIconButton}"
+                                        Click="BtnBrowseImage_Click"
+                                        ToolTip="选择要写入的镜像文件（*.img / *.bin / *.mbn）"/>
+                            </Grid>
+
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="0"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" x:Name="TxtTargetPartition" Style="{StaticResource ThemedInputBox}"
+                                         Margin="0,0,8,0" Text="目标分区名"/>
+                                <Button Grid.Column="1" Content="写入" Style="{StaticResource ThemedPrimaryButton}"
+                                        Click="BtnWriteSelected_Click"/>
+                            </Grid>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：GPT 操作（三个按钮压成一行「按钮带」） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="GPT 操作">
+                        <WrapPanel>
+                            <Button Content="备份 GPT" Style="{StaticResource ThemedFlatButton}"
+                                    Click="BtnBackupGpt_Click" Margin="0,0,8,0"/>
+                            <Button Content="恢复 GPT" Style="{StaticResource ThemedFlatButton}"
+                                    Click="BtnRestoreGpt_Click" Margin="0,0,8,0"/>
+                            <Button Content="生成 rawprogram" Style="{StaticResource ThemedPrimaryButton}"
+                                    Click="BtnGenerateRawprogram_Click"/>
+                        </WrapPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</services:BasePage>

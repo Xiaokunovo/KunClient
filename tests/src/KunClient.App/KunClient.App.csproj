@@ -1,0 +1,84 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\KunClient.Core\KunClient.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- System.Management 显式声明（KunClient.Core 里已有同版本引用）：
+         小米 EDL 页进 EDL 后要**检测 9008 端口有没有出现**，走的是 Core 的
+         DeviceWatcher（WMI）。虽然 PackageReference 默认可传递，但「9008 没检测到」
+         和「设备真的没进 EDL」现象完全一样 —— 这种依赖不该靠传递性活着，
+         一旦有人给 Core 的引用加上 PrivateAssets，运行期就会静默失灵。 -->
+    <PackageReference Include="System.Management" Version="10.0.0" />
+    <!-- Microsoft.Web.WebView2 已移除（2026-09-23）：它唯一的用途是
+         DynamicBackground 里渲染 WE「网页类(type=web)」壁纸，而那个控件依赖
+         Microsoft.Windows.SDK.NET.dll（单项 23.6 MB）。移除后 TFM 也必须回到
+         不带 Windows 版本号的 net10.0-windows，exe 从 31.8 MB 降到 ~6.4 MB。
+         ⚠️ 不要再加回来：一旦引用它，TFM 就必须带 10.0.17763.0，否则运行时
+         Microsoft.Windows.SDK.NET 解析失败。 -->
+    <!-- Ookii.Dialogs.Wpf 已移除（2026-09-28）：它只用于「选目录」，而包里只有
+         2021 年的 lib/net5.0-windows7.0 资产（跑在 net10.0 上属于老壳套新壳）。
+         现在 4 处选目录全部改用 .NET 8+ 自带的 Microsoft.Win32.OpenFolderDialog
+         （Title / InitialDirectory / FolderName），原生支持、零第三方依赖。
+         ⚠️ 别再引回来：选目录是「批量备份」的第一步，它一旦不弹/卡住，
+         表现与「读盘失败」完全一样，排障时最难区分的变量就是它。 -->
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 品牌图形 logo（logo.png / login_logo.png）已按需求全部删除，界面一律改用彩色文字品牌，
+         所以两者都不再作为资源打进程序集。仅保留多尺寸 ico 作为窗口/任务栏图标。 -->
+    <Resource Include="Assets\logo.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 软配置**不再内嵌**（2026-10 加固）。
+         原因：EmbeddedResource 不经过 Obfuscar —— 内嵌的 KunClient.config.json 会以**明文**
+         躺在程序集里，`https://kunawa.cn` 可被直接 strings 抠出（实测已复现）。
+         而它带来的唯一价值只是「给一个可配置的默认值」，这个默认值现在由
+         Core/Configuration/ClientConfig.DefaultServerUrl 提供（已片段化，走字符串加密）。
+         运行时优先级不变：环境变量 > 用户级配置 > exe 同目录配置 > 内置兜底
+         （见 ClientConfig.ResolveServerUrl；内嵌那一段取不到资源会优雅返回 null）。
+         ⚠️ 不要为了「可配置」再加回来：那等于把域名明文重新塞回产物。 -->
+    <!-- <EmbeddedResource Include="KunClient.config.json" LogicalName="KunClient.config.json" /> -->
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <!-- 🔴 必须显式声明 RID。发行链是 `node tools/obfuscate-build.js`：
+         它先 `dotnet build -c Release -r win-x64`，再 `dotnet publish -r win-x64` 并带 no-build。
+         而 publish **会自己再做一次隐式还原**（no-build 并不等于 no-restore）；
+         只要那一次还原没带上 RID，资产文件里就没有 `net10.0-windows/win-x64` 目标，
+         publish 直接 NETSDK1047 挂掉（实测 2026-09-28 踩过一次：改了包引用触发重新还原后就中招）。
+         写上 RuntimeIdentifiers 之后，**任何**一次还原都会带上 RID 目标，不再看运气。
+         注意：**不要**改成单数的 RuntimeIdentifier，那会把 TFM 钉成 RID 专用。 -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <RollForward>LatestMajor</RollForward>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationIcon>Assets\logo.ico</ApplicationIcon>
+    <AssemblyName>KunClient</AssemblyName>
+    <RootNamespace>KunFlashTool</RootNamespace>
+    <DebugType>none</DebugType>
+    <DebugSymbols>false</DebugSymbols>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>false</SelfContained>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <Version>1.1.4.1</Version>
+    <!-- Win32 文件属性（右键「属性 → 详细信息」看到的版本）**不跟随 <Version>**：
+         <Version> 是 NuGet 包版本，只喂给 InformationalVersion。要改文件版本资源
+         必须显式给 FileVersion / AssemblyVersion —— 否则发 1.1.4.0 之后右键仍是旧号。 -->
+    <FileVersion>1.1.4.1</FileVersion>
+    <AssemblyVersion>1.1.4.1</AssemblyVersion>
+    <ProductVersion>1.1.4.1</ProductVersion>
+    <Authors>小坤ovo</Authors>
+    <Description>KunClient - EDL Flash Tool</Description>
+  </PropertyGroup>
+
+</Project>

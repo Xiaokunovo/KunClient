@@ -1,0 +1,340 @@
+﻿<services:BasePage x:Class="KunFlashTool.App.Pages.FastbootFlashPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ═══════════════════════════════════════════════════════════════════
+         FASTBOOT 线刷 —— 工具箱版式（照 OnePlusFlashPage / AppManagerPage 配方）
+         ───────────────────────────────────────────────────────────────────
+         ① 页头删除（页签名「FASTBOOT」就是标题）；页根 = Grid + Theme.BgTint + Tool.PagePad。
+         ② 两列：左 316（本页在 MainWindow 页表里 OwnRail:true，外壳共用左栏让位，左列出自本页）
+              ·「设备信息」—— 6 行「标签: 值」读数 + 3 个 getvar 按钮
+              ·「日志」—— TxtLog 撑满左列剩余高度
+            右 *   ——「分区管理」（ROM 行 + 自定义分区行 + 分区表 + 读表/擦除/写入/搜索）
+                     「Bootloader 与数据操作」（按钮带 + 擦除指定分区）
+         ③ 页内不再有进度条 / 状态栏：任务名与进度一律上报 ShellStatus，由外壳 ③ 通栏双进度条
+            + ④ 分段状态栏显示。
+         ④ 卡片全部换成 ToolGroup 分组框（标题变 Header、圆角与内衬由模板负责，
+            页面里不再套带圆角的 Border）。
+         ⚠️ 隐形契约（重构布局时不得破坏）：
+            · TxtLog —— BasePage.LogTarget / PageLog 按名字找日志框；
+            · NotifyBar / NotifyIcon / NotifyText 三件套 —— BasePage.FindName 弹提示；
+            · TxtBootImage / TxtInitBootImage / TxtVendorBootImage / TxtDtboImage /
+              TxtRecoveryImage / TxtSystemImage 是刷写流程**唯一**的数据源（全部 BtnFlash*_Click
+              都读它们的 .Text）。界面上的展示位已换成「分区管理」表格的「文件路径」列，
+              所以这 6 个框收进 ImageHolders 并保持 Collapsed（不参与布局，只作数据宿主），
+              表格行 ↔ 这些框由代码后置双向同步；
+            · TxtCustomPartition 装的是用户自己填的分区名，必须留在界面上（ROM 行下方那一行）；
+            · 表格「文件路径」为空时显示灰色「双击选择文件」：DataTrigger 绑 HasFile 换 Foreground，
+              颜色一律走 Theme.*（写死色值 = 深色主题下留浅色补丁）。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="{StaticResource Tool.PagePad}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>   <!-- 页面内通知条 -->
+            <RowDefinition Height="Auto"/>   <!-- 模式切换（分区管理 / 可视刷写） -->
+            <!-- 主区地板 320：左列「设备信息 + 日志」至少要这么高才不挤 -->
+            <RowDefinition Height="*" MinHeight="320"/>
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：结构不可改（BasePage 靠 FindName 取这三个名字），
+             经典外观 = 浅蓝底 + 蓝描边；显示时由 Notify.Show 按成败覆写配色。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed"
+                CornerRadius="{StaticResource R.Control}" Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <!-- 2026-10-03 合并「可视刷写」：原先它是与 FASTBOOT 并列的独立页签，但内容是本页的子集
+             （只有分区表 + 刷写进度，没有 ROM / 擦除 / 回读），两个页签做同一件事、
+             用户不知道该点哪个。现在收成页内的一个模式，整宽接管（可视刷写自带左栏，
+             嵌进右列会变成 4 列），页签数从 7 降到 6。
+             视觉语言与登录窗 / EDL 页一致：下划线页签，选中 = 2px 强调色底线 + 主文字色。 -->
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <!-- Auto 而不是 *：两枚页签靠左紧凑排列。
+                     用 * 各占一半会把「分区管理」和「可视刷写」甩到页面两端，看起来像两个不相干的按钮。 -->
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
+            </Grid.ColumnDefinitions>
+            <Border x:Name="TabPartition" Grid.Column="0" BorderThickness="0,0,0,2"
+                    BorderBrush="{DynamicResource Theme.Accent}" Padding="0,8,28,8" Cursor="Hand"
+                    MouseLeftButtonDown="TabPartition_Click">
+                <TextBlock x:Name="TabPartitionText" Text="分区管理" FontSize="12" FontWeight="Bold"
+                           Foreground="{DynamicResource Theme.TextPrimary}" HorizontalAlignment="Center"/>
+            </Border>
+            <Border x:Name="TabVisual" Grid.Column="1" BorderThickness="0,0,0,2"
+                    BorderBrush="Transparent" Padding="0,8,28,8" Cursor="Hand"
+                    MouseLeftButtonDown="TabVisual_Click">
+                <TextBlock x:Name="TabVisualText" Text="可视刷写" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{DynamicResource Theme.TextTertiary}" HorizontalAlignment="Center"/>
+            </Border>
+        </Grid>
+
+        <!-- ═══════════ 主区：左列（设备信息 + 日志） + 右列（分区管理 + Bootloader 操作） ═══════════ -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <!-- 左列 316：与外壳左栏（DeviceLogRail）同宽 —— 两者不会同时出现。
+                     切到「可视刷写」时由代码把这两列收成 0（见 FbMode_Visual），
+                     可视刷写整宽接管，不与本页的左列并存。 -->
+                <ColumnDefinition Width="316" x:Name="ColFbLeft"/>
+                <ColumnDefinition Width="8" x:Name="ColFbGap"/>
+                <ColumnDefinition Width="*" MinWidth="0"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 可视刷写（2026-10-03 从独立页签合并进来）：整宽，跨第 2~3 列 -->
+            <ContentControl x:Name="PanelFbVisual" Grid.Column="1" Grid.ColumnSpan="2" Visibility="Collapsed"/>
+
+            <!-- ── 左列：设备信息（Auto）+ 更多读数（折叠）+ 日志（*） ── -->
+            <Grid x:Name="ColLeftPanel" Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*" MinHeight="140"/>
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备信息（6 行读数由 getvar 结果填，解析不到就是 "-"）
+                     参考稿里这一格**只有 6 行读数、没有按钮** —— 三个 getvar 按钮收进下面的折叠区。 -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备信息">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="12"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="26"/>
+                            <RowDefinition Height="26"/>
+                            <RowDefinition Height="26"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0" Grid.Column="0" Text="序列号:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtFbSerial" Grid.Row="0" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="3" Text="安全启动:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtFbSecure" Grid.Row="0" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}"/>
+
+                        <TextBlock Grid.Row="1" Grid.Column="0" Text="设备代号:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtFbCodename" Grid.Row="1" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}"/>
+                        <TextBlock Grid.Row="1" Grid.Column="3" Text="解锁状态:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtFbUnlocked" Grid.Row="1" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}"/>
+
+                        <TextBlock Grid.Row="2" Grid.Column="0" Text="启动槽位:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtFbSlot" Grid.Row="2" Grid.Column="1" Text="-" Style="{StaticResource ToolFieldValue}"/>
+                        <TextBlock Grid.Row="2" Grid.Column="3" Text="模式:" Style="{StaticResource ToolFieldLabel}"/>
+                        <TextBlock x:Name="TxtFbMode" Grid.Row="2" Grid.Column="4" Text="-" Style="{StaticResource ToolFieldValue}"/>
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 折叠区：三个 getvar 按钮（名称 / 事件处理器都没动，填的就是上面那 6 行读数） -->
+                <Expander Grid.Row="1" Style="{StaticResource ToolFold}" Header="读取设备信息">
+                    <WrapPanel>
+                        <Button Content="Getvar 全部" Style="{StaticResource ThemedPrimaryButton}"
+                                Click="BtnGetvarAll_Click" Height="26" Margin="0,0,6,0"/>
+                        <Button Content="设备信息" Style="{StaticResource ThemedFlatButton}"
+                                Click="BtnGetDeviceInfo_Click" Height="26" Margin="0,0,6,0"/>
+                        <Button Content="Slot 信息" Style="{StaticResource ThemedFlatButton}"
+                                Click="BtnGetSlotInfo_Click" Height="26"/>
+                    </WrapPanel>
+                </Expander>
+
+                <!-- 分组框：日志（撑满左列剩余高度） -->
+                <HeaderedContentControl Grid.Row="2" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Auto">
+                        <RichTextBox.Resources>
+                            <!-- RichTextBox 的段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0"/>
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：分区管理（*，表格自己滚）+ 更多操作（折叠区，Auto） ── -->
+            <Grid x:Name="ColRightPanel" Grid.Column="2">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="*" MinHeight="200"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：分区管理（ROM 目录 / 分区表 / 批量操作）
+                     参考稿里这一格**独占整个右列**：ROM 行 → 表格 → 底部按钮行。
+                     原来的「自定义分区」行被摘走（进折叠区），表格顶到 ROM 行下面。 -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="分区管理">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="26"/>   <!-- ROM 目录行 -->
+                            <RowDefinition Height="*" MinHeight="120"/>  <!-- 分区表：吃满剩余高度 -->
+                            <RowDefinition Height="26"/>   <!-- 底部按钮行 -->
+                        </Grid.RowDefinitions>
+
+                        <!-- ROM 目录：只读框 + 文件夹图标钮（选完自动匹配目录里的镜像） -->
+                        <Grid Grid.Row="0" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*" MinWidth="0"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="ROM:" Style="{StaticResource ToolFieldLabel}"/>
+                            <TextBox Grid.Column="1" x:Name="TxtRomDir" Style="{StaticResource ToolReadOnlyBox}"
+                                     Margin="0,0,6,0" Height="26"
+                                     ToolTip="固件目录：选完后自动匹配目录里的 boot / init_boot / vendor_boot / dtbo / recovery / system 镜像"/>
+                            <Button Grid.Column="2" Content="&#xE8B7;" Style="{StaticResource ToolIconButton}"
+                                    Click="BtnPickRomDir_Click" ToolTip="选择固件目录"/>
+                        </Grid>
+
+                        <!-- 分区表：勾选框 / 分区名 / 大小 / 类型 / 文件路径
+                             勾选 = 参与「写入分区 / 擦除分区」；双击行 = 选镜像文件；
+                             右键菜单 = 单分区的选择 / 刷写 / 擦除（原来那 7 个「刷写 X」按钮的入口，
+                             版式上并进了「写入分区」，单分区操作仍然够得着）。 -->
+                        <DataGrid Grid.Row="1" x:Name="DgFastbootPartitions" Style="{StaticResource ThemedDataGrid}"
+                                  SelectionMode="Single" IsReadOnly="True"
+                                  PreviewMouseRightButtonDown="DgFastbootPartitions_PreviewMouseRightButtonDown"
+                                  MouseDoubleClick="DgFastbootPartitions_MouseDoubleClick"
+                                  ToolTip="双击行选择镜像文件；勾选多行后点「写入分区 / 擦除分区」批量处理">
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Header="选择镜像…" Click="DgRowPickImage_Click"/>
+                                    <Separator/>
+                                    <MenuItem Header="刷写此分区" Click="DgRowFlash_Click"/>
+                                    <MenuItem Header="擦除此分区" Click="DgRowErase_Click"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+                            <DataGrid.Columns>
+                                <DataGridTemplateColumn Header="" Width="34">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <CheckBox Style="{StaticResource ThemedCheckBox}" HorizontalAlignment="Center"
+                                                      Click="ChkPartition_Click"
+                                                      IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                                <DataGridTextColumn Header="分区名" Binding="{Binding Name}" Width="130"/>
+                                <DataGridTextColumn Header="大小" Binding="{Binding Size}" Width="90"/>
+                                <DataGridTextColumn Header="类型" Binding="{Binding Type}" Width="70"/>
+                                <DataGridTemplateColumn Header="文件路径" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <TextBlock Text="{Binding FilePathDisplay}" VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" ToolTip="{Binding FilePathDisplay}">
+                                                <TextBlock.Style>
+                                                    <Style TargetType="TextBlock">
+                                                        <Setter Property="Foreground" Value="{DynamicResource Theme.TextPrimary}"/>
+                                                        <Style.Triggers>
+                                                            <!-- 没选文件 = 灰色提示文案「双击选择文件」 -->
+                                                            <DataTrigger Binding="{Binding HasFile}" Value="False">
+                                                                <Setter Property="Foreground" Value="{DynamicResource Theme.TextTertiary}"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </TextBlock.Style>
+                                            </TextBlock>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+
+                        <!-- 底部按钮行：主操作在左，「搜索分区」是右端那枚独立胶囊（参考稿形态）。
+                             输入框默认收起 —— 点胶囊才展开并聚焦；再点一次收起且清空过滤词。 -->
+                        <Grid Grid.Row="2" Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*" MinWidth="0"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Button Content="读分区表" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnReadPartitionTable_Click" Height="26" Margin="0,0,6,0"
+                                        ToolTip="fastboot getvar all，读取各分区大小"/>
+                                <Button Content="擦除分区" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnEraseSelected_Click" Height="26" Margin="0,0,6,0"
+                                        ToolTip="擦除表格里勾选的分区"/>
+                                <Button Content="写入分区" Style="{StaticResource ThemedPrimaryButton}"
+                                        Click="BtnFlashSelected_Click" Height="26"
+                                        ToolTip="把勾选行的镜像刷进对应分区"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                                <TextBox x:Name="TxtPartitionSearch" Style="{StaticResource ThemedInputBox}"
+                                         Width="130" Padding="8,3" Height="26" Margin="0,0,6,0" Visibility="Collapsed"
+                                         TextChanged="TxtPartitionSearch_TextChanged" ToolTip="按分区名过滤表格"/>
+                                <Button Content="搜索分区" Style="{StaticResource ThemedFlatButton}"
+                                        Click="SearchToggle_Click" Tag="TxtPartitionSearch" Height="26"
+                                        ToolTip="展开输入框，按分区名过滤表格"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 折叠区：参考稿里没有这两样，收进来。功能一个不少，只是不在主视线上。 -->
+                <Expander Grid.Row="1" Style="{StaticResource ToolFold}"
+                          Header="更多操作">
+                    <StackPanel>
+                        <!-- 自定义分区名：表格里那一行的分区名跟着它走；镜像在表格里双击那一行选择 -->
+                        <Grid Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*" MinWidth="0"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="自定义分区:" Style="{StaticResource ToolFieldLabel}"/>
+                            <TextBox Grid.Column="1" x:Name="TxtCustomPartition" Style="{StaticResource ThemedInputBox}"
+                                     Padding="8,3" Height="26"
+                                     TextChanged="TxtCustomPartition_TextChanged"
+                                     ToolTip="要刷写 / 擦除的自定义分区名；对应镜像在表格里双击该行选择"/>
+                        </Grid>
+
+                        <!-- 分组框：Bootloader 与数据操作（按钮带，一行放不下自动换行） -->
+                        <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="Bootloader 与数据操作">
+                            <WrapPanel>
+                                <Button Content="解锁 Bootloader" Style="{StaticResource ThemedPrimaryButton}"
+                                        Click="BtnUnlockBl_Click" Height="26" Margin="0,0,6,6"/>
+                                <Button Content="锁定 Bootloader" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnLockBl_Click" Height="26" Margin="0,0,6,6"/>
+                                <Button Content="查询解锁状态" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnGetUnlockStatus_Click" Height="26" Margin="0,0,6,6"/>
+                                <Button Content="格式化数据" Style="{StaticResource ThemedDangerButton}"
+                                        FontSize="12" Height="26" Click="BtnFormatData_Click" Margin="0,0,6,6"/>
+                                <Button Content="擦除 Cache" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnEraseCache_Click" Height="26" Margin="0,0,6,6"/>
+                                <Button Content="擦除 Metadata" Style="{StaticResource ThemedFlatButton}"
+                                        Click="BtnEraseMetadata_Click" Height="26" Margin="0,0,6,6"/>
+                                <!-- 擦除指定分区名：输入框 + 擦除按钮 -->
+                                <Grid Margin="0,0,6,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" MinWidth="0"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" x:Name="TxtErasePartition" Style="{StaticResource ThemedInputBox}"
+                                             Padding="8,3" Height="26" Width="150" Margin="0,0,6,0"
+                                             Tag="擦除分区" ToolTip="要擦除的分区名"/>
+                                    <Button Grid.Column="1" Content="擦除" Style="{StaticResource ThemedFlatButton}"
+                                            Click="BtnErasePartition_Click" Height="26"/>
+                                </Grid>
+                            </WrapPanel>
+                        </HeaderedContentControl>
+                    </StackPanel>
+                </Expander>
+            </Grid>
+
+            <!-- 6 个镜像框的数据宿主（保持 Collapsed，不参与布局，只让代码后置的 x:Name 引用继续成立）：
+                 界面上的展示位已经是「分区管理」表格的「文件路径」列，
+                 自定义分区名那一格则留在上面（它是用户可以填的内容，不能藏）。 -->
+            <StackPanel x:Name="ImageHolders" Grid.Column="2" Visibility="Collapsed">
+                <TextBox x:Name="TxtBootImage"/>
+                <TextBox x:Name="TxtInitBootImage"/>
+                <TextBox x:Name="TxtVendorBootImage"/>
+                <TextBox x:Name="TxtDtboImage"/>
+                <TextBox x:Name="TxtRecoveryImage"/>
+                <TextBox x:Name="TxtSystemImage"/>
+            </StackPanel>
+        </Grid>
+    </Grid>
+</services:BasePage>

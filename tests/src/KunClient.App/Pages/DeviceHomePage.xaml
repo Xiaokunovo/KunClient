@@ -1,0 +1,427 @@
+<services:BasePage x:Class="KunFlashTool.App.Pages.DeviceHomePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:services="clr-namespace:KunFlashTool.App.Services">
+    <!-- ═══════════════════════════════════════════════════════════════════
+         主页 · 设备总览（工具箱皮肤 · 字段区两列键值网格）
+         ───────────────────────────────────────────────────────────────────
+         外壳四层（菜单栏 / 页签区 / 通栏双进度条 / 分段状态栏）由 MainWindow 承担，
+         本页只负责「页签区内容」这一层，所以：
+           ① 页内不再有页头标题栏（页签名「主页」就是标题）、不再有页内进度条、
+              不再有页内状态栏 —— 进度与状态统一上报 ShellStatus（见 .xaml.cs）。
+           ② 字段区一律 ToolGroup 分组框 + ToolFieldLabel / ToolFieldValue 的
+              **两列键值网格**：标签列 Auto、值列 *，行高写字面 26，行距 6。
+              原来的 4 列表格（项目|值|项目|值）拆成单列 13 行 —— 列宽不再写死总宽，
+              窗口怎么拉都不会把值列挤没。
+           ③ 分组框内部不再套带圆角 Border（圆角与 1px 描边由 ToolGroup 模板负责）。
+           ④ 控件统一 Height="26"；间距一律字面数字（6/8/10）；
+              颜色一律 DynamicResource Theme.*，不写死十六进制。
+           ⑤ 间距/行高刻意不用 {StaticResource Tool.*}：Tool.RowHeight 是 sys:Double，
+              放进 RowDefinition.Height（GridLength）会运行期抛；写进复合字符串更会抛。
+
+         🔴 契约（DeviceHomePage.xaml.cs 逐个引用，一个都不能少）：
+            31 个 x:Name 全部保留 —— TxtModel / TxtAndroidVersion / TxtBuild /
+            TxtBattery / TxtBatteryTemp / TxtStorage / TxtConnectionStatus / TxtDeviceMode /
+            TxtRootStatus / TxtBootloader / TxtUsbDebugging / TxtKernel / TxtBaseband /
+            TxtSecurityPatch / TxtBrand / TxtPlatform / TxtProduct / TxtRam /
+            TxtDeviceCodename / TxtResolution / TxtSlot / TxtDensity / TxtAbUpdate /
+            TxtConnectionType / EllipseConnection / TxtLog / NotifyBar / NotifyIcon /
+            NotifyText / BtnAutoRefresh / BtnRefresh。
+            事件处理器名一律不变（BtnRefresh_Click / BtnRebootSystem_Click …）。
+            ⚠️ x:Name 与事件名是**探针契约**（combo_probe2 按名字找控件），改名 = 验收直接红。
+            EllipseConnection 名字保留，但类型 2026-10-08 已从 **Ellipse 改为 Border**
+            （用户「我不想要有圆形」；本节注释本来就写着「方点」，实现却没跟上）——
+            代码侧同步从 .Fill 改成 .Background，见 DeviceHomePage.xaml.cs 的状态映射。
+            运行时状态四行的方点用 ElementName 绑定值的 Foreground，改文字色即改点色。
+         ═══════════════════════════════════════════════════════════════════ -->
+    <Grid Background="{DynamicResource Theme.BgTint}" Margin="10,10,10,8">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />                <!-- ① 通知条 -->
+            <RowDefinition Height="Auto" />                <!-- ② 命令条 -->
+            <!-- ③ 主区：左＝设备标识/运行状态/实时读数/日志，右＝设备信息/快捷操作。
+                 两列都用 *，不写死总宽：OwnRail=true，外壳共用左栏整列收起，
+                 本页左列就是全部读数与日志。 -->
+            <RowDefinition Height="*" MinHeight="300" />
+        </Grid.RowDefinitions>
+
+        <!-- 页面内通知条：BasePage 用 FindName("NotifyBar") 取它，且要求
+             Border > StackPanel > TextBlock#NotifyIcon / #NotifyText，结构不可改。
+             底色/描边走主题（InfoBg 底 + Info 描边）；真正显示时由 Notify.Show 按成败覆写。 -->
+        <Border x:Name="NotifyBar" Grid.Row="0" Visibility="Collapsed"
+                CornerRadius="{StaticResource R.Control}" Padding="10,7" Margin="0,0,0,8"
+                Background="{DynamicResource Theme.InfoBg}"
+                BorderBrush="{DynamicResource Theme.Info}" BorderThickness="1">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock x:Name="NotifyIcon" FontSize="12.5" Margin="0,0,8,0" VerticalAlignment="Center" />
+                <TextBlock x:Name="NotifyText" FontSize="12" VerticalAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
+        <!-- ═══════════ ② 命令条：全部操作按钮收到这一行 ═══════════ -->
+        <Grid Grid.Row="1" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button x:Name="BtnAutoRefresh" Content="自动刷新" Style="{StaticResource ThemedFlatButton}"
+                        Click="BtnAutoRefresh_Click" Height="26" Margin="0,0,6,0" />
+                <Button Content="设备管理器" Style="{StaticResource ThemedFlatButton}"
+                        Click="BtnDeviceManager_Click" Height="26" Margin="0,0,6,0"
+                        ToolTip="打开 Windows 设备管理器（devmgmt.msc），用于确认 9008 / ADB / Fastboot 端口" />
+                <Button Content="命令行" Style="{StaticResource ThemedFlatButton}"
+                        Click="BtnOpenConsole_Click" Height="26" Margin="0,0,6,0"
+                        ToolTip="打开命令行页面，可直接执行 adb / fastboot 或调用系统 CMD" />
+            </StackPanel>
+
+            <Button Grid.Column="2" x:Name="BtnRefresh" Content="刷新" Style="{StaticResource ThemedPrimaryButton}"
+                    Click="BtnRefresh_Click" Height="26" />
+        </Grid>
+
+        <!-- ═══════════ ③ 主区：左列（读数 + 日志） + 右列（设备信息 + 快捷操作） ═══════════ -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" MinWidth="0" />
+                <ColumnDefinition Width="8" />
+                <ColumnDefinition Width="*" MinWidth="0" />
+            </Grid.ColumnDefinitions>
+
+            <!-- ── 左列 ── -->
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" MinHeight="112" />   <!-- 设备标识 -->
+                    <RowDefinition Height="Auto" />                  <!-- 连接 -->
+                    <RowDefinition Height="Auto" />                  <!-- 运行状态 -->
+                    <RowDefinition Height="Auto" />                  <!-- 实时读数 -->
+                    <RowDefinition Height="*" MinHeight="120" />     <!-- 日志 -->
+                </Grid.RowDefinitions>
+
+                <!-- 分组框：设备标识 -->
+                <HeaderedContentControl Grid.Row="0" Style="{StaticResource ToolGroup}" Header="设备标识">
+                    <StackPanel>
+                        <!-- 机型是这一组的标题行：等宽加粗，单独占一行（不是 26 高的普通读数行） -->
+                        <TextBlock x:Name="TxtModel" Text="—" FontFamily="{StaticResource F.Mono}"
+                                   FontSize="14" FontWeight="Bold" Margin="0,0,0,8"
+                                   Foreground="{DynamicResource Theme.TextPrimary}"
+                                   TextTrimming="CharacterEllipsis" />
+
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Android 版本:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock Grid.Column="1" x:Name="TxtAndroidVersion" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+
+                        <Grid Height="26">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Build:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock Grid.Column="1" x:Name="TxtBuild" Text="-"
+                                       Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- 分组框：连接状态（方点 + 等宽状态词；点色由代码改 EllipseConnection.Background）。
+                     点用 Border + R.Square(2) 而不是 Ellipse：8px 见方配 R.Micro(4) 会被 WPF
+                     收成正圆，配 2 才是「方点」。 -->
+                <HeaderedContentControl Grid.Row="1" Style="{StaticResource ToolGroup}" Header="连接">
+                    <Grid Height="26">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Orientation="Horizontal">
+                            <Border x:Name="EllipseConnection" Width="8" Height="8" Margin="0,0,6,0"
+                                    VerticalAlignment="Center"
+                                    CornerRadius="{StaticResource R.Square}"
+                                    Background="{DynamicResource Theme.TextTertiary}" />
+                            <TextBlock Text="状态:" Style="{StaticResource ToolFieldLabel}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" x:Name="TxtConnectionStatus" Text="检测中..."
+                                   FontFamily="{StaticResource F.Mono}" FontSize="12" FontWeight="Bold"
+                                   Foreground="{DynamicResource Theme.TextPrimary}" VerticalAlignment="Center"
+                                   TextTrimming="CharacterEllipsis" />
+                    </Grid>
+                </HeaderedContentControl>
+
+                <!-- 分组框：运行状态（方点颜色跟随值的 Foreground，由代码改文字色即可） -->
+                <HeaderedContentControl Grid.Row="2" Style="{StaticResource ToolGroup}" Header="运行状态">
+                    <StackPanel>
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Rectangle Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Fill="{Binding Foreground, ElementName=TxtDeviceMode}" />
+                                <TextBlock Text="模式:" Style="{StaticResource ToolFieldLabel}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" x:Name="TxtDeviceMode" Text="—"
+                                       Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Rectangle Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Fill="{Binding Foreground, ElementName=TxtRootStatus}" />
+                                <TextBlock Text="Root:" Style="{StaticResource ToolFieldLabel}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" x:Name="TxtRootStatus" Text="检测中..."
+                                       Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Rectangle Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Fill="{Binding Foreground, ElementName=TxtBootloader}" />
+                                <TextBlock Text="引导锁:" Style="{StaticResource ToolFieldLabel}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" x:Name="TxtBootloader" Text="检测中..."
+                                       Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+
+                        <Grid Height="26">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                                <Rectangle Width="8" Height="8" Margin="0,0,6,0" VerticalAlignment="Center"
+                                           Fill="{Binding Foreground, ElementName=TxtUsbDebugging}" />
+                                <TextBlock Text="USB 调试:" Style="{StaticResource ToolFieldLabel}" />
+                            </StackPanel>
+                            <TextBlock Grid.Column="1" x:Name="TxtUsbDebugging" Text="检测中..."
+                                       Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- 分组框：实时读数 -->
+                <HeaderedContentControl Grid.Row="3" Style="{StaticResource ToolGroup}" Header="实时读数">
+                    <StackPanel>
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="电量:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock Grid.Column="1" x:Name="TxtBattery" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+
+                        <Grid Height="26" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="温度:" Style="{StaticResource ToolFieldLabel}" />
+                            <TextBlock Grid.Column="1" x:Name="TxtBatteryTemp" Text="-" Style="{StaticResource ToolFieldValue}" />
+                        </Grid>
+
+                        <!-- 存储：df 的输出是多行文本，这一行给 Auto 高度并换行显示
+                             （锁 26 会把「用量」那一截裁掉） -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="存储:" Style="{StaticResource ToolFieldLabel}"
+                                       VerticalAlignment="Top" />
+                            <TextBlock Grid.Column="1" x:Name="TxtStorage" Text="-" Style="{StaticResource ToolFieldValue}"
+                                       TextWrapping="Wrap" VerticalAlignment="Top" />
+                        </Grid>
+                    </StackPanel>
+                </HeaderedContentControl>
+
+                <!-- 分组框：日志（OwnRail 页面的操作日志落在这里；等宽只读，样式自带 F.Mono） -->
+                <HeaderedContentControl Grid.Row="4" Style="{StaticResource ToolGroup}" Header="日志">
+                    <RichTextBox x:Name="TxtLog" Style="{StaticResource LogRichTextBox}"
+                                 HorizontalScrollBarVisibility="Disabled"
+                                 VerticalScrollBarVisibility="Auto">
+                        <RichTextBox.Resources>
+                            <!-- RichTextBox 的段落默认带上下外边距，会把日志行距撑开 -->
+                            <Style TargetType="Paragraph">
+                                <Setter Property="Margin" Value="0" />
+                            </Style>
+                        </RichTextBox.Resources>
+                    </RichTextBox>
+                </HeaderedContentControl>
+            </Grid>
+
+            <!-- ── 右列：设备信息字段表 + 快捷操作（内容随按钮换行变高，整列可滚） ── -->
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel>
+                    <!-- 分组框：设备信息（两列键值网格，Auto + *，13 行 × 26） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="设备信息">
+                        <StackPanel>
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="连接方式:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtConnectionType" Text="-"
+                                           Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="内核版本:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtKernel" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="基带版本:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtBaseband" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="安全补丁:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtSecurityPatch" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="品牌:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtBrand" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="芯片平台:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtPlatform" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="产品名称:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtProduct" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="运行内存:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtRam" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="设备代号:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtDeviceCodename" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="屏幕分辨率:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtResolution" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="屏幕密度:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtDensity" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="启动槽位:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtSlot" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+
+                            <Grid Height="26">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="A/B 分区:" Style="{StaticResource ToolFieldLabel}" />
+                                <TextBlock Grid.Column="1" x:Name="TxtAbUpdate" Text="-" Style="{StaticResource ToolFieldValue}" />
+                            </Grid>
+                        </StackPanel>
+                    </HeaderedContentControl>
+
+                    <!-- 分组框：快捷操作（ADB / Fastboot 两组，组内不再套带圆角 Border） -->
+                    <HeaderedContentControl Style="{StaticResource ToolGroup}" Header="快捷操作">
+                        <StackPanel>
+                            <TextBlock Text="ADB" FontFamily="{StaticResource F.Mono}" FontSize="10"
+                                       FontWeight="Bold" Foreground="{DynamicResource Theme.TextTertiary}"
+                                       Margin="0,0,0,6" />
+                            <WrapPanel>
+                                <Button Content="重启系统" Style="{StaticResource ThemedPrimaryButton}" Click="BtnRebootSystem_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="重启 Recovery" Style="{StaticResource ThemedFlatButton}" Click="BtnRebootRecovery_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="重启 Bootloader" Style="{StaticResource ThemedFlatButton}" Click="BtnRebootBootloader_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="重启 EDL" Style="{StaticResource ThemedFlatButton}" Click="BtnRebootEdl_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="重启 FastbootD" Style="{StaticResource ThemedFlatButton}" Click="BtnRebootFastbootD_Click" Height="26" Margin="0,0,6,6" />
+                            </WrapPanel>
+
+                            <TextBlock Text="Fastboot" FontFamily="{StaticResource F.Mono}" FontSize="10"
+                                       FontWeight="Bold" Foreground="{DynamicResource Theme.TextTertiary}"
+                                       Margin="0,3,0,6" />
+                            <WrapPanel>
+                                <Button Content="重启系统" Style="{StaticResource ThemedPrimaryButton}" Click="BtnFastbootReboot_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="重启 Recovery" Style="{StaticResource ThemedFlatButton}" Click="BtnFastbootRebootRecovery_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="重启 Bootloader" Style="{StaticResource ThemedFlatButton}" Click="BtnFastbootRebootBootloader_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="解锁 Bootloader" Style="{StaticResource ThemedFlatButton}" Click="BtnFastbootOemUnlock_Click" Height="26" Margin="0,0,6,6" />
+                                <!-- 合规：「获取序列号」已移除（序列号是可定位到具体设备的唯一标识） -->
+                                <Button Content="查看引导状态" Style="{StaticResource ThemedFlatButton}" Click="BtnFastbootGetvarUnlocked_Click" Height="26" Margin="0,0,6,6" />
+                                <Button Content="进入 EDL (9008)" Style="{StaticResource ThemedFlatButton}" Click="BtnEnterEdl_Click" Height="26" Margin="0,0,6,6"
+                                        ToolTip="免解 BL、免拆机进入 9008：adb 在线走 adb reboot edl，fastboot 下依次尝试 fastboot oem edl 与 fastboot reboot edl。&#x0a;注意：较新的机型已在 bootloader 里封锁这两条命令，此时只能用深度刷机线或短接测试点。&#x0a;本工具不提供绕过厂商 EDL 授权鉴权（读 token 算码）的手段。" />
+                            </WrapPanel>
+                        </StackPanel>
+                    </HeaderedContentControl>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</services:BasePage>
