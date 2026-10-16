@@ -32,7 +32,7 @@ namespace KunFlashTool.App.Services
         {
             try
             {
-                using var response = await httpClient.GetAsync($"{ServerUrl}/api/v2/app/version");
+                using var response = await httpClient.GetAsync($"{ServerUrl}/api/v1/app/version");
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonSerializer.Deserialize<JsonElement>(json);
 

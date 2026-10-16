@@ -67,7 +67,7 @@ namespace KunFlashTool.App.Dialogs
 
             try
             {
-                var json = await Http.GetStringAsync($"{ServerUrl}/api/v2/wallpapers");
+                var json = await Http.GetStringAsync($"{ServerUrl}/api/v1/wallpapers");
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 

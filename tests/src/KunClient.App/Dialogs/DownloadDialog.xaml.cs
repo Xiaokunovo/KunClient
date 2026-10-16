@@ -111,7 +111,7 @@ namespace KunFlashTool.App.Dialogs
                     // E11：优先二进制端点 /api/packages/tools/file（原始 zip，比 base64 JSON 少 33% 字节），
                     // 失败自动回落旧的 base64 端点。
                     var toolsOk = await _downloader.DownloadPackageFromServerAsync(
-                        ServerUrl, "/api/v2/packages/tools",
+                        ServerUrl, "/api/v1/packages/tools",
                         Path.Combine(_toolsDirectory, "tools.zip"),
                         "正在下载 ADB / Fastboot...",
                         overallFrom: 5, overallTo: 45);
@@ -155,7 +155,7 @@ namespace KunFlashTool.App.Dialogs
 
                     // 下载 52→90，解压 90→97。E11：优先 /api/packages/scrcpy/file，失败回落 base64。
                     var scrcpyOk = await _downloader.DownloadPackageFromServerAsync(
-                        ServerUrl, "/api/v2/packages/scrcpy",
+                        ServerUrl, "/api/v1/packages/scrcpy",
                         Path.Combine(_scrcpyDirectory, "scrcpy.zip"),
                         "正在下载 scrcpy...",
                         overallFrom: 52, overallTo: 90);

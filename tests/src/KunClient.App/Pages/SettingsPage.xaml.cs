@@ -381,7 +381,7 @@ namespace KunFlashTool.App.Pages
                     return;
                 }
 
-                var request = new HttpRequestMessage(HttpMethod.Get, $"{ProfileServerUrl}/api/v2/profile");
+                var request = new HttpRequestMessage(HttpMethod.Get, $"{ProfileServerUrl}/api/v1/profile");
                 request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
                 using var response = await _profileHttp.SendAsync(request);
                 var json = await response.Content.ReadAsStringAsync();

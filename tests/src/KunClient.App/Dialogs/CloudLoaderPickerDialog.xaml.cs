@@ -121,7 +121,7 @@ namespace KunFlashTool.App.Dialogs
 
             try
             {
-                var json = await Http.GetStringAsync($"{ServerUrl}/api/v2/loaders/firehose/index");
+                var json = await Http.GetStringAsync($"{ServerUrl}/api/v1/loaders/firehose/index");
                 var (ok, items) = CloudLoaderItem.ParseIndex(json);
                 if (!ok)
                 {

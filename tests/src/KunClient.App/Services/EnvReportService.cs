@@ -104,10 +104,10 @@ namespace KunFlashTool.App.Services
                 var payload = BuildPayload(signals);
                 var sig = HmacHex(nonce, payload);
 
-                // v2：env/report 是受保护端点，走 RequestSigner（外层信封不参与环境签名，
+                // v1：env/report 是受保护端点，走 RequestSigner（外层信封不参与环境签名，
                 // nonce + payload 才是被签的内容，与请求签名互不干扰）。
                 using var resp = Core.Net.RequestSigner
-                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v2/client/env/report",
+                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v1/client/env/report",
                         JsonBody.Of(("nonce", nonce), ("payload", payload), ("sig", sig), ("answer", answer)),
                         r => r.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token))
                     .ConfigureAwait(false).GetAwaiter().GetResult();
@@ -201,9 +201,9 @@ namespace KunFlashTool.App.Services
                 var payload = BuildPayload(signals);
                 var sig = HmacHex(nonce, payload);
 
-                // v2：env/anonymous 是受保护端点，走 RequestSigner
+                // v1：env/anonymous 是受保护端点，走 RequestSigner
                 using var resp = Core.Net.RequestSigner
-                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v2/client/env/anonymous",
+                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v1/client/env/anonymous",
                         JsonBody.Of(("nonce", nonce), ("payload", payload), ("sig", sig), ("answer", answer)))
                     .ConfigureAwait(false).GetAwaiter().GetResult();
                 return resp.IsSuccessStatusCode;
@@ -218,9 +218,9 @@ namespace KunFlashTool.App.Services
             puzzle = "";
             try
             {
-                // v2：challenge-anon 是受保护端点，走 RequestSigner
+                // v1：challenge-anon 是受保护端点，走 RequestSigner
                 using var resp = Core.Net.RequestSigner
-                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v2/client/env/challenge-anon", "{}")
+                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v1/client/env/challenge-anon", "{}")
                     .ConfigureAwait(false).GetAwaiter().GetResult();
                 if (!resp.IsSuccessStatusCode) return false;
                 var json = resp.Content.ReadAsStringAsync().ConfigureAwait(false).GetAwaiter().GetResult();
@@ -238,9 +238,9 @@ namespace KunFlashTool.App.Services
             puzzle = "";
             try
             {
-                // v2：challenge 是受保护端点，走 RequestSigner
+                // v1：challenge 是受保护端点，走 RequestSigner
                 using var resp = Core.Net.RequestSigner
-                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v2/client/env/challenge", "{}",
+                    .PostJsonAsync(Http, AppConfig.ServerUrl + "/api/v1/client/env/challenge", "{}",
                         r => r.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token))
                     .ConfigureAwait(false).GetAwaiter().GetResult();
                 if (!resp.IsSuccessStatusCode) return false;

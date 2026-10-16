@@ -56,7 +56,7 @@ namespace KunFlashTool.App.Pages
 
             try
             {
-                var json = await Http.GetStringAsync($"{ServerUrl}/api/v2/packages/drivers");
+                var json = await Http.GetStringAsync($"{ServerUrl}/api/v1/packages/drivers");
                 using var doc = JsonDocument.Parse(json);
                 var root = doc.RootElement;
 

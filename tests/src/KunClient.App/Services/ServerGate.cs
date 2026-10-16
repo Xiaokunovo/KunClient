@@ -37,7 +37,7 @@ public static class ServerGate
     /// <summary>给 HttpClient 装上统一请求头。UA 为空在网关看来是强机器人信号，必须给一个。</summary>
     public static void ApplyDefaultHeaders(HttpClient client)
     {
-        // v2 签名握手走 Core 层自己的 HttpClient，UA 从这里注入（Core 不能反向引用 App）。
+        // v1 签名握手走 Core 层自己的 HttpClient，UA 从这里注入（Core 不能反向引用 App）。
         Core.Net.RequestSigner.HandshakeUserAgent = UserAgent;
         client.DefaultRequestHeaders.UserAgent.Clear();
         client.DefaultRequestHeaders.UserAgent.ParseAdd(UserAgent);

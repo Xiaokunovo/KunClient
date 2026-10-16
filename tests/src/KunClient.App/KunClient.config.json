@@ -1,0 +1,4 @@
+{
+  "_说明": "KunClient 客户端默认软配置：编译时以 EmbeddedResource 内嵌进程序（打包目录里不会再出现松散 json）。改 serverUrl 即可切换后端，无需改代码重新编译。运行时优先级：环境变量 KUNCLIENT_SERVER_URL > %LOCALAPPDATA%\\KunClient\\KunClient.config.json（登录框「服务器设置」写入）> exe 同目录 KunClient.config.local.json > exe 同目录 KunClient.config.json > 本文件。字段模板见 KunClient.config.example.json。",
+  "serverUrl": "https://your-domain.com"
+}

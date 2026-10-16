@@ -15,7 +15,7 @@ namespace KunFlashTool.Core.Net;
 /// <summary>
 /// 并行分片下载器（2026-10-08，用户反馈「下载速度太慢」）。
 ///
-/// <para><b>为什么必须多连接</b>：用本类跑真机 A/B（chunk_probe，直连 kunawa.cn，
+/// <para><b>为什么必须多连接</b>：用本类跑真机 A/B（chunk_probe，直连服务端，
 /// 11.3MB 的 scrcpy.zip，同一时刻同一网络对比）：</para>
 /// <list type="table">
 ///   <item><description>单连接：31.4 ~ 43.8 s（0.25 ~ 0.34 MB/s）—— 就是旧实现的口径</description></item>

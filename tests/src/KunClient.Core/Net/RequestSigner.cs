@@ -9,9 +9,9 @@ using System.Threading.Tasks;
 namespace KunFlashTool.Core.Net;
 
 /// <summary>
-/// API v2 请求签名器（2026-10-11 服务端全量重构配套）。
+/// API v1 请求签名器（2026-10-11 服务端全量重构配套）。
 ///
-/// 模型：先 POST <c>/api/v2/client/handshake</c> 换一次性会话 <c>{sid, secret}</c>
+/// 模型：先 POST <c>/api/v1/client/handshake</c> 换一次性会话 <c>{sid, secret}</c>
 /// （secret 只经 HTTPS 下发一次、只存内存 —— 不落盘、不进程序集，符合凭据红线），
 /// 之后每个受保护请求带四个头：
 /// <code>
@@ -121,7 +121,7 @@ public static class RequestSigner
             // 双检：等锁期间别人可能已经换好了
             if (!string.IsNullOrEmpty(_sid) && _sessionBaseUrl == baseUrl && DateTime.UtcNow < _expireUtc) return;
 
-            using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/v2/client/handshake")
+            using var req = new HttpRequestMessage(HttpMethod.Post, baseUrl + "/api/v1/client/handshake")
             {
                 Content = new StringContent("{}", Encoding.UTF8, "application/json"),
             };

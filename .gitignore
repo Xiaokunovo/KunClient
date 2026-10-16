@@ -28,7 +28,9 @@ tests/**/obj/
 *.user
 
 # ── 白名单内仍需排除：本机私有配置与运行期日志 ──
-tests/src/KunClient.App/KunClient.config.json
+# 注：KunClient.config.json 已脱敏（serverUrl 为占位符）后纳入仓库 ——
+# ServerUrlGuardTests 会断言它存在，缺了会让克隆下来的测试直接失败。
+# KunClient.config.local.json 是本机私有覆盖，仍然排除。
 tests/src/KunClient.App/KunClient.config.local.json
 **/*.local.json
 *.log

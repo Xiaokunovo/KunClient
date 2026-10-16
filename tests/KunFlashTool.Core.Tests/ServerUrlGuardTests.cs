@@ -9,14 +9,14 @@ namespace KunFlashTool.Core.Tests;
 /// <summary>
 /// 服务器地址回归护栏。
 ///
-/// 血泪史（2026-09-26）：注册全线失败，最后查出根因是**域名选错** ——
-/// <c>kunawa.xyz</c> 被 Cloudflare 挂上了 Managed Challenge（人机校验），
-/// 客户端（HttpClient / urllib）**不执行 JS** → 所有接口返回 403 挑战页 → 注册/登录全挂。
-/// 表现与「服务器宕机」完全一样，极易误判。
+/// 血泪史：注册全线失败，最后查出根因是**域名选错** —— 备用域被 CDN 挂上了
+/// Managed Challenge（人机校验），客户端（HttpClient / urllib）**不执行 JS**
+/// → 所有接口返回 403 挑战页 → 注册/登录全挂。表现与「服务器宕机」完全一样，极易误判。
 ///
 /// 所以这里用源码级断言把两条红线钉住：
 ///   1. 兜底地址必须是真实可用的域名（不能再是 http://127.0.0.1:3000，那只会静默连不上）；
-///   2. 内嵌配置 **禁止** 出现 kunawa.xyz。
+///   2. 内嵌配置 **禁止** 回退到那个被拦的备用域（下方 <c>legacy.example.com</c> 为占位符，
+///      部署时替换成你自己的域）。
 /// </summary>
 public sealed class ServerUrlGuardTests
 {
@@ -40,9 +40,9 @@ public sealed class ServerUrlGuardTests
         var text = File.ReadAllText(embedded);
 
         Assert.False(
-            text.Contains("kunawa.xyz", StringComparison.OrdinalIgnoreCase),
-            "内嵌配置禁止使用 kunawa.xyz —— 该域被 Cloudflare Managed Challenge 拦截，" +
-            "客户端不执行 JS 会收到 403，注册/登录全部失败。");
+            text.Contains("legacy.example.com", StringComparison.OrdinalIgnoreCase),
+            "内嵌配置禁止回退到被 CDN 人机校验拦截的备用域 —— 客户端不执行 JS 会收到 403，" +
+            "注册/登录全部失败。");
         Assert.Contains("https://", text, StringComparison.Ordinal);
         Assert.DoesNotContain("127.0.0.1", text, StringComparison.Ordinal);
     }
@@ -53,7 +53,7 @@ public sealed class ServerUrlGuardTests
     /// 原来这条断言盯的是 <c>package/python/kunflash/client_config.py</c>，但 PySide6 前端已在
     /// 2026-09 冻结、整个 <c>package/</c> 目录已从仓库移除 → 路径不存在 → 断言永远失败。
     /// **常年红的护栏比没有护栏更糟**：它会掩盖真正的回归（这次就是靠上面 119 条才发现它）。
-    /// 所以改成「扫活跃源码树里还有没有 kunawa.xyz」，与具体文件解耦，路径怎么变都不会烂。
+    /// 所以改成「扫活跃源码树里还有没有那个被拦的备用域」，与具体文件解耦，路径怎么变都不会烂。
     /// </summary>
     [Fact]
     public void NoActiveSourceSurface_UsesCloudflareChallengedDomain()
@@ -72,15 +72,15 @@ public sealed class ServerUrlGuardTests
 
                 foreach (var (line, no) in ReadCodeLines(file))
                 {
-                    if (line.Contains("kunawa.xyz", StringComparison.OrdinalIgnoreCase))
+                    if (line.Contains("legacy.example.com", StringComparison.OrdinalIgnoreCase))
                         offenders.Add($"{Path.GetRelativePath(root, file).Replace('\\', '/')}:{no}  {line.Trim()}");
                 }
             }
         }
 
         Assert.True(offenders.Count == 0,
-            "以下文件仍在使用 kunawa.xyz —— 该域被 Cloudflare Managed Challenge 拦截，" +
-            "客户端不执行 JS 会收到 403（表现与宕机一模一样）：\n  " +
+            "以下文件仍在使用那个被 CDN 人机校验拦截的备用域 —— 客户端不执行 JS 会收到 403" +
+            "（表现与宕机一模一样）：\n  " +
             string.Join("\n  ", offenders));
     }
 
@@ -96,16 +96,16 @@ public sealed class ServerUrlGuardTests
 
     [Theory]
     [InlineData("https://evil.example.com")]
-    [InlineData("https://kunawa.cn.evil.com")]      // 后缀伪造：只写 EndsWith 会误放行，必须挡住
-    [InlineData("https://evil-kunawa.cn")]          // 前缀伪造
+    [InlineData("https://your-domain.com.evil.com")]      // 后缀伪造：只写 EndsWith 会误放行，必须挡住
+    [InlineData("https://evil-your-domain.com")]          // 前缀伪造
     [InlineData("https://attacker.io")]
     public void Accept_RejectsUntrustedRemoteHost(string url)
         => Assert.Null(ClientConfig.Accept(url));
 
     [Theory]
-    [InlineData("https://kunawa.cn")]
-    [InlineData("https://www.kunawa.cn")]
-    [InlineData("https://api.kunawa.cn")]
+    [InlineData("https://your-domain.com")]
+    [InlineData("https://www.your-domain.com")]
+    [InlineData("https://api.your-domain.com")]
     public void Accept_AllowsOfficialDomainAndSubdomains(string url)
         => Assert.Equal(url, ClientConfig.Accept(url));
 
@@ -119,7 +119,7 @@ public sealed class ServerUrlGuardTests
 
     [Theory]
     [InlineData("http://evil.example.com")]         // 远程明文 → 拒绝
-    [InlineData("http://kunawa.cn")]                // 既是官方域也不许走明文
+    [InlineData("http://your-domain.com")]                // 既是官方域也不许走明文
     public void Accept_RejectsPlaintextHttpForRemoteHost(string url)
         => Assert.Null(ClientConfig.Accept(url));
 
@@ -154,7 +154,7 @@ public sealed class ServerUrlGuardTests
     /// <summary>
     /// 只取「代码行」，跳过整行注释。
     /// ⚠️ 必须跳过 —— 这类红线域的**说明文字**本身就会写出那个域名
-    /// （<c>ClientConfig.cs</c> 的文档注释里就写着「不能用 kunawa.xyz」），
+    /// （<c>ClientConfig.cs</c> 的文档注释里就写着「不能用 legacy.example.com」），
     /// 不跳过会把讲道理的注释判成违规，护栏立刻变成噪声。
     /// </summary>
     private static IEnumerable<(string Line, int Number)> ReadCodeLines(string path)

@@ -340,8 +340,8 @@ namespace KunFlashTool.App.Dialogs
             try
             {
                 var payload = JsonBody.Of(("username", username), ("password", password));
-                // v2：受保护端点统一走 RequestSigner（握手 + HMAC 签名，见 Core.Net.RequestSigner）
-                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v2/login", payload);
+                // v1：受保护端点统一走 RequestSigner（握手 + HMAC 签名，见 Core.Net.RequestSigner）
+                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v1/login", payload);
                 var json = await response.Content.ReadAsStringAsync();
                 // 先判【请求有没有走到业务层】：CF 的挑战页是 403 + HTML，
                 // 直接反序列化只会抛 JsonException，界面上就成了指不出原因的报错（见 ServerGate 注释）。
@@ -398,7 +398,7 @@ namespace KunFlashTool.App.Dialogs
             try
             {
                 var payload = JsonBody.Of(("key", key));
-                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v2/auth/key-login", payload);
+                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v1/auth/key-login", payload);
                 var json = await response.Content.ReadAsStringAsync();
                 // 先判【请求有没有走到业务层】：CF 的挑战页是 403 + HTML，
                 // 直接反序列化只会抛 JsonException，界面上就成了指不出原因的报错（见 ServerGate 注释）。
@@ -455,7 +455,7 @@ namespace KunFlashTool.App.Dialogs
             {
                 var payload = JsonBody.Of(("email", email), ("type", "login"));
                 using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-                using var response = await httpClient.PostAsync($"{serverUrl}/api/v2/auth/send-code", content);
+                using var response = await httpClient.PostAsync($"{serverUrl}/api/v1/auth/send-code", content);
                 var json = await response.Content.ReadAsStringAsync();
                 // 先判【请求有没有走到业务层】：CF 的挑战页是 403 + HTML，
                 // 直接反序列化只会抛 JsonException，界面上就成了指不出原因的报错（见 ServerGate 注释）。
@@ -489,7 +489,7 @@ namespace KunFlashTool.App.Dialogs
             try
             {
                 var payload = JsonBody.Of(("email", email), ("code", code));
-                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v2/auth/code-login", payload);
+                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v1/auth/code-login", payload);
                 var json = await response.Content.ReadAsStringAsync();
                 // 先判【请求有没有走到业务层】：CF 的挑战页是 403 + HTML，
                 // 直接反序列化只会抛 JsonException，界面上就成了指不出原因的报错（见 ServerGate 注释）。
@@ -546,7 +546,7 @@ namespace KunFlashTool.App.Dialogs
             {
                 var payload = JsonBody.Of(("email", email), ("type", "register"));
                 using var content = new StringContent(payload, Encoding.UTF8, "application/json");
-                using var response = await httpClient.PostAsync($"{serverUrl}/api/v2/auth/send-code", content);
+                using var response = await httpClient.PostAsync($"{serverUrl}/api/v1/auth/send-code", content);
                 var json = await response.Content.ReadAsStringAsync();
                 // 先判【请求有没有走到业务层】：CF 的挑战页是 403 + HTML，
                 // 直接反序列化只会抛 JsonException，界面上就成了指不出原因的报错（见 ServerGate 注释）。
@@ -595,7 +595,7 @@ namespace KunFlashTool.App.Dialogs
                 var payload = JsonBody.Of(
                     ("email", email), ("code", code), ("username", username),
                     ("password", password), ("agree", true), ("legalVersion", LegalVersion));
-                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v2/auth/code-register", payload);
+                using var response = await Core.Net.RequestSigner.PostJsonAsync(httpClient, $"{serverUrl}/api/v1/auth/code-register", payload);
                 var json = await response.Content.ReadAsStringAsync();
                 // 先判【请求有没有走到业务层】：CF 的挑战页是 403 + HTML，
                 // 直接反序列化只会抛 JsonException，界面上就成了指不出原因的报错（见 ServerGate 注释）。

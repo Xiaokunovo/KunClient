@@ -114,7 +114,7 @@ namespace KunFlashTool.Core.PlatformTools
                 {
                     _log?.Invoke($"静态路径不可用（{raw.Error}），改用二进制端点…");
                     raw = await ChunkedDownloader.DownloadAsync(
-                        httpClient, $"{ServerUrl}/api/v2/packages/tools/file", zipPath,
+                        httpClient, $"{ServerUrl}/api/v1/packages/tools/file", zipPath,
                         ChunkedDownloader.DefaultParallelism, onProgress, CancellationToken.None).ConfigureAwait(false);
                     total = raw.TotalBytes;
                     received = raw.TotalBytes;
@@ -127,7 +127,7 @@ namespace KunFlashTool.Core.PlatformTools
                     var rawPath = Path.Combine(_toolsDirectory, "tools.payload");
                     long got = 0;
                     long respTotal;
-                    using (var resp = await httpClient.GetAsync($"{ServerUrl}/api/v2/packages/tools",
+                    using (var resp = await httpClient.GetAsync($"{ServerUrl}/api/v1/packages/tools",
                                    HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false))
                     {
                         resp.EnsureSuccessStatusCode();

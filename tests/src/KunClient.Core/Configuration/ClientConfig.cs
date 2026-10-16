@@ -23,15 +23,22 @@ namespace KunFlashTool.Core.Configuration
 
         /// <summary>内置兜底地址（内嵌配置解析失败时才会用到）。
         ///
+        /// 🔴 <b>本仓库是开源版，这里已抹成占位符</b>：自行部署时请替换成你自己的服务端地址，
+        /// 或改用环境变量 / 配置文件（优先级见类型注释）。占位符状态下所有**在线**接口都连不上，
+        /// 本地刷写类功能不受影响。
+        ///
         /// ⚠️ 别改回 <c>http://127.0.0.1:3000</c>：那只是个"什么都没配"的信号，
         /// 一旦内嵌资源读不到（如入口程序集不是 KunClient.App），用户会**静默**落到
         /// localhost → 表现为「所有请求都失败」，而不是报配置错误。指向真实域名至少能连上。
-        /// 域名选择：<b>不能用 kunawa.xyz</b> —— 它被 Cloudflare 挂了 Managed Challenge，
-        /// 客户端不执行 JS，所有接口会被 403 拦掉。kunawa.cn 实测干净可用。
-    /// 🔴 不能用 const：const 的值进元数据 Constant 表，HideStrings 加密不到（详见 FdlApiClient）。
-    /// 片段拼接在编译期会被折叠成单个 ldstr，于是照样能被字符串加密覆盖。
-    /// </summary>
-    public static readonly string DefaultServerUrl = "https://" + "kunawa" + ".cn";
+        ///
+        /// ⚠️ 选域名时避开**被 CDN 人机校验（Managed Challenge）拦下**的域：客户端不执行 JS，
+        /// 所有接口会拿到 403 挑战页，表现与「服务器宕机」完全一样，极难排查。
+        ///
+        /// 🔴 不能用 <c>const</c>：const 的值进元数据 Constant 表，HideStrings 加密不到
+        /// （详见 <c>FdlApiClient</c>）。填回真实域名时用 <c>static readonly</c>，
+        /// 才会以 ldstr 形式被字符串加密覆盖。
+        /// </summary>
+        public static readonly string DefaultServerUrl = "https://your-domain.com";
 
         public const string ConfigFileName = "KunClient.config.json";
         public const string LocalConfigFileName = "KunClient.config.local.json";
@@ -121,8 +128,8 @@ namespace KunFlashTool.Core.Configuration
         /// <summary>
         /// 主机是否可信：官方域名（含子域）、回环、私有内网。其余一律 false。
         /// <para>
-        /// 官方域名用「精确匹配或子域」判定（<c>kunawa.cn</c>、<c>www.kunawa.cn</c> 都算，
-        /// <c>kunawa.cn.evil.com</c> 不算）—— 别只写 <c>EndsWith</c>，那样后缀伪造能过。
+        /// 官方域名用「精确匹配或子域」判定（<c>your-domain.com</c>、<c>www.your-domain.com</c> 都算，
+        /// <c>your-domain.com.evil.com</c> 不算）—— 别只写 <c>EndsWith</c>，那样后缀伪造能过。
         /// </para>
         /// </summary>
         public static bool IsTrustedHost(string url)
@@ -141,18 +148,18 @@ namespace KunFlashTool.Core.Configuration
         }
 
         /// <summary>
-        /// 官方域名。🔴 不能是 <c>const</c>（值会进元数据 Constant 表，字符串加密碰不到）；
-        /// 拼接在编译期折叠成单个 ldstr，照样能被加密覆盖。
+        /// 官方域名（开源版已抹成占位符，部署时改成你自己的域）。
+        /// 🔴 不能是 <c>const</c>（值会进元数据 Constant 表，字符串加密碰不到）；
+        /// 用 <c>static readonly</c> 才会以 ldstr 形式被加密覆盖。
         /// <para>
-        /// 🔴 只有 <c>kunawa.cn</c>：另一个官方域 <c>kunawa.xyz</c> **故意不进名单** ——
-        /// 它被 Cloudflare 挂了 Managed Challenge，客户端不执行 JS，接口会被 403 拦掉
-        /// （详见 <c>ServerUrlGuardTests</c>）。放进名单等于允许把用户配置指向一个
-        /// 必然连不上的地址，那正是当年「注册全线失败」的原样复现。
+        /// 只登记真正可用的主域：任何**被 CDN 人机校验拦下**的备用域都**故意不进名单** ——
+        /// 放进名单等于允许把用户配置指向一个必然连不上的地址，那正是当年
+        /// 「注册全线失败」的原样复现（详见 <c>ServerUrlGuardTests</c>）。
         /// </para>
         /// </summary>
         private static readonly string[] OfficialDomains =
         {
-            "kunawa" + ".cn",
+            "your-domain.com",
         };
 
         /// <summary>回环 / 私有内网 / 常见内网域名后缀：本机调试与自建内网服务要用，放行。</summary>

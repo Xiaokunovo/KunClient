@@ -23,12 +23,13 @@ namespace KunFlashTool.App.Services;
 /// </summary>
 public sealed class FdlApiClient
 {
-    /// <summary>默认接口地址。可用环境变量 <c>KUNCLIENT_FDL_URL</c> 覆盖（联调/换平台时用）。
+    /// <summary>默认接口地址。<b>开源版已抹成占位符</b>，部署时替换成你自己的 FDL 计算服务地址；
+    /// 也可用环境变量 <c>KUNCLIENT_FDL_URL</c> 覆盖（联调/换平台时用）。
     /// 🔴 不能写成 <c>const string</c>：const 的值落在元数据 **Constant 表**，而 Obfuscar 的
     ///    HideStrings 只处理方法体里的 ldstr、碰不到 Constant 表 —— 那个地址会以**明文**
     ///    留在产物里（实测复现）。改 static readonly 后它变成普通 ldstr，会被字符串加密覆盖。</summary>
     public static readonly string DefaultUrl =
-        "https://" + "ultra." + "xiaonan" + ".qzz" + ".io" + "/api.php";
+        "https://fdl-endpoint.example.com/api.php";
 
     public string Endpoint { get; }
 

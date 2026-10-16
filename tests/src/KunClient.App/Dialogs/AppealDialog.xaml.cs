@@ -61,7 +61,7 @@ namespace KunFlashTool.App.Dialogs
                 // 🔴 免登录：不带 Authorization 头，直接打 /api/appeal
                 var payload = JsonBody.Of(("username", username), ("content", content), ("contact", contact));
                 using var req = new StringContent(payload, Encoding.UTF8, "application/json");
-                using var response = await httpClient.PostAsync($"{serverUrl}/api/v2/appeal", req);
+                using var response = await httpClient.PostAsync($"{serverUrl}/api/v1/appeal", req);
                 var json = await response.Content.ReadAsStringAsync();
                 var result = JsonSerializer.Deserialize<JsonElement>(json);
                 var msg = result.TryGetProperty("message", out var m) && m.ValueKind == JsonValueKind.String

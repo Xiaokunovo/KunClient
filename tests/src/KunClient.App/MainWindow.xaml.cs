@@ -325,7 +325,7 @@ public partial class MainWindow : Window
             var token = AuthSession.ResolveToken();
             if (string.IsNullOrEmpty(token)) return;
 
-            using var req = new HttpRequestMessage(HttpMethod.Get, $"{ProfileApiUrl}/api/v2/profile");
+            using var req = new HttpRequestMessage(HttpMethod.Get, $"{ProfileApiUrl}/api/v1/profile");
             req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
             using var resp = await _titleHttp.SendAsync(req);
 

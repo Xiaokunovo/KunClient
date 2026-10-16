@@ -178,7 +178,7 @@ namespace KunFlashTool.App.Pages
                 LogInfo("[投屏] 正在从服务器下载 scrcpy...");
                 // E11：优先二进制端点（-33% 字节），失败回落 base64。
                 await downloader.DownloadPackageFromServerAsync(
-                    ServerUrl, "/api/v2/packages/scrcpy", zipPath, "正在下载 scrcpy...");
+                    ServerUrl, "/api/v1/packages/scrcpy", zipPath, "正在下载 scrcpy...");
 
                 if (File.Exists(zipPath))
                 {

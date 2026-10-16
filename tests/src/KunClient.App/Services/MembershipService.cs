@@ -42,9 +42,9 @@ public static class MembershipService
     // const 的值会进元数据的 Constant 表，混淆器的「字符串加密」只处理方法体里的 ldstr，
     // 碰不到 Constant 表 → 路径会以明文留在产物里（实测：改成 const 时 /api/app/consume
     // 仍能在 exe 里被 grep 到）。static readonly 会走 ldstr，能被一起加密。
-    private static readonly string LimitsPath = "/api/v2/app/limits";
-    private static readonly string GateCheckPath = "/api/v2/app/check";
-    private static readonly string GateConsumePath = "/api/v2/app/consume";
+    private static readonly string LimitsPath = "/api/v1/app/limits";
+    private static readonly string GateCheckPath = "/api/v1/app/check";
+    private static readonly string GateConsumePath = "/api/v1/app/consume";
 
     private static readonly string StoreDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KunClient");
@@ -360,7 +360,7 @@ public static class MembershipService
             {
                 try
                 {
-                    // v2：app/check 与 app/consume 是受保护端点，走 RequestSigner（Bearer 照旧）
+                    // v1：app/check 与 app/consume 是受保护端点，走 RequestSigner（Bearer 照旧）
                     // ConfigureAwait(false) 很关键：避免 await 续体回到 UI 线程 —— 那样
                     // 在 UI 线程上 GetResult() 会直接死锁。这里必须让续体跑在线程池上。
                     using var resp = Core.Net.RequestSigner

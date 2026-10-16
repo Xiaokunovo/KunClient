@@ -576,7 +576,7 @@ namespace KunFlashTool.App.Services
                                                                 string description, int maxRetries = 3,
                                                                 double overallFrom = -1, double overallTo = -1)
         {
-            // "/api/v2/packages/scrcpy" → "scrcpy"：静态路径的文件名与 API 末段同名
+            // "/api/v1/packages/scrcpy" → "scrcpy"：静态路径的文件名与 API 末段同名
             var segments = apiPath.Trim('/').Split('/');
             var pkg = segments.Length > 0 ? segments[^1] : "";
 

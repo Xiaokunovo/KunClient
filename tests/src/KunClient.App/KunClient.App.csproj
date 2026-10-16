@@ -35,9 +35,9 @@
   <ItemGroup>
     <!-- 软配置**不再内嵌**（2026-10 加固）。
          原因：EmbeddedResource 不经过 Obfuscar —— 内嵌的 KunClient.config.json 会以**明文**
-         躺在程序集里，`https://kunawa.cn` 可被直接 strings 抠出（实测已复现）。
+         躺在程序集里，配置里的域名可被直接 strings 抠出（实测已复现）。
          而它带来的唯一价值只是「给一个可配置的默认值」，这个默认值现在由
-         Core/Configuration/ClientConfig.DefaultServerUrl 提供（已片段化，走字符串加密）。
+         Core/Configuration/ClientConfig.DefaultServerUrl 提供（走字符串加密）。
          运行时优先级不变：环境变量 > 用户级配置 > exe 同目录配置 > 内置兜底
          （见 ClientConfig.ResolveServerUrl；内嵌那一段取不到资源会优雅返回 null）。
          ⚠️ 不要为了「可配置」再加回来：那等于把域名明文重新塞回产物。 -->

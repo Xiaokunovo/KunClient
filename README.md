@@ -9,6 +9,14 @@
 > 不包含在本仓库内；服务端、官网、机器人及构建部署脚本同样未开源。
 > 详见下方「[开源范围](#开源范围)」。
 
+> **⚠️ 本仓库是脱敏后的开源版**
+> - 所有实际部署域名已替换为占位符：主服务端 `your-domain.com`、FDL 计算接口 `fdl-endpoint.example.com`
+> - API 版本统一为 **v1**（路径形如 `/api/v1/...`）
+>
+> 代码可以直接编译，但**在线功能（登录、会员、云驱动、自动更新）连不上任何后端** ——
+> 需要你把域名换成自己的部署，并把服务端接口对齐到代码中的路径。
+> 本地刷写类功能（EDL / Fastboot / 镜像与分区表处理）不依赖后端，不受影响。
+
 ---
 
 ## 功能一览
@@ -143,7 +151,7 @@ tests/src/KunClient.Core/PlatformTools/
 2. `%LOCALAPPDATA%\KunClient\KunClient.config.json`（登录框「服务器设置」写入）
 3. exe 同目录 `KunClient.config.local.json`
 4. exe 同目录 `KunClient.config.json`
-5. 源码内置默认值（`ClientConfig.DefaultServerUrl`）
+5. 源码内置默认值（`ClientConfig.DefaultServerUrl`，**开源版为占位符** `https://your-domain.com`）
 
 字段模板见 `tests/src/KunClient.App/KunClient.config.example.json`。
 `KunClient.config.local.json` 为本机私有覆盖，**不入库**。
