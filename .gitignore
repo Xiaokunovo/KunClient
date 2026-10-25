@@ -93,6 +93,8 @@ _autogen/
 *.zip
 *.tar.gz
 *.rar
+# 例外：SWT-EDL 的编译产物发行包（用户明确要求一并开源）
+!_archive/server/assets/swt-edl.zip
 publish/
 publish_obf/
 
