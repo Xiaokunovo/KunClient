@@ -1,0 +1,71 @@
+<?xml version='1.0'?>
+<!--
+  壳程序集（KunClientLoader）的 Obfuscar 配置 —— **只加密字符串，不重命名任何名字**。
+  由 tools/obfuscate-build.js 注入 @BIN@ / @OUT@ / @SEARCH_ELEMENTS@ 后使用。
+
+  ══════════════════════════════════════════════════════════════════════════════
+  为什么必须单独一份配置（不能复用 App/Core 那份）
+  ══════════════════════════════════════════════════════════════════════════════
+  App/Core 那份是「类型名保留、方法名放开」。壳**一个名字都不能改**：
+    · 壳是**入口程序集**，`StartupObject=KunFlashTool.Shell.ShellMain`；
+    · 它还要 `Assembly.GetType("KunFlashTool.App.App")` 反射拉起真正的应用；
+    · 以及直写 `Application.ResourceAssembly` 的私有静态字段。
+  改任何名字都可能变成「编译期毫无征兆、运行期直接起不来」——壳起不来 = 整个程序废掉。
+  而壳又不走 WPF 的 BAML 名字绑定，重命名在这里本就**没有收益**，只有风险。
+
+  ══════════════════════════════════════════════════════════════════════════════
+  那为什么还要过 Obfuscar —— 收益只在 HideStrings
+  ══════════════════════════════════════════════════════════════════════════════
+  壳里躺着几样**静态可读**的东西，它们都是明文 ldstr：
+    · FragStore / FragOrder —— 载荷 AES 密钥的种子片段与索引表；
+    · DumpToolProcesses    —— 反调试扫描的工具名单；
+    · 各处报错文案、资源名。
+  未混淆时，`ilspycmd KunClientLoader.exe` 一眼就能把 FragStore + FragOrder 抄出来，
+  拼出种子 → SHA-256 → 直接得到载荷密钥 → 解开密文载荷。那层壳就白做了。
+  HideStrings 会把 ldstr 换成解密调用，把门槛从「反编译看一眼」抬到「得动态跑起来 dump」。
+
+  ══════════════════════════════════════════════════════════════════════════════
+  实测记录（2026-10-09，`.workbuddy/tmp/shellexp/`，两个档位结果完全一致）
+  ══════════════════════════════════════════════════════════════════════════════
+  混淆前 KunClientLoader.dll 906,752 B → 混淆后 909,824 B（+3 KB = 字符串解密代码）
+    字符串  «-Pay» / «Edl» / «megadumper» / «检测到调试器…»   → 全部消失（utf16 命中 0）✓
+    名字    «ShellMain» / «KunFlashTool.Shell» / «BackdoorName» /
+            «ForceResourceAssembly» / «FragStore»             → 全部保留（utf8 命中 1）✓
+    资源名  «KunClient.dll.enc» 仍可见 —— **这是预期且必须的**：
+            它是 manifest resource 的清单名，Obfuscar 不改，运行期
+            GetManifestResourceStream 就靠它。它只是「叫什么」，不含密钥。
+
+  ⚠️ 用 MarkedOnly=true 是刻意的：语义明确等于「不重命名任何东西」。
+     实测它与 false 在加密字符串上效果相同，但将来若 Obfuscar 改了
+     HidePrivateApi 的默认值，true 这一档也不会突然开始改名。
+-->
+<Obfuscator>
+  <Var name="InPath" value="@BIN@" />
+  <Var name="OutPath" value="@OUT@" />
+  <AssemblySearchPath path="@BIN@" />
+@SEARCH_ELEMENTS@
+
+  <!-- ── 名字：一律不动 ──────────────────────────────────────────────── -->
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="false" />
+  <Var name="RenameProperties" value="false" />
+  <Var name="RenameFields" value="false" />
+  <Var name="RenameEvents" value="false" />
+  <!-- 不重命名任何元素（除非显式打了 [Obfuscation] 标记；壳里一个都没有） -->
+  <Var name="MarkedOnly" value="true" />
+
+  <!-- ── 唯一的收益：字符串加密 ──────────────────────────────────────── -->
+  <Var name="HideStrings" value="true" />
+
+  <!-- ── 命名风格 / 产物 ─────────────────────────────────────────────── -->
+  <Var name="UseUnicodeNames" value="false" />
+  <Var name="UseKoreanNames" value="false" />
+  <Var name="ReuseNames" value="false" />
+  <Var name="SuppressIldasm" value="true" />
+  <Var name="OptimizeMethods" value="true" />
+  <Var name="RegenerateDebugInfo" value="false" />
+  <Var name="XmlMapping" value="false" />
+  <Var name="LogFile" value="@OUT@/Mapping.txt" />
+
+  <Module file="@BIN@/KunClientLoader.dll" />
+</Obfuscator>

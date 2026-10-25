@@ -1,0 +1,9 @@
+# 运行期数据与本地依赖，不入库
+config.json
+data/
+napcat/
+_dl/
+__pycache__/
+*.pyc
+*.log
+tmp-release.json

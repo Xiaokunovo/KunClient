@@ -1,0 +1,8 @@
+[package]
+name = "kunflash-core"
+version.workspace = true
+edition.workspace = true
+description = "KunFlashTool 核心：EDL / Firehose 协议、分区表解析、传输层"
+
+[dependencies]
+# 见 workspace Cargo.toml 的依赖策略：暂时保持零依赖

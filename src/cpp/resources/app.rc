@@ -1,0 +1,32 @@
+// KunClient.exe Windows 版本信息 + 图标
+// 图标资源：资源管理器 / 任务栏 / 窗口标题栏 显示的 exe 图标。
+// 版本号与 kc/version.h 同步（set-version.js 管，改版本时这里手动跟一次）。
+#include <windows.h>
+
+IDI_ICON1 ICON "logo.ico"
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 2,0,6,0
+ PRODUCTVERSION 2,0,6,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0x0L
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "080404b0"
+        BEGIN
+            VALUE "CompanyName", "KunAwa"
+            VALUE "FileDescription", "KunClient"
+            VALUE "FileVersion", "2.0.6"
+            VALUE "ProductName", "KunClient"
+            VALUE "LegalCopyright", "Copyright (C) 2026 KunAwa. All rights reserved."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0804, 1200
+    END
+END

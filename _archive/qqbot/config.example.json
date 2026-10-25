@@ -1,0 +1,17 @@
+{
+  "_说明": "owner_qq 是主人 QQ 号，可写单个字符串或数组（多主人）；主人拥有最高权限且永不被封禁/降级。admins 填超级管理员的 QQ 号（也兼容平台 openid）——也可以让主人在机器里发「超管添加 @某人」。permissions.trust_platform_roles=false 时平台群主/管理员身份不自动获得机器人权限，群管理员用「设置管理 @某人」显式授予（可审计、可逐群降级）。kunclient 为 KunClient 登录服务器对接。",
+  "app_id": "你的AppID",
+  "app_secret": "你的AppSecret",
+  "admins": ["超级管理员的QQ号"],
+  "owner_qq": ["主人QQ号", "第二个主人QQ号"],
+  "permissions": {
+    "trust_platform_roles": false
+  },
+  "kunclient": {
+    "base_url": "https://kunawa.cn",
+    "admin_username": "",
+    "admin_password": ""
+  },
+  "data_file": "data.json",
+  "log_file": "bot.log"
+}

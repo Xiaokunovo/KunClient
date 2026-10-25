@@ -1,0 +1,20 @@
+{
+  "_说明": "机器人单聊（C2C）自定义菜单 → PUT /v2/menu。文档明确：仅 C2C 场景、全局生效、5 QPM，所以群管理类项一律不放在这里（放 panels.json 的 group 面板）。items 最多 10 项，按数组顺序从左到右；顶层 name 最多 10 字符（1 汉字=2 字符，即 5 汉字）；type=menu 的折叠子菜单最多 5 项、name 最多 14 字符（7 汉字）、不支持再嵌套。send_message=点一下把文本填进输入框（用户还要按发送），link 必须 https://。改动后启动/重载/发「菜单同步」即生效；与线上内容相同会自动跳过，不会白涨 version。校验规则见 core/menu.py。",
+  "menu": {
+    "items": [
+      { "name": "签到", "type": "send_message", "send_message": "签到" },
+      {
+        "name": "我的",
+        "type": "menu",
+        "sub_menu_items": [
+          { "name": "我的账号", "type": "send_message", "send_message": "kun我" },
+          { "name": "绑定邮箱", "type": "send_message", "send_message": "kun绑定邮箱" },
+          { "name": "我的积分", "type": "send_message", "send_message": "积分" },
+          { "name": "积分排行", "type": "send_message", "send_message": "积分排行" }
+        ]
+      },
+      { "name": "帮助", "type": "send_message", "send_message": "帮助" },
+      { "name": "官网", "type": "link", "link": "https://kunawa.cn" }
+    ]
+  }
+}

@@ -1,0 +1,106 @@
+<?xml version='1.0'?>
+<!--
+  Obfuscar 配置（KunClient / WPF 专用，保守档）
+  由 tools/obfuscate-build.js 注入 @BIN@ / @OUT@ 两个路径后使用。
+
+  ══════════════════════════════════════════════════════════════════════════════
+  先看这段：Obfuscar 2.2.50 的**有效键白名单**（用
+  `ilspycmd -t Obfuscar.Settings` 反编译出来的构造函数实参，别凭印象写）
+  ══════════════════════════════════════════════════════════════════════════════
+    InPath OutPath LogFile MarkedOnly RenameFields RenameProperties KeepProperties
+    RenameEvents KeepPublicApi HidePrivateApi ReuseNames UseUnicodeNames
+    UseKoreanNames HideStrings OptimizeMethods SuppressIldasm XmlMapping
+    RegenerateDebugInfo AnalyzeXaml SkipGenerated CustomChars
+
+  **不在上面的键会被静默忽略**——不报错、不警告，看起来像生效了其实没有。
+  本文件曾写过 `KeepClassName` 和 `KeepResources` 两个键，两者在整个 Obfuscar.dll 里
+  连一个字节都搜不到（0 命中），属于凭空发明的键。现在已删除。
+  （类型名之所以确实没被改，是因为 `KeepPublicApi=true`，跟 `KeepClassName` 无关。）
+
+  ══════════════════════════════════════════════════════════════════════════════
+  为什么是保守档：WPF 有两处「按名字绑定」，改错就断
+  ══════════════════════════════════════════════════════════════════════════════
+  1) **类型名**：BAML 里 `x:Class` 存的是完整类型名**字符串**，运行时 `Application.LoadComponent`
+     要按名字把这个类型找出来。改了就抛异常，页面直接打不开。
+     → 防御：`KeepPublicApi=true` 保住全部 public 类型；再叠加 `AnalyzeXaml=true` 兜底
+       （见下）。已实测：31 个视图类的 `x:Class` 一个都没被改。
+  2) **成员名**：XAML 里 `{Binding Path=X}` / `DisplayMemberPath="X"` 是按属性名反射解析的。
+     → 防御：`RenameProperties=false` + `RenameFields=false` + `RenameEvents=false`。
+       本工程全量检索 XAML，按名字引用成员的只有一处 `DisplayMemberPath="SimpleDisplayName"`，
+       该属性是 public（Core/Transport/EdlPortInfo.cs），双重保险。
+
+  反过来，下面两类**改名字是安全的**，所以可以放开（已取证，不是推测）：
+  · **方法名**：BAML 的事件处理器不是按名字反射绑定的，而是编译期写进
+    `*.g.cs` 的 `Connect(int connectionId, object target)` 里的**方法 token**：
+        this.SendCodeBtn.Click += new RoutedEventHandler(this.SendCode_Click);
+    改方法名不会影响它。（`Connect` 本身靠 IComponentConnector 接口派发，同样安全。）
+  · **`x:Name` 字段**：由 `Connect()` 直接赋值（token），不做字符串查找。
+
+  实际做掉的：类型名 + 方法名 + 参数名（私有/内部部分）+ **字符串字面量加密**。
+  HideStrings 会把 ldstr 换成解密调用，这是反编译时最难读的一层
+  —— 例如 `/api/app/consume`、`离线状态下不能放行` 在产物里都搜不到了。
+
+  注意 attributes 里的字符串不会被 HideStrings 动（那些在元数据 blob 里，不是 ldstr），
+  所以 [JsonPropertyName] / [Description] 这类仍然有效。
+
+  另一个坑（踩过一次）：用 `const string` 定义的路径存在**元数据 Constant 表**里，
+  HideStrings 只处理方法体的 ldstr，碰不到 Constant 表 → 会以明文留在产物里。
+  所以 MembershipService 里三个接口路径必须写成 `static readonly` 而不是 `const`。
+-->
+<Obfuscator>
+  <Var name="InPath" value="@BIN@" />
+  <Var name="OutPath" value="@OUT@" />
+  <!--
+    搜索路径必须包含 **WPF 共享框架目录**：框架依赖（SelfContained=false）的产物里没有
+    PresentationFramework/PresentationCore，它们运行时从
+    %ProgramFiles%\dotnet\shared\Microsoft.WindowsDesktop.App\<ver>\ 加载。
+    不加上就会报 “Failed to resolve assembly: 'PresentationFramework, Version=10.0.0.0'”。
+
+    格式坑：搜索路径**不是** Var，而是可重复的 `<AssemblySearchPath path="..."/>` 元素
+    （`Project.ReadAssemblySearchPath()` 只认这个；写成 `Var name="AssemblySearchPath"` 会被
+    当成一整个字符串，路径里的 ';' 不切分，于是报 “Unable to find assembly: <整串>”）。
+  -->
+@SEARCH_ELEMENTS@
+
+  <!-- ── 类型与公开 API：一律不动（WPF 的命门）────────────────────────── -->
+  <Var name="KeepPublicApi" value="true" />
+  <Var name="HidePrivateApi" value="true" />
+  <!--
+    解析模块内嵌 .g.resources 里的每个 .baml，把 XAML 按名字引用到的类型收集起来，
+    这些类型一律跳过重命名（Mapping.txt 里会显示 “filtered by BAML”）。
+    语义上**只增不减保守度**：它只会让改名更少，不会更多。
+    当前 31 个视图类本来就因为 KeepPublicApi 保住了，打开它是为了防将来有人把
+    某个被 XAML 引用的类型改成 internal —— 那种情况下它是唯一防线。
+    实现见 Obfuscar `RenameTypes() -> GetXamlDocuments() -> NamesInXaml()`。
+  -->
+  <Var name="AnalyzeXaml" value="true" />
+
+  <!-- ── 成员名：属性/字段/事件保留，方法可以改 ──────────────────────── -->
+  <Var name="RenameProperties" value="false" />
+  <Var name="RenameEvents" value="false" />
+  <Var name="RenameFields" value="false" />
+  <Var name="KeepProperties" value="false" />
+
+  <!-- ── 命名风格：保持默认的短名、不用 Unicode（Unicode 名字会让杀软更敏感）── -->
+  <Var name="UseUnicodeNames" value="false" />
+  <Var name="UseKoreanNames" value="false" />
+  <Var name="ReuseNames" value="false" />
+  <Var name="CustomChars" value="" />
+  <Var name="MarkedOnly" value="false" />
+  <Var name="SkipGenerated" value="false" />
+
+  <!-- ── 产物质量 ─────────────────────────────────────────────────────── -->
+  <Var name="OptimizeMethods" value="true" />
+  <Var name="SuppressIldasm" value="true" />
+  <Var name="RegenerateDebugInfo" value="false" />
+  <Var name="XmlMapping" value="false" />
+  <!-- Mapping.txt 落进 OutPath，由构建脚本转存到固定位置，方便事后查「哪个成员被改成了什么」 -->
+  <Var name="LogFile" value="@OUT@/Mapping.txt" />
+
+  <!-- 字符串加密：反编译后看不到 /api/app/consume、提示文案等明文 -->
+  <Var name="HideStrings" value="true" />
+
+  <!-- 只混淆自家两个程序集；HandyControl / CommunityToolkit 等第三方保持原样（它们被引用，不参与重命名） -->
+  <Module file="@BIN@/KunClient.dll" />
+  <Module file="@BIN@/KunClient.Core.dll" />
+</Obfuscator>

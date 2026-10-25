@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KunClient · 3D Reveal</title>
+<style>
+  :root{
+    --ink:#04060b;
+    --teal:#2fe3c4;
+    --cyan:#7ef0ff;
+    --text:#e9f3f8;
+    --muted:#6d8798;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:var(--ink)}
+  body{
+    font-family:"Segoe UI","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+  }
+  #stage{position:fixed;inset:0;width:100%;height:100%;display:block}
+
+  .vignette{
+    position:fixed;inset:0;pointer-events:none;
+    background:
+      radial-gradient(ellipse 70% 60% at 50% 42%, rgba(0,0,0,0) 0%, rgba(0,0,0,.45) 72%, rgba(2,4,8,.92) 100%);
+  }
+  .scan{
+    position:fixed;inset:0;pointer-events:none;opacity:.16;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,.055) 0 1px, transparent 1px 3px);
+    mix-blend-mode:overlay;
+  }
+  .curtain{
+    position:fixed;inset:0;background:#04060b;pointer-events:none;opacity:0;
+    transition:none;
+  }
+
+  .hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .8s ease .2s}
+  .hud.on{opacity:1}
+
+  .brand{
+    position:absolute;left:38px;top:34px;display:flex;align-items:center;gap:10px;
+    font-size:11px;letter-spacing:.34em;color:rgba(233,243,248,.72);font-weight:600;
+  }
+  .brand .dot{
+    width:7px;height:7px;border-radius:50%;background:var(--teal);
+    box-shadow:0 0 12px 2px rgba(47,227,196,.75);
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:.55;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+  .brand em{
+    font-style:normal;color:rgba(109,135,152,.75);letter-spacing:.24em;font-weight:400;
+    padding-left:12px;border-left:1px solid rgba(255,255,255,.12);
+  }
+
+  .chapters{
+    position:absolute;left:38px;bottom:44px;display:flex;flex-direction:column;gap:11px;
+  }
+  .ch{
+    display:flex;align-items:center;gap:11px;
+    font-size:11.5px;letter-spacing:.2em;color:rgba(109,135,152,.55);
+    transition:color .45s ease;
+  }
+  .ch i{
+    font-style:normal;font-variant-numeric:tabular-nums;font-size:10px;
+    width:18px;color:rgba(109,135,152,.5);transition:color .45s ease;
+  }
+  .ch b{font-weight:500}
+  .ch .ln{
+    width:0;height:1px;background:linear-gradient(90deg,var(--teal),rgba(47,227,196,0));
+    transition:width .55s cubic-bezier(.2,.8,.2,1);
+  }
+  .ch.active{color:rgba(233,243,248,.95)}
+  .ch.active i{color:var(--teal)}
+  .ch.active .ln{width:34px}
+
+  .foot{
+    position:absolute;right:38px;bottom:44px;display:flex;align-items:center;gap:18px;
+  }
+  .tc{
+    font-size:11px;letter-spacing:.16em;color:rgba(109,135,152,.8);
+    font-variant-numeric:tabular-nums;
+  }
+  .replay{
+    pointer-events:auto;cursor:pointer;
+    background:rgba(255,255,255,.04);
+    border:1px solid rgba(255,255,255,.13);
+    color:rgba(233,243,248,.86);
+    font:inherit;font-size:11px;letter-spacing:.18em;
+    padding:8px 16px;border-radius:999px;
+    backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+    transition:background .25s ease,border-color .25s ease,transform .25s ease;
+  }
+  .replay:hover{background:rgba(47,227,196,.14);border-color:rgba(47,227,196,.45);transform:translateY(-1px)}
+  .replay:active{transform:translateY(0)}
+
+  .bar{
+    position:absolute;left:0;right:0;bottom:0;height:1px;background:rgba(255,255,255,.06);
+  }
+  .bar span{
+    display:block;height:100%;width:0%;
+    background:linear-gradient(90deg,rgba(47,227,196,.15),var(--teal) 60%,var(--cyan));
+    box-shadow:0 0 10px rgba(47,227,196,.7);
+  }
+
+  .loader{
+    position:fixed;inset:0;display:grid;place-items:center;background:var(--ink);
+    transition:opacity .6s ease;z-index:10;
+  }
+  .loader.hide{opacity:0;pointer-events:none}
+  .loader .ring{
+    width:34px;height:34px;border-radius:50%;
+    border:1.5px solid rgba(255,255,255,.1);
+    border-top-color:var(--teal);
+    animation:spin .9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .err{
+    position:fixed;inset:0;display:none;place-items:center;background:#04060b;z-index:20;
+    padding:40px;text-align:center;font-size:13px;line-height:1.9;color:#93a8b6;
+  }
+  .err b{display:block;color:#e9f3f8;font-size:15px;margin-bottom:10px;letter-spacing:.08em}
+  .err code{color:var(--teal);font-family:Consolas,monospace}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="stage"></canvas>
+<div class="vignette"></div>
+<div class="scan"></div>
+<div class="curtain" id="curtain"></div>
+
+<div class="hud" id="hud">
+  <div class="brand">
+    <span class="dot"></span>
+    <span>KUNCLIENT</span>
+    <em>3D REVEAL</em>
+  </div>
+
+  <div class="chapters" id="chapters">
+    <div class="ch" data-i="0"><i>01</i><b>唤醒</b><span class="ln"></span></div>
+    <div class="ch" data-i="1"><i>02</i><b>成形</b><span class="ln"></span></div>
+    <div class="ch" data-i="2"><i>03</i><b>刷写</b><span class="ln"></span></div>
+    <div class="ch" data-i="3"><i>04</i><b>交付</b><span class="ln"></span></div>
+  </div>
+
+  <div class="foot">
+    <div class="tc" id="tc">00.0 / 17.0</div>
+    <button class="replay" id="replay">重播</button>
+  </div>
+
+  <div class="bar"><span id="bar"></span></div>
+</div>
+
+<div class="loader" id="loader"><div class="ring"></div></div>
+
+<div class="err" id="err">
+  <div>
+    <b>3D 场景加载失败</b>
+    这个页面需要从 CDN 载入 three.js，并且需要 WebGL 支持。<br />
+    请检查网络连接，或用 Chrome / Edge 打开，并确认地址为 <code>http://</code> 或 <code>https://</code>。
+  </div>
+</div>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+
+/* ============================================================
+   0. 工具
+   ============================================================ */
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const ph = (t, a, b) => clamp01((t - a) / (b - a));
+const lerp = (a, b, p) => a + (b - a) * p;
+const smoothstep = (a, b, x) => { const p = clamp01((x - a) / (b - a)); return p * p * (3 - 2 * p); };
+const easeOutCubic = x => 1 - Math.pow(1 - x, 3);
+const easeInOutCubic = x => x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
+const lerp3 = (a, b, p) => [lerp(a[0], b[0], p), lerp(a[1], b[1], p), lerp(a[2], b[2], p)];
+
+/* ============================================================
+   1. 渲染器 / 场景 / 相机
+   ============================================================ */
+const canvas = document.getElementById('stage');
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+} catch (e) {
+  document.getElementById('err').style.display = 'grid';
+  document.getElementById('loader').classList.add('hide');
+  throw e;
+}
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.setSize(window.innerWidth, window.innerHeight, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x04060b);
+scene.fog = new THREE.FogExp2(0x04060b, 0.055);
+
+const camera = new THREE.PerspectiveCamera(42, window.innerWidth / window.innerHeight, 0.1, 120);
+camera.position.set(0, 0.2, 9.5);
+
+/* ============================================================
+   2. 环境光照贴图（程序化，无外部资源）
+   ============================================================ */
+function makeEnvTexture() {
+  const c = document.createElement('canvas');
+  c.width = 1024; c.height = 512;
+  const g = c.getContext('2d');
+
+  const grd = g.createLinearGradient(0, 0, 0, 512);
+  grd.addColorStop(0.00, '#22415e');
+  grd.addColorStop(0.22, '#0d1a28');
+  grd.addColorStop(0.48, '#05080e');
+  grd.addColorStop(0.72, '#07171c');
+  grd.addColorStop(1.00, '#0b2e2c');
+  g.fillStyle = grd;
+  g.fillRect(0, 0, 1024, 512);
+
+  const blob = (x, y, r, color) => {
+    const rg = g.createRadialGradient(x, y, 0, x, y, r);
+    rg.addColorStop(0, color);
+    rg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = rg;
+    g.fillRect(x - r, y - r, r * 2, r * 2);
+  };
+  blob(280, 96, 250, 'rgba(158,224,255,0.85)');
+  blob(742, 150, 210, 'rgba(60,232,200,0.55)');
+  blob(520, 24, 300, 'rgba(255,255,255,0.42)');
+  blob(880, 470, 240, 'rgba(30,190,175,0.40)');
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const pmrem = new THREE.PMREMGenerator(renderer);
+pmrem.compileEquirectangularShader();
+const envMap = pmrem.fromEquirectangular(makeEnvTexture()).texture;
+scene.environment = envMap;
+
+// 直接光
+const keyLight = new THREE.DirectionalLight(0xd8ecff, 3.1);
+keyLight.position.set(4.5, 6, 6);
+scene.add(keyLight);
+
+const frontLight = new THREE.DirectionalLight(0xa8d8ff, 1.7);
+frontLight.position.set(-1.2, 1.4, 7.5);
+scene.add(frontLight);
+
+const rimLight = new THREE.DirectionalLight(0x2fe3c4, 3.4);
+rimLight.position.set(-6, 1.5, -4);
+scene.add(rimLight);
+
+const fillLight = new THREE.PointLight(0x5fd8ff, 12, 26, 2);
+fillLight.position.set(-2.9, -2.6, 4.6);
+scene.add(fillLight);
+
+/* ============================================================
+   3. 星空 / 尘埃
+   ============================================================ */
+function makeDotTexture() {
+  const s = 64;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  rg.addColorStop(0, 'rgba(255,255,255,1)');
+  rg.addColorStop(0.35, 'rgba(200,245,255,0.65)');
+  rg.addColorStop(1, 'rgba(120,220,255,0)');
+  g.fillStyle = rg;
+  g.fillRect(0, 0, s, s);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+const dotTex = makeDotTexture();
+
+const STAR_N = 1600;
+const starPos = new Float32Array(STAR_N * 3);
+const starSeed = new Float32Array(STAR_N);
+for (let i = 0; i < STAR_N; i++) {
+  const r = 7 + Math.pow(Math.random(), 0.7) * 26;
+  const th = Math.random() * Math.PI * 2;
+  const y = (Math.random() * 2 - 1);
+  const rad = Math.sqrt(1 - y * y);
+  starPos[i * 3] = Math.cos(th) * rad * r;
+  starPos[i * 3 + 1] = y * r * 0.72;
+  starPos[i * 3 + 2] = Math.sin(th) * rad * r;
+  starSeed[i] = Math.random();
+}
+const starGeo = new THREE.BufferGeometry();
+starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+starGeo.setAttribute('aSeed', new THREE.BufferAttribute(starSeed, 1));
+
+const starMat = new THREE.PointsMaterial({
+  size: 0.10,
+  map: dotTex,
+  transparent: true,
+  opacity: 0.9,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+  color: 0xbfe9ff,
+  sizeAttenuation: true,
+});
+const stars = new THREE.Points(starGeo, starMat);
+scene.add(stars);
+
+// 近景漂浮尘埃（更强景深）
+const DUST_N = 260;
+const dustPos = new Float32Array(DUST_N * 3);
+for (let i = 0; i < DUST_N; i++) {
+  dustPos[i * 3] = (Math.random() - 0.5) * 14;
+  dustPos[i * 3 + 1] = (Math.random() - 0.5) * 9;
+  dustPos[i * 3 + 2] = (Math.random() - 0.5) * 8 + 1;
+}
+const dustGeo = new THREE.BufferGeometry();
+dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
+const dustMat = new THREE.PointsMaterial({
+  size: 0.045, map: dotTex, transparent: true, opacity: 0.5,
+  depthWrite: false, blending: THREE.AdditiveBlending, color: 0x9ff0e6,
+});
+const dust = new THREE.Points(dustGeo, dustMat);
+scene.add(dust);
+
+/* ============================================================
+   4. 品牌 K —— 三块挤出的立体笔画
+   ============================================================ */
+const INK = 0x122c4a;          // 深藏青
+const INK_EDGE = 0x35e8c8;     // 青绿描边
+
+const kMaterial = new THREE.MeshPhysicalMaterial({
+  color: 0x143a5e,
+  metalness: 0.84,
+  roughness: 0.34,
+  clearcoat: 1,
+  clearcoatRoughness: 0.10,
+  envMapIntensity: 2.4,
+  emissive: 0x0a1d31,
+  emissiveIntensity: 1.05,
+});
+
+const kEdgeMaterial = new THREE.MeshBasicMaterial({
+  color: INK_EDGE,
+  side: THREE.BackSide,
+  transparent: true,
+  opacity: 0.16,
+  depthWrite: false,
+  blending: THREE.AdditiveBlending,
+});
+
+const EXTRUDE = {
+  depth: 0.30,
+  bevelEnabled: true,
+  bevelThickness: 0.035,
+  bevelSize: 0.028,
+  bevelSegments: 4,
+  curveSegments: 1,
+};
+
+function shapeFromPoints(pts) {
+  const s = new THREE.Shape();
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  s.closePath();
+  return s;
+}
+
+// 竖笔（底边左斜切）
+const stemShape = shapeFromPoints([
+  [-0.860, 1.000],
+  [-0.490, 1.000],
+  [-0.490, -0.880],
+  [-0.860, -1.000],
+]);
+
+// 上臂（从腰部斜向右上）
+const armUpShape = shapeFromPoints([
+  [-0.572, 0.237],
+  [ 0.698, 0.997],
+  [ 0.862, 0.723],
+  [-0.408, -0.037],
+]);
+
+// 下臂（镜像）
+const armDnShape = shapeFromPoints([
+  [-0.408, 0.037],
+  [ 0.862, -0.723],
+  [ 0.698, -0.997],
+  [-0.572, -0.237],
+]);
+
+function buildPiece(shape) {
+  const geo = new THREE.ExtrudeGeometry(shape, EXTRUDE);
+  geo.translate(0, 0, -EXTRUDE.depth / 2);
+  geo.computeVertexNormals();
+
+  const group = new THREE.Group();
+  const solid = new THREE.Mesh(geo, kMaterial);
+  solid.castShadow = true;
+  group.add(solid);
+
+  const edge = new THREE.Mesh(geo, kEdgeMaterial);
+  edge.scale.setScalar(1.010);
+  group.add(edge);
+
+  group.userData.edge = edge;
+  return group;
+}
+
+const kGroup = new THREE.Group();
+const stem = buildPiece(stemShape);
+const armUp = buildPiece(armUpShape);
+const armDn = buildPiece(armDnShape);
+kGroup.add(stem, armUp, armDn);
+scene.add(kGroup);
+
+// 每块笔画的入场参数
+const pieceAnim = [
+  { obj: stem,  offset: [-1.85, 0.00, 0.55], rot: 0.55, delay: 0.00 },
+  { obj: armUp, offset: [ 0.95, 1.95, -0.45], rot: -0.42, delay: 0.11 },
+  { obj: armDn, offset: [ 0.95, -1.95, -0.45], rot: 0.42, delay: 0.17 },
+];
+
+/* ============================================================
+   5. 闪电
+   ============================================================ */
+function makeBoltShape() {
+  const s = new THREE.Shape();
+  const pts = [
+    [ 0.252, 1.000],
+    [-0.336, 0.115],
+    [ 0.007, 0.115],
+    [-0.252, -1.000],
+    [ 0.336, -0.075],
+    [-0.007, -0.075],
+  ];
+  s.moveTo(pts[0][0], pts[0][1]);
+  for (let i = 1; i < pts.length; i++) s.lineTo(pts[i][0], pts[i][1]);
+  s.closePath();
+  return s;
+}
+
+const boltMat = new THREE.MeshPhysicalMaterial({
+  color: 0xf2fbff,
+  metalness: 1.0,
+  roughness: 0.13,
+  clearcoat: 1,
+  clearcoatRoughness: 0.06,
+  envMapIntensity: 2.0,
+  emissive: 0x8fe6ff,
+  emissiveIntensity: 0.55,
+});
+
+const boltGeo = new THREE.ExtrudeGeometry(makeBoltShape(), {
+  depth: 0.17, bevelEnabled: true, bevelThickness: 0.022, bevelSize: 0.018,
+  bevelSegments: 3, curveSegments: 1,
+});
+boltGeo.translate(0, 0, -0.085);
+boltGeo.computeVertexNormals();
+
+const bolt = new THREE.Mesh(boltGeo, boltMat);
+bolt.position.set(0.00, 0.00, 0.23);
+bolt.rotation.z = -0.45;
+bolt.scale.setScalar(0.90);
+kGroup.add(bolt);
+
+// 闪电背后的柔光
+const glowTex = (() => {
+  const s = 256;
+  const c = document.createElement('canvas');
+  c.width = c.height = s;
+  const g = c.getContext('2d');
+  const rg = g.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2);
+  rg.addColorStop(0, 'rgba(160,240,255,0.85)');
+  rg.addColorStop(0.35, 'rgba(80,220,230,0.28)');
+  rg.addColorStop(1, 'rgba(40,180,200,0)');
+  g.fillStyle = rg; g.fillRect(0, 0, s, s);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+})();
+
+const boltGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, transparent: true, opacity: 0, depthWrite: false,
+  blending: THREE.AdditiveBlending, color: 0xa8f0ff,
+}));
+boltGlow.scale.set(2.1, 2.1, 1);
+boltGlow.position.set(0, 0, 0.1);
+kGroup.add(boltGlow);
+
+// 背景辉光（让深色主体从虚空里浮出来）
+const bgGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, color: 0x1c6a86, transparent: true, opacity: 0.55,
+  depthWrite: false, blending: THREE.AdditiveBlending,
+}));
+bgGlow.scale.set(17, 12, 1);
+bgGlow.position.set(0.2, 0.5, -7.5);
+scene.add(bgGlow);
+
+const bgGlow2 = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, color: 0x0d3a4a, transparent: true, opacity: 0.6,
+  depthWrite: false, blending: THREE.AdditiveBlending,
+}));
+bgGlow2.scale.set(26, 18, 1);
+bgGlow2.position.set(0, 0, -11);
+scene.add(bgGlow2);
+
+/* ============================================================
+   6. 冲击波
+   ============================================================ */
+const shockMat = new THREE.MeshBasicMaterial({
+  color: 0x9ff4ff, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+});
+const shock = new THREE.Mesh(new THREE.RingGeometry(0.885, 0.897, 128), shockMat);
+shock.position.z = 0.15;
+kGroup.add(shock);
+
+const shock2 = new THREE.Mesh(new THREE.RingGeometry(0.888, 0.896, 128), shockMat.clone());
+shock2.position.z = 0.05;
+kGroup.add(shock2);
+
+/* ============================================================
+   7. 光带（开场）
+   ============================================================ */
+const beamMat = new THREE.MeshBasicMaterial({
+  color: 0x7ff2e2, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const beam = new THREE.Mesh(new THREE.PlaneGeometry(13, 0.014), beamMat);
+beam.position.set(0, 0, 0.9);
+scene.add(beam);
+
+const beamGlowMat = new THREE.MeshBasicMaterial({
+  color: 0x2fe3c4, transparent: true, opacity: 0,
+  blending: THREE.AdditiveBlending, depthWrite: false,
+});
+const beamGlow = new THREE.Mesh(new THREE.PlaneGeometry(13, 0.30), beamGlowMat);
+beamGlow.position.set(0, 0, 0.88);
+scene.add(beamGlow);
+
+/* ============================================================
+   8. 手机 + 屏幕 UI
+   ============================================================ */
+const phone = new THREE.Group();
+phone.position.set(2.05, -3.4, 0.4);
+phone.rotation.set(0.04, -0.38, 0.02);
+scene.add(phone);
+
+const phoneBody = new THREE.Mesh(
+  new RoundedBoxGeometry(0.66, 1.30, 0.085, 5, 0.10),
+  new THREE.MeshPhysicalMaterial({
+    color: 0x0a1420, metalness: 0.95, roughness: 0.28,
+    clearcoat: 1, clearcoatRoughness: 0.15, envMapIntensity: 1.3,
+  })
+);
+phone.add(phoneBody);
+
+// 边框高光条
+const phoneRim = new THREE.Mesh(
+  new RoundedBoxGeometry(0.675, 1.315, 0.075, 5, 0.104),
+  new THREE.MeshBasicMaterial({
+    color: 0x39e6cb, transparent: true, opacity: 0.30,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.BackSide,
+  })
+);
+phone.add(phoneRim);
+
+const SCR_W = 480, SCR_H = 1000;
+const screenCanvas = document.createElement('canvas');
+screenCanvas.width = SCR_W;
+screenCanvas.height = SCR_H;
+const sctx = screenCanvas.getContext('2d');
+const screenTex = new THREE.CanvasTexture(screenCanvas);
+screenTex.colorSpace = THREE.SRGBColorSpace;
+screenTex.anisotropy = 4;
+
+const screenMat = new THREE.MeshBasicMaterial({ map: screenTex, transparent: true, toneMapped: false });
+const screenMesh = new THREE.Mesh(new THREE.PlaneGeometry(0.585, 1.20), screenMat);
+screenMesh.position.z = 0.0435;
+phone.add(screenMesh);
+
+// 手机屏幕的光晕
+const phoneHalo = new THREE.Sprite(new THREE.SpriteMaterial({
+  map: glowTex, transparent: true, opacity: 0.0, depthWrite: false,
+  blending: THREE.AdditiveBlending, color: 0x35e8c8,
+}));
+phoneHalo.scale.set(2.6, 3.2, 1);
+phoneHalo.position.set(0, 0, -0.12);
+phone.add(phoneHalo);
+
+function drawScreen(progress, tick) {
+  const g = sctx;
+  const W = SCR_W, H = SCR_H;
+  g.clearRect(0, 0, W, H);
+
+  // 背景
+  const bg = g.createLinearGradient(0, 0, W, H);
+  bg.addColorStop(0, '#08131f');
+  bg.addColorStop(0.55, '#050b13');
+  bg.addColorStop(1, '#06171a');
+  g.fillStyle = bg;
+  g.fillRect(0, 0, W, H);
+
+  // 顶部状态
+  g.fillStyle = 'rgba(255,255,255,.35)';
+  g.font = '600 17px "Segoe UI", sans-serif';
+  g.textAlign = 'left';
+  g.textBaseline = 'middle';
+  g.fillText('KUNCLIENT', 36, 44);
+  g.textAlign = 'right';
+  g.fillStyle = 'rgba(53,232,200,.9)';
+  g.fillText('EDL', W - 36, 44);
+
+  // 标题
+  g.textAlign = 'left';
+  g.fillStyle = 'rgba(233,243,248,.95)';
+  g.font = '600 34px "Microsoft YaHei", sans-serif';
+  g.fillText('正在刷写', 36, 118);
+  g.fillStyle = 'rgba(109,135,152,.85)';
+  g.font = '400 17px "Consolas", monospace';
+  g.fillText('rawprogram0.xml', 36, 154);
+
+  // 进度环
+  const cx = W / 2, cy = 380, R = 132;
+  g.lineWidth = 12;
+  g.strokeStyle = 'rgba(255,255,255,.06)';
+  g.beginPath(); g.arc(cx, cy, R, 0, Math.PI * 2); g.stroke();
+
+  const ringGrad = g.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+  ringGrad.addColorStop(0, '#2fe3c4');
+  ringGrad.addColorStop(1, '#7ef0ff');
+  g.strokeStyle = ringGrad;
+  g.lineCap = 'round';
+  g.shadowColor = 'rgba(47,227,196,.55)';
+  g.shadowBlur = 26;
+  g.beginPath();
+  g.arc(cx, cy, R, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+  g.stroke();
+  g.shadowBlur = 0;
+
+  // 百分比
+  g.textAlign = 'center';
+  g.fillStyle = '#ffffff';
+  g.font = '300 76px "Segoe UI", sans-serif';
+  g.fillText(Math.round(progress * 100) + '', cx, cy - 6);
+  g.font = '500 20px "Segoe UI", sans-serif';
+  g.fillStyle = 'rgba(126,240,255,.85)';
+  g.fillText('%', cx + 76, cy + 22);
+
+  g.fillStyle = 'rgba(109,135,152,.9)';
+  g.font = '400 16px "Microsoft YaHei", sans-serif';
+  g.fillText(progress >= 0.999 ? '刷写完成' : '写入分区 · 请勿断开', cx, cy + 78);
+
+  // 日志
+  const logs = [
+    ['载入 Firehose 编程器', 0.02],
+    ['校验 GPT 分区表', 0.14],
+    ['super.img  sparse 展开', 0.34],
+    ['写入 system_a', 0.52],
+    ['写入 vendor_a', 0.74],
+    ['回读校验扇区', 0.93],
+  ];
+  let ly = 620;
+  g.textAlign = 'left';
+  logs.forEach(([text, at], i) => {
+    const done = progress > at;
+    const active = progress > at - 0.12 && progress <= at + 0.02;
+    g.fillStyle = done ? 'rgba(53,232,200,.92)' : active ? 'rgba(233,243,248,.9)' : 'rgba(109,135,152,.45)';
+    g.font = '400 18px "Microsoft YaHei", sans-serif';
+    g.fillText((done ? '✓  ' : active ? '›  ' : '·  ') + text, 40, ly);
+    ly += 46;
+  });
+
+  // 底部条
+  const barY = H - 96;
+  g.fillStyle = 'rgba(255,255,255,.07)';
+  g.fillRect(40, barY, W - 80, 6);
+  g.fillStyle = ringGrad;
+  g.fillRect(40, barY, (W - 80) * progress, 6);
+
+  g.fillStyle = 'rgba(109,135,152,.8)';
+  g.font = '400 15px "Consolas", monospace';
+  g.textAlign = 'left';
+  g.fillText('sector ' + String(Math.round(progress * 8388608)).padStart(8, '0'), 40, barY + 34);
+  g.textAlign = 'right';
+  g.fillText((progress * 4.2).toFixed(1) + ' GB/s', W - 40, barY + 34);
+
+  screenTex.needsUpdate = true;
+}
+drawScreen(0, 0);
+
+/* ============================================================
+   9. 数据流粒子（手机 → K）
+   ============================================================ */
+const FLOW_N = 300;
+const flowCurve = new THREE.CatmullRomCurve3([
+  new THREE.Vector3(1.74, -0.12, 0.45),
+  new THREE.Vector3(1.18, 0.60, 0.78),
+  new THREE.Vector3(0.48, 0.86, 0.88),
+  new THREE.Vector3(0.04, 0.52, 0.58),
+  new THREE.Vector3(-0.02, 0.08, 0.34),
+]);
+const SAMPLES = 160;
+const flowPts = flowCurve.getPoints(SAMPLES);
+
+const flowPos = new Float32Array(FLOW_N * 3);
+const flowPhase = new Float32Array(FLOW_N);
+const flowSpeed = new Float32Array(FLOW_N);
+for (let i = 0; i < FLOW_N; i++) {
+  flowPhase[i] = Math.random();
+  flowSpeed[i] = 0.22 + Math.random() * 0.30;
+}
+const flowGeo = new THREE.BufferGeometry();
+flowGeo.setAttribute('position', new THREE.BufferAttribute(flowPos, 3));
+const flowMat = new THREE.PointsMaterial({
+  size: 0.075, map: dotTex, transparent: true, opacity: 0,
+  depthWrite: false, blending: THREE.AdditiveBlending, color: 0x8ff6e4,
+});
+const flow = new THREE.Points(flowGeo, flowMat);
+scene.add(flow);
+
+function sampleFlow(u) {
+  const f = clamp01(u) * SAMPLES;
+  const i0 = Math.min(SAMPLES - 1, Math.floor(f));
+  const i1 = i0 + 1;
+  const k = f - i0;
+  const a = flowPts[i0], b = flowPts[i1];
+  return [lerp(a.x, b.x, k), lerp(a.y, b.y, k), lerp(a.z, b.z, k)];
+}
+
+/* ============================================================
+   10. 标题（Canvas 纹理）
+   ============================================================ */
+function makeTitleTexture() {
+  const W = 1600, H = 460;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d');
+
+  const drawTracked = (text, cx, y, tracking, font, fill) => {
+    g.font = font;
+    g.textBaseline = 'middle';
+    g.textAlign = 'left';
+    const chars = [...text];
+    const widths = chars.map(ch => g.measureText(ch).width);
+    const total = widths.reduce((a, b) => a + b, 0) + tracking * (chars.length - 1);
+    let x = cx - total / 2;
+    for (let i = 0; i < chars.length; i++) {
+      g.fillStyle = fill;
+      g.fillText(chars[i], x, y);
+      x += widths[i] + tracking;
+    }
+  };
+
+  // 主标题
+  const grd = g.createLinearGradient(0, 150, 0, 280);
+  grd.addColorStop(0, '#eaf7fb');
+  grd.addColorStop(0.55, '#cfe9f2');
+  grd.addColorStop(1, '#7db8c4');
+  g.shadowColor = 'rgba(60,180,190,.18)';
+  g.shadowBlur = 14;
+  drawTracked('KUNCLIENT', W / 2, 212, 26, '700 132px "Segoe UI", "Microsoft YaHei", sans-serif', grd);
+  g.shadowBlur = 0;
+
+  // 分隔线
+  g.strokeStyle = 'rgba(53,232,200,.35)';
+  g.lineWidth = 1.5;
+  g.beginPath();
+  g.moveTo(W / 2 - 330, 300);
+  g.lineTo(W / 2 + 330, 300);
+  g.stroke();
+
+  // 副标题
+  g.textAlign = 'center';
+  g.fillStyle = 'rgba(150,180,196,.92)';
+  g.font = '400 40px "Microsoft YaHei", "Segoe UI", sans-serif';
+  g.fillText('MTK · Qualcomm EDL  /  一键刷机工作台', W / 2, 366);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+const titleTex = makeTitleTexture();
+const titleMat = new THREE.MeshBasicMaterial({
+  map: titleTex, transparent: true, opacity: 0, depthWrite: false,
+});
+const titleMesh = new THREE.Mesh(new THREE.PlaneGeometry(4.0, 4.0 * 460 / 1600), titleMat);
+titleMesh.position.set(0, -0.70, 1.1);
+scene.add(titleMesh);
+
+/* ============================================================
+   11. 后期：Bloom
+   ============================================================ */
+const composer = new EffectComposer(renderer);
+composer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+composer.setSize(window.innerWidth, window.innerHeight);
+composer.addPass(new RenderPass(scene, camera));
+
+const bloom = new UnrealBloomPass(
+  new THREE.Vector2(window.innerWidth, window.innerHeight),
+  0.72, 0.50, 0.84
+);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+/* ============================================================
+   12. 相机关键帧
+   ============================================================ */
+const camKeys = [
+  { t: 0.00, pos: [0.00, 0.22, 10.20], look: [0.00, 0.00, 0] },
+  { t: 1.40, pos: [0.10, 0.18, 8.40], look: [0.00, 0.00, 0] },
+  { t: 3.00, pos: [0.55, 0.32, 6.10], look: [0.00, 0.00, 0] },
+  { t: 5.10, pos: [-0.52, 0.38, 5.75], look: [0.00, 0.05, 0] },
+  { t: 6.60, pos: [0.35, 0.60, 5.30], look: [0.10, 0.05, 0] },
+  { t: 8.20, pos: [0.95, 0.30, 5.05], look: [0.30, -0.05, 0] },
+  { t: 10.20, pos: [0.45, 0.40, 5.70], look: [0.10, 0.00, 0] },
+  { t: 12.60, pos: [0.00, 0.52, 6.20], look: [0.00, 0.22, 0] },
+  { t: 17.00, pos: [0.00, 0.50, 5.90], look: [0.00, 0.22, 0] },
+];
+
+function sampleCam(t) {
+  if (t <= camKeys[0].t) return camKeys[0];
+  for (let i = 0; i < camKeys.length - 1; i++) {
+    const a = camKeys[i], b = camKeys[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const p = smoothstep(a.t, b.t, t);
+      return { pos: lerp3(a.pos, b.pos, p), look: lerp3(a.look, b.look, p) };
+    }
+  }
+  return camKeys[camKeys.length - 1];
+}
+
+/* ============================================================
+   13. 交互
+   ============================================================ */
+const pointer = { x: 0, y: 0, tx: 0, ty: 0 };
+window.addEventListener('pointermove', e => {
+  pointer.tx = (e.clientX / window.innerWidth) * 2 - 1;
+  pointer.ty = (e.clientY / window.innerHeight) * 2 - 1;
+});
+
+let paused = false;
+const TOTAL = 17.0;
+const HOLD = 1.5;
+const CYCLE = TOTAL + HOLD;
+
+let time = 0;
+const params = new URLSearchParams(location.search);
+const seek = params.has('t') ? parseFloat(params.get('t')) || 0 : null;
+const still = params.has('still');
+if (seek !== null) { time = seek; paused = true; }
+
+function replay() {
+  time = 0;
+  paused = false;
+}
+document.getElementById('replay').addEventListener('click', replay);
+window.addEventListener('keydown', e => {
+  if (e.code === 'Space') { e.preventDefault(); paused = !paused; }
+  if (e.key === 'r' || e.key === 'R') replay();
+});
+
+/* ============================================================
+   14. HUD
+   ============================================================ */
+const hud = document.getElementById('hud');
+const barEl = document.getElementById('bar');
+const tcEl = document.getElementById('tc');
+const curtain = document.getElementById('curtain');
+const chEls = [...document.querySelectorAll('.ch')];
+
+const CHAPTERS = [
+  { t: 0.00, i: 0 },
+  { t: 3.20, i: 1 },
+  { t: 6.10, i: 2 },
+  { t: 10.20, i: 3 },
+];
+let lastChapter = -1;
+let lastScreenP = -1;
+let lastScreenDraw = 0;
+
+function updateHUD(t) {
+  const p = clamp01(t / TOTAL);
+  barEl.style.width = (p * 100).toFixed(2) + '%';
+  tcEl.textContent = t.toFixed(1).padStart(4, '0') + ' / 17.0';
+
+  let cur = 0;
+  for (const c of CHAPTERS) if (t >= c.t) cur = c.i;
+  if (cur !== lastChapter) {
+    chEls.forEach((el, i) => el.classList.toggle('active', i === cur));
+    lastChapter = cur;
+  }
+
+  const fade = 1 - smoothstep(TOTAL + 0.15, TOTAL + 0.95, t);
+  curtain.style.opacity = (1 - fade).toFixed(3);
+}
+
+/* ============================================================
+   15. 主循环
+   ============================================================ */
+let last = 0;
+
+function update(t) {
+  // ---------- 星空 ----------
+  stars.rotation.y = t * 0.018;
+  stars.rotation.x = Math.sin(t * 0.07) * 0.03;
+  starMat.opacity = 0.85 * smoothstep(0.1, 1.6, t);
+  dust.position.y = Math.sin(t * 0.35) * 0.18;
+  dust.rotation.y = -t * 0.03;
+  dustMat.opacity = 0.42 * smoothstep(0.2, 2.2, t);
+
+  // ---------- 光带 ----------
+  const bp = ph(t, 0.10, 1.15);
+  const beamW = easeOutQuint(bp);
+  beam.scale.x = Math.max(0.001, beamW);
+  beamMat.opacity = (bp > 0 ? 1 : 0) * (1 - smoothstep(0.72, 1.0, bp)) * 0.95;
+  beamGlow.scale.x = Math.max(0.001, beamW);
+  beamGlowMat.opacity = (bp > 0 ? 1 : 0) * (1 - smoothstep(0.6, 1.0, bp)) * 0.16;
+
+  // ---------- K 三块入场 ----------
+  pieceAnim.forEach((p, i) => {
+    const e = easeOutCubic(ph(t, 1.20 + p.delay, 2.70 + p.delay));
+    const e2 = easeOutQuint(ph(t, 1.20 + p.delay, 2.90 + p.delay));
+    p.obj.position.set(
+      p.offset[0] * (1 - e2),
+      p.offset[1] * (1 - e2),
+      p.offset[2] * (1 - e2)
+    );
+    p.obj.rotation.z = p.rot * (1 - e);
+    p.obj.rotation.y = (1 - e) * (i === 0 ? 0.5 : -0.35);
+    p.obj.userData.edge.material.opacity = 0.16 * e;
+  });
+
+  // K 整体：成形后的漂移 + 结尾构图
+  const kIn = smoothstep(1.2, 3.0, t);
+  kGroup.visible = t > 1.02;
+  const toFinal = smoothstep(9.9, 12.6, t);
+
+  const heroFloat = Math.sin(t * 0.9) * 0.022 * kIn;
+  kGroup.position.x = lerp(0, 0, toFinal) + Math.sin(t * 0.5) * 0.03 * kIn;
+  kGroup.position.y = heroFloat + lerp(0, 0.74, toFinal);
+  kGroup.position.z = 0;
+  kGroup.rotation.y = Math.sin(t * 0.32) * 0.10 * kIn * (1 - toFinal);
+  kGroup.rotation.x = Math.sin(t * 0.24) * 0.045 * kIn * (1 - toFinal);
+  const kScale = lerp(1, 0.76, toFinal) * lerp(0.92, 1, easeOutCubic(kIn));
+  kGroup.scale.setScalar(kScale);
+
+  // 描边脉冲
+  const edgePulse = (0.13 + 0.04 * Math.sin(t * 2.1) + 0.07 * toFinal) * smoothstep(1.2, 2.6, t);
+  pieceAnim.forEach(p => { p.obj.userData.edge.material.opacity = edgePulse; });
+
+  // ---------- 闪电 ----------
+  const bIn = easeOutCubic(ph(t, 2.45, 3.02));
+  const bBounce = ph(t, 3.02, 3.35);
+  const bounceY = Math.sin(bBounce * Math.PI) * 0.06 * (1 - bBounce);
+  bolt.position.y = 0.00 + 3.4 * (1 - bIn) + bounceY;
+  bolt.position.z = 0.23 + Math.sin(t * 0.8) * 0.012 * bIn;
+  bolt.rotation.z = -0.45 + Math.sin(t * 0.55) * 0.012 * bIn;
+  bolt.rotation.y = Math.sin(t * 0.4) * 0.022 * bIn;
+  bolt.visible = t > 2.4;
+
+  const boltPulse = 0.5 + 0.28 * Math.sin(t * 3.4) + 0.18 * Math.sin(t * 8.1) * 0.4;
+  boltMat.emissiveIntensity = boltPulse * (0.5 + 0.5 * bIn);
+  boltMat.color.setScalar(1);
+  boltGlow.material.opacity = 0.30 * bIn * (0.75 + 0.25 * Math.sin(t * 2.6)) * (1 - 0.55 * toFinal);
+  boltGlow.scale.setScalar(2.1 + 0.16 * Math.sin(t * 2.2));
+
+  // ---------- 冲击波 ----------
+  const sp = ph(t, 2.92, 3.90);
+  if (sp > 0 && sp < 1) {
+    shock.visible = shock2.visible = true;
+    const s1 = 0.25 + easeOutQuint(sp) * 2.2;
+    shock.scale.setScalar(s1);
+    shockMat.opacity = Math.pow(1 - sp, 2) * 0.55;
+    const sp2 = ph(t, 3.04, 4.20);
+    const s2 = 0.2 + easeOutQuint(sp2) * 2.1;
+    shock2.scale.setScalar(s2);
+    shock2.material.opacity = Math.pow(1 - sp2, 2) * 0.30;
+  } else {
+    shock.visible = shock2.visible = false;
+  }
+
+  // ---------- 手机 ----------
+  const phIn = easeOutCubic(ph(t, 6.05, 7.55));
+  const phOut = smoothstep(9.6, 11.2, t);
+  phone.position.y = lerp(-3.4, 0.02, phIn) - phOut * 1.2;
+  phone.position.x = lerp(2.05, 1.78, phOut);
+  phone.position.z = lerp(0.4, -0.2, phOut);
+  phone.rotation.y = lerp(-0.38, -0.62, phOut) + Math.sin(t * 0.6) * 0.05 * phIn;
+  phone.rotation.z = 0.02 + Math.sin(t * 0.45) * 0.02 * phIn;
+  phone.rotation.x = 0.04 + Math.sin(t * 0.38) * 0.03 * phIn;
+  phone.visible = phIn > 0.001 && phOut < 0.999;
+  phone.scale.setScalar(lerp(0.92, 1, phIn) * lerp(1, 0.9, phOut));
+
+  // 屏幕进度：6.9 → 10.2 秒走完
+  const scrP = easeInOutCubic(ph(t, 6.90, 10.05));
+  if (Math.abs(scrP - lastScreenP) > 0.0015 || t - lastScreenDraw > 0.28) {
+    drawScreen(scrP, t);
+    lastScreenP = scrP;
+    lastScreenDraw = t;
+  }
+  screenMat.opacity = smoothstep(6.5, 7.3, t) * (1 - phOut);
+  phoneHalo.material.opacity = 0.5 * smoothstep(6.6, 7.8, t) * (1 - phOut);
+
+  // ---------- 数据流 ----------
+  const flowOn = smoothstep(7.0, 7.8, t) * (1 - smoothstep(9.7, 10.6, t));
+  flowMat.opacity = flowOn * 0.95;
+  flow.visible = flowOn > 0.01;
+  if (flow.visible) {
+    const pos = flowGeo.attributes.position.array;
+    for (let i = 0; i < FLOW_N; i++) {
+      let u = (flowPhase[i] + t * flowSpeed[i]) % 1;
+      // 收束：靠后段更快
+      const pt = sampleFlow(u);
+      const spread = Math.sin(u * Math.PI) * 0.055;
+      const jx = Math.sin(i * 12.9898 + t * 1.4) * spread;
+      const jy = Math.cos(i * 78.233 + t * 1.1) * spread;
+      pos[i * 3] = pt[0] + jx;
+      pos[i * 3 + 1] = pt[1] + jy;
+      pos[i * 3 + 2] = pt[2];
+    }
+    flowGeo.attributes.position.needsUpdate = true;
+  }
+
+  // ---------- 标题 ----------
+  const tIn = smoothstep(10.4, 12.4, t);
+  titleMat.opacity = tIn;
+  titleMesh.position.y = lerp(-1.22, -1.00, easeOutCubic(tIn));
+  titleMesh.position.z = lerp(0.9, 1.1, tIn);
+
+  // ---------- 相机 ----------
+  const c = sampleCam(t);
+  pointer.x = lerp(pointer.x, pointer.tx, 0.045);
+  pointer.y = lerp(pointer.y, pointer.ty, 0.045);
+
+  camera.position.set(
+    c.pos[0] + pointer.x * 0.42,
+    c.pos[1] - pointer.y * 0.26,
+    c.pos[2]
+  );
+  camera.lookAt(
+    c.look[0] + pointer.x * 0.16,
+    c.look[1] - pointer.y * 0.10,
+    c.look[2]
+  );
+
+  // 微幅手持感
+  camera.position.x += Math.sin(t * 0.7) * 0.012;
+  camera.position.y += Math.cos(t * 0.53) * 0.010;
+
+  // 灯光呼吸
+  fillLight.intensity = 11 + Math.sin(t * 1.4) * 3;
+  rimLight.intensity = 2.4 + Math.sin(t * 0.9 + 1.2) * 0.5;
+  bloom.strength = 0.68 + 0.07 * Math.sin(t * 1.1) + 0.08 * toFinal;
+}
+
+// ?loop=timeout 用定时器驱动（无头截图 / 录屏工具里 rAF 会被节流）
+const USE_TIMEOUT = params.get('loop') === 'timeout';
+
+function tick(now) {
+  const dt = last ? Math.max(0, Math.min(0.05, (now - last) / 1000)) : 0.016;
+  last = now;
+
+  if (!paused) {
+    time += dt;
+    if (time >= CYCLE) time -= CYCLE;
+  }
+
+  update(time);
+  updateHUD(time);
+  composer.render();
+
+  if (USE_TIMEOUT) setTimeout(() => tick(performance.now()), 16);
+  else requestAnimationFrame(tick);
+}
+
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.fov = camera.aspect < 1.3 ? 52 : 42;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+  composer.setSize(w, h);
+  bloom.setSize(w, h);
+});
+
+// 启动
+window.addEventListener('error', e => {
+  document.title = 'ERR: ' + (e.message || 'unknown');
+});
+document.getElementById('loader').classList.add('hide');
+hud.classList.add('on');
+if (USE_TIMEOUT) tick(performance.now());
+else requestAnimationFrame(tick);
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+// ====== 邮件品牌视觉（2026-10-12 重做）======
+// 🔴 三类邮件（验证码 / 反馈 / 版本更新）与三端（客户端 / 控制台 / 官网）共用同一套品牌色。
+//    历史遗留的深绿 #0F6B4F 是**旧品牌**，早已被浅蓝系取代 —— 邮件是用户唯一从「站外」
+//    看到品牌的地方，色板漂了最扎眼。色值直接抄 server/console/index.html 的 :root：
+//      --pri #7ab8f3 / --pri-t #3e8fe0 / --pri-s #eaf3fe / --pri-ink #10304f
+//    ⚠️ 邮件客户端不认 CSS 变量，也不认外部样式表 —— 只能内联，所以这里是一份**无 var() 的副本**。
+const MAIL_BRAND = {
+  accent:     '#7ab8f3',   // 品牌强调色（页头顶条 / 按钮底）
+  accentText: '#3e8fe0',   // 压在白底上的强调色文字（#7ab8f3 当文字用对比度不够）
+  accentInk:  '#10304f',   // 压在强调色底上的文字色（= --pri-ink）
+  accentSoft: '#eaf3fe',   // 强调色浅底（验证码块 / 信息块）
+  navy:       '#1b2740',   // 页头深蓝底
+  text:       '#1f2329',
+  sub:        '#6b7177',
+  line:       '#e6e8eb',
+  lineSoft:   '#eef0f2',
+  foot:       '#9aa0a6',
+  soft:       '#f3f5f4',
+  softLine:   '#dfe3e1',
+};
+
+/** 邮件外壳：统一卡片（白底 + 细边 + 8px 圆角）。 */
+function mailShell(inner) {
+  const b = MAIL_BRAND;
+  return `<div style="max-width:540px;margin:0 auto;background:#fff;border:1px solid ${b.line};`
+    + `border-radius:8px;overflow:hidden;color:${b.text};`
+    + `font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif">`
+    + inner + '</div>';
+}
+
+/** 邮件页头：深蓝底 + 品牌色下边线（三类邮件共用）。 */
+function mailHeader(title, subtitle) {
+  const b = MAIL_BRAND;
+  return `<div style="background:${b.navy};border-bottom:3px solid ${b.accent};color:#fff;padding:20px 24px">`
+    + `<div style="font-size:17px;font-weight:700">${title}</div>`
+    + `<div style="font-size:12.5px;opacity:.72;margin-top:3px">${subtitle}</div>`
+    + '</div>';
+}
+
+/** 邮件页脚（三类邮件共用）。 */
+function mailFooter() {
+  const b = MAIL_BRAND;
+  return `<div style="padding:14px 24px;border-top:1px solid ${b.lineSoft};color:${b.foot};font-size:11.5px">`
+    + '本邮件由 KunClient 系统自动发送，请勿直接回复</div>';
+}
+

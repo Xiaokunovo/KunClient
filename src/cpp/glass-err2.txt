@@ -1,0 +1,27 @@
+[boot]     0 ms  进程起步
+[boot]   438 ms  QApplication 就绪
+[boot]   779 ms  主题与样式表就绪
+[page]     0 ms  buildUi 开始
+[page]  2486 ms (+ 2486 ms)  buildUi 完成
+[page]  2574 ms (+   88 ms)  registerPages 开始
+[page]  2675 ms (+  101 ms)  EdlFlash
+[page]  2770 ms (+   95 ms)  FastbootFlash
+[page]  2890 ms (+  120 ms)  Payload
+[page]  2981 ms (+   91 ms)  OnePlusFlash
+[page]  3081 ms (+  100 ms)  XiaomiFastboot
+[page]  3175 ms (+   94 ms)  MtkFlash
+[page]  3264 ms (+   89 ms)  VisualFlash
+[page]  3388 ms (+  124 ms)  DeviceHome
+[page]  3521 ms (+  133 ms)  AndroidTools
+[page]  3605 ms (+   84 ms)  ScreenMirror
+[page]  3620 ms (+   15 ms)  AppManager
+[page]  3640 ms (+   20 ms)  FileTransfer
+[page]  3654 ms (+   14 ms)  CommandConsole
+[page]  3678 ms (+   24 ms)  CloudDriver
+[page]  3812 ms (+  134 ms)  Settings
+[page]  3872 ms (+   60 ms)  About
+[page]  3893 ms (+   21 ms)  ControlCenter
+[page]  3899 ms (+    6 ms)  registerPages 完成
+[page]  3905 ms (+    6 ms)  主屏图标网格完成
+[boot]  5658 ms  主界面已构造
+[boot]  5978 ms  主界面已显示

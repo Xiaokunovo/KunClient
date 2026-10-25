@@ -1,0 +1,1118 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>KunClient · ColorOS 17 概念原型</title>
+<style>
+/* ============================================================
+   KunClient × ColorOS 17 —— 设计语言原型
+   动效四曲线：silk(转场) / spring(落定) / decel(浮现) / accel(退场)
+   ============================================================ */
+:root{
+  --r-s:8px; --r-m:12px; --r-l:16px; --r-xl:22px; --r-2xl:28px;
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-8:32px;
+  --ease-silk:cubic-bezier(.32,.72,0,1);
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);
+  --ease-decel:cubic-bezier(.16,1,.3,1);
+  --ease-accel:cubic-bezier(.55,0,1,.45);
+  --t-fast:140ms; --t-med:280ms; --t-slow:420ms;
+  --bloom:.6;          /* 氛围光晕强度（设置页滑杆实时驱动） */
+  --glass-blur:24px;   /* 毛玻璃模糊半径（设置页滑杆实时驱动） */
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","HarmonyOS Sans SC","MiSans","Microsoft YaHei UI","Segoe UI",sans-serif;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,"Courier New",monospace;
+}
+html[data-theme="light"]{
+  --desk:#dde4ee;
+  --win-bg:#f4f6fb;
+  --glass:rgba(255,255,255,.62);
+  --glass-strong:rgba(255,255,255,.80);
+  --card:rgba(255,255,255,.56);
+  --card-line:rgba(255,255,255,.85);
+  --hairline:rgba(15,23,42,.07);
+  --text:#182231; --text-2:#4d5a6d; --text-3:#8b98a9;
+  --accent:#2b6bf0; --accent-2:#7a5af8; --accent-soft:rgba(43,107,240,.11); --accent-line:rgba(43,107,240,.28);
+  --success:#17a05e; --success-soft:rgba(23,160,94,.12);
+  --warning:#e8930c; --warning-soft:rgba(232,147,12,.13);
+  --danger:#e5484d; --danger-soft:rgba(229,72,77,.11);
+  --track:rgba(15,23,42,.08);
+  --shadow:0 30px 80px -32px rgba(15,23,42,.35),0 4px 14px -6px rgba(15,23,42,.12);
+  --blob-1:rgba(64,120,255,.20); --blob-2:rgba(38,198,190,.16); --blob-3:rgba(140,110,250,.16); --blob-4:rgba(250,190,90,.13);
+  --code-bg:rgba(15,23,42,.045);
+}
+html[data-theme="dark"]{
+  --desk:#0a0d13;
+  --win-bg:#0e131c;
+  --glass:rgba(22,28,40,.60);
+  --glass-strong:rgba(24,30,44,.74);
+  --card:rgba(255,255,255,.048);
+  --card-line:rgba(255,255,255,.09);
+  --hairline:rgba(255,255,255,.07);
+  --text:#e9eef6; --text-2:#a6b2c4; --text-3:#68758a;
+  --accent:#5b8cff; --accent-2:#9d8cff; --accent-soft:rgba(91,140,255,.15); --accent-line:rgba(91,140,255,.32);
+  --success:#2ec27e; --success-soft:rgba(46,194,126,.14);
+  --warning:#f5b84c; --warning-soft:rgba(245,184,76,.13);
+  --danger:#ff6b70; --danger-soft:rgba(255,107,112,.13);
+  --track:rgba(255,255,255,.10);
+  --shadow:0 40px 90px -30px rgba(0,0,0,.75),0 4px 16px -6px rgba(0,0,0,.5);
+  --blob-1:rgba(64,120,255,.26); --blob-2:rgba(38,198,190,.18); --blob-3:rgba(140,110,250,.20); --blob-4:rgba(250,190,90,.12);
+  --code-bg:rgba(255,255,255,.045);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{
+  font-family:var(--font);
+  background:
+    radial-gradient(1100px 700px at 15% 8%,rgba(120,150,220,.14),transparent 60%),
+    radial-gradient(900px 640px at 88% 92%,rgba(120,190,180,.10),transparent 60%),
+    var(--desk);
+  display:grid;place-items:center;color:var(--text);
+  transition:background-color var(--t-med) var(--ease-silk);
+  -webkit-font-smoothing:antialiased;
+}
+button{font-family:inherit;border:0;background:none;cursor:pointer;color:inherit}
+input,select{font-family:inherit;color:inherit}
+h1,h2,h3,h4{font-weight:600}
+.muted{color:var(--text-2)}
+.small{font-size:12px}
+b{font-weight:600}
+
+/* ── 窗口外壳 ───────────────────────────────────────────── */
+.window{
+  position:relative;width:min(1280px,96vw);height:min(830px,93vh);min-height:600px;
+  border-radius:18px;overflow:hidden;display:grid;grid-template-columns:auto 1fr;
+  background:var(--win-bg);box-shadow:var(--shadow);
+  border:1px solid var(--hairline);
+  transition:background-color var(--t-med) var(--ease-silk),border-color var(--t-med) var(--ease-silk);
+}
+.window::before{ /* 氛围色晕：玻璃唯一的衬底 */
+  content:"";position:absolute;inset:0;pointer-events:none;opacity:var(--bloom);
+  background:
+    radial-gradient(560px 420px at 14% 16%,var(--blob-1),transparent 70%),
+    radial-gradient(520px 400px at 86% 10%,var(--blob-2),transparent 70%),
+    radial-gradient(600px 480px at 18% 88%,var(--blob-3),transparent 70%),
+    radial-gradient(480px 380px at 84% 84%,var(--blob-4),transparent 70%);
+  transition:opacity var(--t-med) var(--ease-silk);
+}
+.glass{background:var(--glass);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));}
+
+/* ── 左侧导航轨 ─────────────────────────────────────────── */
+.rail{
+  position:relative;z-index:2;width:216px;display:flex;flex-direction:column;
+  background:var(--glass);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+  border-right:1px solid var(--hairline);
+  transition:width var(--t-slow) var(--ease-silk),background-color var(--t-med) var(--ease-silk);
+}
+.brand{display:flex;align-items:center;gap:10px;padding:16px 14px 12px;min-height:60px}
+.logo{
+  width:34px;height:34px;border-radius:11px;flex:none;display:grid;place-items:center;color:#fff;
+  background:linear-gradient(135deg,var(--accent),var(--accent-2));
+  box-shadow:0 6px 14px -6px var(--accent-line);
+}
+.logo svg{width:19px;height:19px}
+.brand-text{display:flex;flex-direction:column;line-height:1.2;overflow:hidden;white-space:nowrap}
+.brand-text b{font-size:15px}
+.brand-text span{font-size:11px;color:var(--text-3)}
+.collapse{margin-left:auto}
+.icon-btn{
+  width:32px;height:32px;border-radius:var(--r-s);display:grid;place-items:center;color:var(--text-2);
+  transition:background-color var(--t-fast) var(--ease-silk),color var(--t-fast) var(--ease-silk),transform var(--t-fast) var(--ease-spring);
+}
+.icon-btn:hover{background:var(--accent-soft);color:var(--accent)}
+.icon-btn:active{transform:scale(.9)}
+.icon-btn svg{width:17px;height:17px}
+.nav{position:relative;flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 10px 10px;scrollbar-width:none}
+.nav::-webkit-scrollbar{display:none}
+.nav-group{font-size:11px;color:var(--text-3);letter-spacing:.08em;padding:14px 10px 6px;white-space:nowrap;overflow:hidden;transition:opacity var(--t-med)}
+.nav-item{
+  position:relative;z-index:1;display:flex;align-items:center;gap:11px;width:100%;
+  padding:9px 10px;border-radius:var(--r-m);color:var(--text-2);text-align:left;
+  transition:color var(--t-fast) var(--ease-silk),background-color var(--t-fast) var(--ease-silk);
+}
+.nav-item svg{width:19px;height:19px;flex:none;transition:color var(--t-fast) var(--ease-silk)}
+.nav-item .item-label{font-size:13px;white-space:nowrap;overflow:hidden;transition:opacity var(--t-med) var(--ease-silk)}
+.nav-item:hover{color:var(--text)}
+.nav-item.active{color:var(--accent);font-weight:600}
+.nav-item.active svg{color:var(--accent)}
+.nav-pill{
+  position:absolute;left:0;right:0;top:0;height:40px;border-radius:var(--r-m);z-index:0;
+  background:var(--accent-soft);border:1px solid var(--accent-line);
+  transition:transform 480ms var(--ease-spring),height 200ms var(--ease-silk),opacity var(--t-med);
+}
+.rail-foot{padding:12px 10px;border-top:1px solid var(--hairline)}
+.user-chip{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:var(--r-m);transition:background-color var(--t-fast)}
+.user-chip:hover{background:var(--accent-soft)}
+.avatar{
+  width:32px;height:32px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:13px;font-weight:600;color:#fff;
+  background:linear-gradient(135deg,var(--accent-2),var(--accent));
+}
+.user-text{display:flex;flex-direction:column;line-height:1.25;overflow:hidden;white-space:nowrap;transition:opacity var(--t-med)}
+.user-text b{font-size:12.5px}
+.user-text span{font-size:11px;color:var(--text-3);display:flex;align-items:center;gap:5px}
+.user-text span::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--success)}
+.rail.collapsed{width:76px}
+.rail.collapsed .brand-text,.rail.collapsed .item-label,.rail.collapsed .nav-group,.rail.collapsed .user-text{opacity:0;pointer-events:none}
+.rail.collapsed .nav-item{justify-content:center;padding:10px 0}
+.rail.collapsed .brand{justify-content:center;padding:16px 0 12px}
+.rail.collapsed .collapse{position:absolute;right:8px;top:20px;opacity:0;pointer-events:none}
+.rail.collapsed .user-chip{justify-content:center;padding:8px 0}
+.rail.collapsed .nav-pill{left:8px;right:8px}
+
+/* ── 主区 ───────────────────────────────────────────────── */
+.main{position:relative;z-index:1;display:grid;grid-template-rows:auto 1fr auto;min-width:0;min-height:0}
+.topbar{
+  display:flex;align-items:center;gap:12px;height:58px;padding:0 18px 0 24px;
+  border-bottom:1px solid var(--hairline);
+}
+.top-left{display:flex;align-items:baseline;gap:10px;min-width:0}
+#page-title{font-size:17px;font-weight:700;letter-spacing:.01em;white-space:nowrap}
+.group-chip{
+  font-size:11px;color:var(--accent);background:var(--accent-soft);border:1px solid var(--accent-line);
+  padding:2px 9px;border-radius:999px;white-space:nowrap;
+}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.proto-chip{
+  display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text-2);
+  background:var(--card);border:1px solid var(--card-line);padding:5px 11px;border-radius:999px;
+}
+.proto-dot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:breathe 2.4s var(--ease-silk) infinite}
+@keyframes breathe{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.8)}}
+.win-btns{display:flex;gap:2px;margin-left:4px}
+.win-btn{width:38px;height:30px;border-radius:var(--r-s);display:grid;place-items:center;color:var(--text-2);transition:background-color var(--t-fast),color var(--t-fast)}
+.win-btn svg{width:13px;height:13px}
+.win-btn:hover{background:var(--track);color:var(--text)}
+.win-btn.close:hover{background:var(--danger);color:#fff}
+
+/* ── 页面舞台与转场 ─────────────────────────────────────── */
+.stage{position:relative;min-height:0;overflow:hidden}
+.page{
+  position:absolute;inset:0;overflow-y:auto;overscroll-behavior:contain;
+  padding:22px 26px 26px;opacity:0;pointer-events:none;visibility:hidden;
+  scrollbar-width:thin;scrollbar-color:var(--track) transparent;
+}
+.page::-webkit-scrollbar{width:8px}
+.page::-webkit-scrollbar-thumb{background:var(--track);border-radius:99px}
+.page.active{opacity:1;pointer-events:auto;visibility:visible}
+.page-inner{max-width:1060px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+/* 方向感知转场：旧页淡出缩小让位，新页推入落定 */
+.page.enter-f{animation:pageInF var(--t-slow) var(--ease-silk) 70ms both}
+.page.enter-b{animation:pageInB var(--t-slow) var(--ease-silk) 70ms both}
+.page.leave-f{animation:pageOutF 240ms var(--ease-accel) both}
+.page.leave-b{animation:pageOutB 240ms var(--ease-accel) both}
+@keyframes pageInF{from{opacity:0;transform:translate3d(44px,0,0) scale(.965)}to{opacity:1;transform:none}}
+@keyframes pageInB{from{opacity:0;transform:translate3d(-44px,0,0) scale(.965)}to{opacity:1;transform:none}}
+@keyframes pageOutF{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(-26px,0,0) scale(.975)}}
+@keyframes pageOutB{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(26px,0,0) scale(.975)}}
+/* 卡片错峰浮起 */
+.stagger{animation:riseIn 380ms var(--ease-decel) both;animation-delay:calc(var(--i,0)*60ms + 90ms)}
+@keyframes riseIn{from{opacity:0;transform:translate3d(0,16px,0)}to{opacity:1;transform:none}}
+
+/* ── 卡片与通用 ─────────────────────────────────────────── */
+.card{
+  background:var(--card);border:1px solid var(--card-line);border-radius:var(--r-xl);
+  padding:18px 20px;backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+  box-shadow:0 10px 30px -18px rgba(15,23,42,.18);
+  transition:background-color var(--t-med) var(--ease-silk),border-color var(--t-med) var(--ease-silk),transform var(--t-med) var(--ease-spring),box-shadow var(--t-med) var(--ease-silk);
+}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-head h3{font-size:14.5px}
+.card-head .head-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.chip{
+  font-size:11.5px;padding:3px 10px;border-radius:999px;white-space:nowrap;
+  background:var(--track);color:var(--text-2);border:1px solid transparent;
+  transition:background-color var(--t-med) var(--ease-silk),color var(--t-med) var(--ease-silk),border-color var(--t-med) var(--ease-silk);
+}
+.chip.ok{background:var(--success-soft);color:var(--success);border-color:color-mix(in srgb,var(--success) 30%,transparent)}
+.chip.busy{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-line)}
+.chip.warn{background:var(--warning-soft);color:var(--warning);border-color:color-mix(in srgb,var(--warning) 30%,transparent)}
+
+/* 按钮：按压回弹 + hover 浮起 */
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  font-size:13px;font-weight:500;padding:8px 16px;border-radius:var(--r-m);
+  border:1px solid var(--card-line);background:var(--glass-strong);color:var(--text);
+  transition:transform var(--t-fast) var(--ease-spring),box-shadow var(--t-med) var(--ease-silk),
+    background-color var(--t-fast) var(--ease-silk),border-color var(--t-fast) var(--ease-silk),opacity var(--t-fast);
+  will-change:transform;
+}
+.btn svg{width:15px;height:15px}
+.btn:hover{box-shadow:0 8px 18px -10px rgba(15,23,42,.35);transform:translateY(-1px)}
+.btn:active{transform:scale(.955)}
+.btn:disabled{opacity:.45;pointer-events:none}
+.btn.primary{
+  background:linear-gradient(135deg,var(--accent),color-mix(in srgb,var(--accent) 72%,var(--accent-2)));
+  border-color:transparent;color:#fff;font-weight:600;
+  box-shadow:0 8px 20px -10px var(--accent-line);
+}
+.btn.primary:hover{box-shadow:0 12px 26px -10px var(--accent-line)}
+.btn.danger{background:var(--danger-soft);border-color:color-mix(in srgb,var(--danger) 38%,transparent);color:var(--danger);font-weight:600}
+.btn.danger:hover{box-shadow:0 8px 18px -10px color-mix(in srgb,var(--danger) 45%,transparent)}
+
+/* 分段控件：弹簧指示器 */
+.seg{position:relative;display:inline-flex;background:var(--track);border-radius:999px;padding:3px;transition:background-color var(--t-med)}
+.seg button{
+  position:relative;z-index:1;font-size:12px;padding:5px 13px;border-radius:999px;color:var(--text-2);
+  transition:color var(--t-fast) var(--ease-silk);white-space:nowrap;
+}
+.seg button.active{color:var(--text);font-weight:600}
+.seg .seg-indicator{
+  position:absolute;z-index:0;top:3px;bottom:3px;left:0;width:0;border-radius:999px;
+  background:var(--glass-strong);box-shadow:0 2px 8px -3px rgba(15,23,42,.28);
+  transition:transform var(--t-slow) var(--ease-spring),width var(--t-slow) var(--ease-spring);
+}
+
+/* 开关 */
+.switch{position:relative;display:inline-block;width:46px;height:27px;flex:none}
+.switch input{position:absolute;opacity:0;inset:0;margin:0}
+.switch .track{
+  position:absolute;inset:0;border-radius:999px;background:var(--track);
+  transition:background-color var(--t-med) var(--ease-silk);
+}
+.switch .knob{
+  position:absolute;top:3px;left:3px;width:21px;height:21px;border-radius:50%;background:#fff;
+  box-shadow:0 2px 6px -1px rgba(15,23,42,.35);
+  transition:transform var(--t-slow) var(--ease-spring);
+}
+.switch input:checked + .track{background:var(--accent)}
+.switch input:checked + .track .knob{transform:translateX(19px)}
+
+/* 输入 */
+.field{display:flex;flex-direction:column;gap:6px}
+.field>span{font-size:12px;color:var(--text-3)}
+select,.text-input{
+  appearance:none;background:var(--glass-strong);border:1px solid var(--card-line);border-radius:var(--r-m);
+  padding:8px 12px;font-size:13px;min-width:150px;outline:none;
+  transition:border-color var(--t-fast) var(--ease-silk),box-shadow var(--t-fast) var(--ease-silk);
+}
+select:focus,.text-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search{position:relative;display:flex;align-items:center}
+.search svg{position:absolute;left:10px;width:14px;height:14px;color:var(--text-3)}
+.search .text-input{padding-left:30px;min-width:170px}
+
+/* ── 主页 ───────────────────────────────────────────────── */
+.hero{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+.hero-left{flex:1;min-width:260px}
+.hero-mode{display:flex;align-items:center;gap:12px}
+.dot{width:12px;height:12px;border-radius:50%;background:var(--text-3);flex:none;transition:background-color var(--t-med) var(--ease-silk)}
+.dot.live{background:var(--success);box-shadow:0 0 0 0 color-mix(in srgb,var(--success) 60%,transparent);animation:pulse 2s var(--ease-silk) infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--success) 55%,transparent)}70%{box-shadow:0 0 0 9px transparent}100%{box-shadow:0 0 0 0 transparent}}
+.hero-mode h2{font-size:24px;letter-spacing:.01em}
+.hero-left .muted{margin-top:7px;font-size:13px}
+.hero-right{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.demo-tag{font-size:10.5px;color:var(--text-3);border:1px dashed var(--hairline);border-radius:999px;padding:2px 8px}
+.tile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+.tile{
+  display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:14px 14px 12px;
+  background:var(--glass-strong);border:1px solid var(--card-line);border-radius:var(--r-l);text-align:left;
+  transition:transform var(--t-fast) var(--ease-spring),box-shadow var(--t-med) var(--ease-silk),border-color var(--t-fast),opacity var(--t-fast);
+}
+.tile:hover{transform:translateY(-2px);box-shadow:0 12px 26px -14px rgba(15,23,42,.3)}
+.tile:active{transform:scale(.955)}
+.tile:disabled{opacity:.42;pointer-events:none}
+.tile-icon{
+  width:36px;height:36px;border-radius:var(--r-m);display:grid;place-items:center;color:var(--accent);
+  background:var(--accent-soft);transition:transform var(--t-med) var(--ease-spring);
+}
+.tile:hover .tile-icon{transform:scale(1.08)}
+.tile-icon svg{width:18px;height:18px}
+.tile-label{font-size:13px;font-weight:600}
+.tile-sub{font-size:11px;color:var(--text-3);font-family:var(--mono)}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px 20px}
+.info-item{display:flex;justify-content:space-between;gap:12px;padding:7px 2px;border-bottom:1px solid var(--hairline);font-size:12.5px}
+.info-item .k{color:var(--text-3)}
+.info-item .v{color:var(--text);font-weight:500;text-align:right;font-variant-numeric:tabular-nums}
+
+/* ── Qualcomm 页 ────────────────────────────────────────── */
+.conn-row{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap}
+.table{display:flex;flex-direction:column;border:1px solid var(--hairline);border-radius:var(--r-l);overflow:hidden}
+.tr{display:grid;grid-template-columns:34px 1.4fr .8fr .9fr 110px;align-items:center;gap:10px;padding:9px 14px;font-size:12.5px;border-bottom:1px solid var(--hairline)}
+.tr:last-child{border-bottom:0}
+.tr.th{background:var(--track);color:var(--text-3);font-size:11.5px;font-weight:600;letter-spacing:.04em}
+.tr.row{transition:background-color var(--t-fast) var(--ease-silk)}
+.tr.row:hover{background:var(--accent-soft)}
+.tr.row.appear{animation:rowIn 300ms var(--ease-decel) both}
+@keyframes rowIn{from{opacity:0;transform:translate3d(0,8px,0)}to{opacity:1;transform:none}}
+.tr input[type=checkbox]{appearance:none;width:16px;height:16px;border:1.5px solid var(--text-3);border-radius:5px;cursor:pointer;position:relative;transition:all var(--t-fast) var(--ease-spring)}
+.tr input[type=checkbox]:checked{background:var(--accent);border-color:var(--accent)}
+.tr input[type=checkbox]:checked::after{
+  content:"";position:absolute;left:4.6px;top:1.8px;width:4px;height:8px;border:solid #fff;border-width:0 2px 2px 0;transform:rotate(42deg);
+}
+.part-name{font-family:var(--mono);font-size:12px}
+.part-size{color:var(--text-2);font-variant-numeric:tabular-nums}
+.mini-track{height:4px;border-radius:99px;background:var(--track);overflow:hidden}
+.mini-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width 700ms var(--ease-silk)}
+.tag{font-size:11px;padding:2px 9px;border-radius:999px;justify-self:start;background:var(--track);color:var(--text-3);transition:all var(--t-med) var(--ease-silk)}
+.tag.active{background:var(--accent-soft);color:var(--accent)}
+.tag.done{background:var(--success-soft);color:var(--success)}
+.action-bar{display:flex;gap:10px;flex-wrap:wrap;position:sticky;bottom:0;padding:4px 0 2px}
+.log{
+  font-family:var(--mono);font-size:12px;line-height:1.75;background:var(--code-bg);border:1px solid var(--hairline);
+  border-radius:var(--r-l);padding:12px 14px;height:168px;overflow-y:auto;display:flex;flex-direction:column;gap:1px;
+  scrollbar-width:thin;scrollbar-color:var(--track) transparent;
+}
+.log::-webkit-scrollbar{width:8px}
+.log::-webkit-scrollbar-thumb{background:var(--track);border-radius:99px}
+.log-line{animation:logIn 220ms var(--ease-decel) both;word-break:break-all}
+@keyframes logIn{from{opacity:0;transform:translate3d(0,6px,0)}to{opacity:1;transform:none}}
+.log-line .t{color:var(--text-3);margin-right:8px}
+.log-line.info{color:var(--text-2)}
+.log-line.ok{color:var(--success)}
+.log-line.warn{color:var(--warning)}
+.log-line.err{color:var(--danger)}
+
+/* ── 设置页 ─────────────────────────────────────────────── */
+.setting-row{display:flex;align-items:center;gap:18px;padding:13px 2px;border-bottom:1px solid var(--hairline)}
+.setting-row:last-child{border-bottom:0}
+.setting-row h4{font-size:13.5px}
+.setting-row .ctl{margin-left:auto;flex:none}
+input[type=range]{
+  appearance:none;width:170px;height:5px;border-radius:99px;background:var(--track);outline:none;
+}
+input[type=range]::-webkit-slider-thumb{
+  appearance:none;width:17px;height:17px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer;
+  box-shadow:0 2px 8px -2px rgba(15,23,42,.4);transition:transform var(--t-fast) var(--ease-spring);
+}
+input[type=range]::-webkit-slider-thumb:active{transform:scale(1.2)}
+input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer}
+.about-row{display:flex;gap:10px;font-size:12.5px;padding:7px 2px}
+.about-row .k{color:var(--text-3);width:76px;flex:none}
+
+/* ── 占位页 ─────────────────────────────────────────────── */
+.stub{display:flex;flex-direction:column;align-items:center;text-align:center;gap:14px;padding:56px 30px}
+.stub-icon{
+  width:64px;height:64px;border-radius:var(--r-xl);display:grid;place-items:center;color:var(--accent);
+  background:var(--accent-soft);border:1px solid var(--accent-line);
+  animation:floaty 4s var(--ease-silk) infinite;
+}
+.stub-icon svg{width:30px;height:30px}
+@keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+.stub h2{font-size:19px}
+.stub p{color:var(--text-2);font-size:13px;max-width:420px;line-height:1.7}
+.stub-wire{display:flex;flex-direction:column;gap:9px;width:min(360px,80%);margin-top:6px}
+.stub-wire i{display:block;height:9px;border-radius:99px;background:var(--track)}
+.stub-wire i:nth-child(1){width:88%}
+.stub-wire i:nth-child(2){width:64%}
+.stub-wire i:nth-child(3){width:76%}
+
+/* ── 底部状态栏 ─────────────────────────────────────────── */
+.statusbar{border-top:1px solid var(--hairline);padding:8px 20px 10px;background:var(--glass);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur))}
+.bars{display:flex;flex-direction:column;gap:6px;overflow:hidden;max-height:0;opacity:0;transition:max-height 320ms var(--ease-silk),opacity 260ms var(--ease-silk),margin-bottom 320ms var(--ease-silk)}
+.bars.busy{max-height:44px;opacity:1;margin-bottom:8px}
+.bar-row{display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-3)}
+.bar-label{width:44px;flex:none;text-align:right}
+.bar-track{flex:1;height:6px;border-radius:99px;background:var(--track);overflow:hidden}
+.bar-fill{height:100%;width:0;border-radius:99px;background:linear-gradient(90deg,var(--accent),var(--accent-2));position:relative;overflow:hidden;transition:width 640ms var(--ease-silk)}
+.bar-fill.part{background:linear-gradient(90deg,var(--success),color-mix(in srgb,var(--success) 60%,var(--accent)))}
+.bar-fill::after{
+  content:"";position:absolute;inset:0;
+  background:linear-gradient(100deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);
+  animation:shimmer 1.6s linear infinite;
+}
+@keyframes shimmer{from{transform:translateX(-100%)}to{transform:translateX(100%)}}
+.bar-num{width:38px;flex:none;font-variant-numeric:tabular-nums;color:var(--text-2)}
+.segments{display:flex;align-items:center;gap:18px;font-size:11.5px;color:var(--text-3);flex-wrap:wrap}
+.segments b{color:var(--text-2);font-weight:500;font-variant-numeric:tabular-nums}
+.segments .grow{flex:1}
+
+/* ── 弹窗 ───────────────────────────────────────────────── */
+.dialog-backdrop{
+  position:fixed;inset:0;z-index:40;display:grid;place-items:center;
+  background:rgba(10,14,22,.34);backdrop-filter:blur(7px);-webkit-backdrop-filter:blur(7px);
+  opacity:0;pointer-events:none;transition:opacity 220ms var(--ease-silk);
+}
+.dialog-backdrop.open{opacity:1;pointer-events:auto}
+.dialog{
+  width:min(400px,90vw);border-radius:var(--r-2xl);padding:24px;
+  background:var(--glass-strong);border:1px solid var(--card-line);
+  box-shadow:var(--shadow);backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+  transform:scale(.9) translateY(10px);opacity:0;
+  transition:transform 320ms var(--ease-spring),opacity 220ms var(--ease-silk);
+}
+.dialog-backdrop.open .dialog{transform:none;opacity:1}
+.dialog h3{font-size:16px;margin-bottom:8px}
+.dialog p{font-size:13px;color:var(--text-2);line-height:1.7}
+.dialog .dlg-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px}
+
+/* ── Toast ──────────────────────────────────────────────── */
+.toast-layer{position:fixed;top:22px;left:50%;transform:translateX(-50%);z-index:50;display:flex;flex-direction:column;gap:10px;align-items:center;pointer-events:none}
+.toast{
+  display:flex;align-items:center;gap:9px;font-size:13px;padding:10px 18px;border-radius:999px;white-space:nowrap;
+  background:var(--glass-strong);border:1px solid var(--card-line);box-shadow:var(--shadow);
+  backdrop-filter:blur(var(--glass-blur));-webkit-backdrop-filter:blur(var(--glass-blur));
+  animation:toastIn var(--t-slow) var(--ease-spring) both;
+}
+.toast svg{width:15px;height:15px;flex:none}
+.toast.info svg{color:var(--accent)}
+.toast.ok svg{color:var(--success)}
+.toast.warn svg{color:var(--warning)}
+.toast.err svg{color:var(--danger)}
+.toast.out{animation:toastOut 240ms var(--ease-accel) both}
+@keyframes toastIn{from{opacity:0;transform:translate3d(0,-18px,0) scale(.94)}to{opacity:1;transform:none}}
+@keyframes toastOut{from{opacity:1;transform:none}to{opacity:0;transform:translate3d(0,-12px,0) scale(.97)}}
+
+/* ── 降级：系统减少动态 或 用户关闭动效 ─────────────────── */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
+}
+html.no-motion *,html.no-motion *::before,html.no-motion *::after{
+  animation-duration:.01ms !important;animation-iteration-count:1 !important;transition-duration:.01ms !important;
+}
+</style>
+</head>
+<body>
+
+<div class="window">
+  <!-- ══ 左侧导航 ══ -->
+  <aside class="rail" id="rail">
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4v16M6 12l8-8M6 12l8 8"/></svg>
+      </div>
+      <div class="brand-text"><b>KunClient</b><span>刷机工具</span></div>
+      <button class="icon-btn collapse" id="rail-collapse" title="收起导航">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+    </div>
+    <nav class="nav" id="nav"><span class="nav-pill" id="nav-pill"></span></nav>
+    <div class="rail-foot">
+      <div class="user-chip">
+        <span class="avatar">坤</span>
+        <div class="user-text"><b>小坤ovo</b><span>已登录 · 会员</span></div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ 主区 ══ -->
+  <div class="main">
+    <header class="topbar">
+      <div class="top-left">
+        <h1 id="page-title">主页</h1>
+        <span class="group-chip" id="group-chip">工具</span>
+      </div>
+      <div class="top-right">
+        <span class="proto-chip"><span class="proto-dot"></span>ColorOS 17 概念原型</span>
+        <button class="icon-btn" id="quick-theme" title="切换主题"></button>
+        <div class="win-btns">
+          <button class="win-btn" title="最小化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+          <button class="win-btn" title="最大化"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg></button>
+          <button class="win-btn close" title="关闭"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+        </div>
+      </div>
+    </header>
+
+    <div class="stage" id="stage">
+
+      <!-- ═══ 主页 ═══ -->
+      <section class="page active" id="page-home">
+        <div class="page-inner">
+          <div class="card hero stagger" style="--i:0">
+            <div class="hero-left">
+              <div class="hero-mode"><span class="dot" id="home-dot"></span><h2 id="home-mode-title">未连接设备</h2></div>
+              <p class="muted" id="home-mode-hint">通过 USB 连接设备，并开启 USB 调试</p>
+            </div>
+            <div class="hero-right">
+              <span class="demo-tag">演示</span>
+              <div class="seg" id="mode-seg">
+                <span class="seg-indicator"></span>
+                <button data-mode="none" class="active">未连接</button>
+                <button data-mode="adb">ADB</button>
+                <button data-mode="fb">Fastboot</button>
+                <button data-mode="edl">EDL</button>
+              </div>
+              <button class="btn" id="home-refresh">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.8 12a7.8 7.8 0 1 1-2.3-5.5"/><path d="M19.9 3.6v4.8h-4.8"/></svg>
+                立即刷新
+              </button>
+            </div>
+          </div>
+
+          <div class="card stagger" style="--i:1">
+            <div class="card-head"><h3>快捷操作</h3><span class="small muted" id="quick-note" style="margin-left:auto">未检测到设备</span></div>
+            <div class="tile-grid" id="tile-grid"></div>
+          </div>
+
+          <div class="card stagger" style="--i:2">
+            <div class="card-head"><h3>设备信息</h3><span class="small muted" id="info-note" style="margin-left:auto">等待设备连接</span></div>
+            <div class="info-grid" id="info-grid"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ Qualcomm EDL ═══ -->
+      <section class="page" id="page-edl">
+        <div class="page-inner">
+          <div class="card stagger" style="--i:0">
+            <div class="card-head"><h3>设备连接</h3><span class="chip" id="edl-state">未连接</span></div>
+            <div class="conn-row">
+              <label class="field"><span>端口</span>
+                <select id="edl-port">
+                  <option>COM3 · Qualcomm 9008</option>
+                  <option>COM7 · Qualcomm 9008</option>
+                  <option>COM11 · Qualcomm 900E</option>
+                </select>
+              </label>
+              <button class="btn primary" id="edl-connect">连接设备</button>
+              <button class="btn" id="edl-read" disabled>读取分区表</button>
+            </div>
+          </div>
+
+          <div class="card stagger" style="--i:1">
+            <div class="card-head">
+              <h3>分区表</h3>
+              <div class="head-right">
+                <div class="search">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M15.8 15.8 20.5 20.5"/></svg>
+                  <input class="text-input" id="part-filter" placeholder="搜索分区…">
+                </div>
+                <span class="small muted" id="part-count">0 个分区</span>
+              </div>
+            </div>
+            <div class="table" id="part-table"><div class="tr th"><span></span><span>分区</span><span>大小</span><span>进度</span><span>状态</span></div></div>
+          </div>
+
+          <div class="card stagger" style="--i:2">
+            <div class="card-head"><h3>日志</h3><span class="small muted" style="margin-left:auto">Firehose 协议</span></div>
+            <div class="log" id="edl-log"></div>
+          </div>
+
+          <div class="action-bar stagger" style="--i:3">
+            <button class="btn" id="edl-pick">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v10.5"/><path d="M7.5 10.5 12 15l4.5-4.5"/><path d="M5 19.5h14"/></svg>
+              选择镜像…
+            </button>
+            <button class="btn primary" id="edl-flash" disabled>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 3 5.5 13.5H11L9.8 21l7.7-10.5H11L13 3Z"/></svg>
+              开始刷写
+            </button>
+            <button class="btn danger" id="edl-erase" disabled>擦除选中</button>
+            <button class="btn" id="edl-reboot" disabled>重启设备</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ═══ 设置 ═══ -->
+      <section class="page" id="page-settings">
+        <div class="page-inner">
+          <div class="card stagger" style="--i:0">
+            <div class="card-head"><h3>外观</h3></div>
+            <div class="setting-row">
+              <div><h4>主题</h4><p class="small muted">浅色 / 深色双主题，玻璃与光晕实时联动</p></div>
+              <div class="seg ctl" id="theme-seg">
+                <span class="seg-indicator"></span>
+                <button data-theme="light" class="active">浅色</button>
+                <button data-theme="dark">深色</button>
+              </div>
+            </div>
+            <div class="setting-row">
+              <div><h4>界面动效</h4><p class="small muted">页面转场 / 弹簧反馈 / 微交互；关闭后立即降级为直改</p></div>
+              <label class="switch ctl"><input type="checkbox" id="motion-toggle" checked><span class="track"><span class="knob"></span></span></label>
+            </div>
+            <div class="setting-row">
+              <div><h4>氛围光晕</h4><p class="small muted">玻璃衬底的彩色光晕强度，实时可调</p></div>
+              <input type="range" class="ctl" id="bloom-range" min="0" max="100" value="60">
+            </div>
+            <div class="setting-row">
+              <div><h4>毛玻璃模糊</h4><p class="small muted">面板高斯模糊半径（backdrop blur）</p></div>
+              <input type="range" class="ctl" id="blur-range" min="0" max="48" value="24">
+            </div>
+          </div>
+          <div class="card stagger" style="--i:1">
+            <div class="card-head"><h3>关于</h3></div>
+            <div class="about-row"><span class="k">版本</span><span>v2.0.0.4 · ColorOS 17 概念原型</span></div>
+            <div class="about-row"><span class="k">作者</span><span>小坤ovo</span></div>
+            <div class="about-row"><span class="k">说明</span><span style="color:var(--text-2);line-height:1.7">本原型演示 KunClient 在 ColorOS 17 设计语言下的重设计方向：左侧导航轨、大圆角玻璃卡片、方向感知的页面转场与弹簧微交互。转场曲线 silk cubic-bezier(.32,.72,0,1)，落定曲线 spring cubic-bezier(.34,1.56,.64,1)。</span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 其余页面由 JS 生成占位页 -->
+
+    </div>
+
+    <!-- ══ 底部状态栏 ══ -->
+    <footer class="statusbar">
+      <div class="bars" id="bars">
+        <div class="bar-row"><span class="bar-label">总进度</span><div class="bar-track"><div class="bar-fill" id="bar-total"></div></div><span class="bar-num" id="bar-total-num">0%</span></div>
+        <div class="bar-row"><span class="bar-label">分区</span><div class="bar-track"><div class="bar-fill part" id="bar-part"></div></div><span class="bar-num" id="bar-part-num">0%</span></div>
+      </div>
+      <div class="segments">
+        <span>设备 <b id="st-device">—</b></span>
+        <span>模式 <b id="st-mode">—</b></span>
+        <span>任务 <b id="st-task">—</b></span>
+        <span>分区 <b id="st-part">—</b></span>
+        <span class="grow"></span>
+        <span>速度 <b id="st-speed">—</b></span>
+        <span>总量 <b id="st-total">—</b></span>
+        <span>进度 <b id="st-percent">0%</b></span>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<!-- 弹窗 / Toast 层 -->
+<div class="dialog-backdrop" id="dialog-backdrop">
+  <div class="dialog" role="dialog" aria-modal="true">
+    <h3 id="dlg-title">确认</h3>
+    <p id="dlg-body">…</p>
+    <div class="dlg-actions">
+      <button class="btn" id="dlg-cancel">取消</button>
+      <button class="btn primary" id="dlg-ok">确认</button>
+    </div>
+  </div>
+</div>
+<div class="toast-layer" id="toast-layer"></div>
+
+<script>
+/* ============================================================
+   KunClient × ColorOS 17 原型交互
+   ============================================================ */
+(function(){
+"use strict";
+var $=function(s,r){return (r||document).querySelector(s);};
+var $$=function(s,r){return Array.prototype.slice.call((r||document).querySelectorAll(s));};
+
+/* ── 图标库（线性 SVG，currentColor） ───────────────────── */
+function ic(name){
+  var p={
+    home:'<path d="M3.5 10.8 12 4l8.5 6.8"/><path d="M5.5 9.8V20h13V9.8"/><path d="M10 20v-5.5h4V20"/>',
+    cpu:'<rect x="7" y="7" width="10" height="10" rx="2"/><rect x="10.5" y="10.5" width="3" height="3" rx=".6"/><path d="M9 4v3M15 4v3M9 17v3M15 17v3M4 9h3M4 15h3M17 9h3M17 15h3"/>',
+    bolt:'<path d="M13 3 5.5 13.5H11L9.8 21l7.7-10.5H11L13 3Z"/>',
+    package:'<path d="M12 3.5 19.5 7.7v8.6L12 20.5 4.5 16.3V7.7L12 3.5Z"/><path d="M4.5 7.7 12 11.9l7.5-4.2M12 11.9v8.6"/>',
+    phone:'<rect x="7" y="3" width="10" height="18" rx="2.5"/><path d="M10.5 18.5h3"/>',
+    usb:'<path d="M12 15V4"/><circle cx="12" cy="3.4" r="1.3"/><path d="M12 15 9 12M12 15l3-3"/><path d="M8.5 16h7l-1 3.5h-5L8.5 16Z"/>',
+    pulse:'<path d="M3.5 12.5h3.5l2-5 3 9 2.5-6 1.5 2h4.5"/>',
+    sliders:'<path d="M5 6h14M5 12h14M5 18h14"/><circle cx="9.5" cy="6" r="2" fill="var(--win-bg)"/><circle cx="14.5" cy="12" r="2" fill="var(--win-bg)"/><circle cx="8" cy="18" r="2" fill="var(--win-bg)"/>',
+    monitor:'<rect x="3" y="4.5" width="18" height="12.5" rx="2"/><path d="M9 20.5h6M12 17v3.5"/>',
+    grid:'<rect x="4" y="4" width="7" height="7" rx="1.8"/><rect x="13" y="4" width="7" height="7" rx="1.8"/><rect x="4" y="13" width="7" height="7" rx="1.8"/><rect x="13" y="13" width="7" height="7" rx="1.8"/>',
+    folder:'<path d="M4 7.5a2 2 0 0 1 2-2h3.4l2 2.5H18a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-10Z"/>',
+    terminal:'<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 10 10 12.5 7.5 15M12.5 15H16"/>',
+    cloud:'<path d="M7.5 18.5h9.2a3.8 3.8 0 0 0 .6-7.6 5.2 5.2 0 0 0-10-1.6 3.9 3.9 0 0 0 .2 9.2Z"/>',
+    gear:'<circle cx="12" cy="12" r="3.2"/><path d="M12 2.8v2.4M12 18.8v2.4M5.5 5.5l1.7 1.7M16.8 16.8l1.7 1.7M2.8 12h2.4M18.8 12h2.4M5.5 18.5l1.7-1.7M16.8 7.2l1.7-1.7"/>',
+    info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5"/><circle cx="12" cy="7.8" r=".9" fill="currentColor"/>',
+    power:'<path d="M12 3.5v7"/><path d="M7 6.5a7 7 0 1 0 10 0"/>',
+    rotate:'<path d="M4 12a8 8 0 1 1 2.3 5.6"/><path d="M4 19v-4.5h4.5"/>',
+    up:'<path d="M12 20V6"/><path d="m6 12 6-6 6 6"/><path d="M5 21.5h14"/>',
+    lock:'<rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 1 1 7 0v2.5"/>',
+    sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6 17 7M7 17l-1.4 1.4"/>',
+    moon:'<path d="M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5Z"/>',
+    check:'<path d="M5 12.5 10 17.5 19 7"/>',
+    alert:'<path d="M12 4 21 19.5H3L12 4Z"/><path d="M12 10v4"/><circle cx="12" cy="16.8" r=".8" fill="currentColor"/>',
+    shield:'<path d="M12 3.5 19 6v5.5c0 4.4-3 7.4-7 9-4-1.6-7-4.6-7-9V6l7-2.5Z"/>'
+  }[name]||'';
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">'+p+'</svg>';
+}
+
+/* ── 导航模型（与客户端 registerPages 同构） ─────────────── */
+var NAV=[
+  {group:'刷机',items:[
+    {id:'edl',label:'Qualcomm',icon:'cpu',done:true},
+    {id:'fastboot',label:'FASTBOOT',icon:'bolt'},
+    {id:'payload',label:'Payload',icon:'package'},
+    {id:'oplus',label:'欧加线刷',icon:'phone'},
+    {id:'mi',label:'小米线刷',icon:'usb'},
+    {id:'mtk',label:'MTK',icon:'pulse'}
+  ]},
+  {group:'工具',items:[
+    {id:'home',label:'主页',icon:'home',done:true},
+    {id:'andtools',label:'安卓工具',icon:'sliders'},
+    {id:'mirror',label:'投屏',icon:'monitor'},
+    {id:'apps',label:'应用管理',icon:'grid'},
+    {id:'files',label:'文件传输',icon:'folder'},
+    {id:'console',label:'命令行',icon:'terminal'},
+    {id:'cloud',label:'云端驱动',icon:'cloud'}
+  ]},
+  {group:'其他',items:[
+    {id:'settings',label:'设置',icon:'gear',done:true},
+    {id:'about',label:'关于',icon:'info'}
+  ]}
+];
+var FLAT=[];NAV.forEach(function(g){g.items.forEach(function(it){FLAT.push(it);});});
+var TITLE={home:'主页',edl:'Qualcomm',fastboot:'FASTBOOT',payload:'Payload',oplus:'欧加线刷',mi:'小米线刷',mtk:'MTK',andtools:'安卓工具',mirror:'投屏',apps:'应用管理',files:'文件传输',console:'命令行',cloud:'云端驱动',settings:'设置',about:'关于'};
+var GROUPOF={};NAV.forEach(function(g){g.items.forEach(function(it){GROUPOF[it.id]=g.group;});});
+
+/* ── 生成占位页 ─────────────────────────────────────────── */
+var stage=$('#stage');
+FLAT.forEach(function(it){
+  if(it.done)return;
+  var sec=document.createElement('section');
+  sec.className='page';sec.id='page-'+it.id;
+  sec.innerHTML='<div class="page-inner"><div class="card stub stagger" style="--i:0">'+
+    '<div class="stub-icon">'+ic(it.icon)+'</div><h2>'+it.label+'</h2>'+
+    '<p>该页面将在 ColorOS 17 设计语言下重构。本原型聚焦导航转场、主页、Qualcomm 刷写与设置四条主线。</p>'+
+    '<div class="stub-wire"><i></i><i></i><i></i></div></div></div>';
+  stage.appendChild(sec);
+});
+
+/* ── 渲染导航 ───────────────────────────────────────────── */
+var nav=$('#nav'),pill=$('#nav-pill');
+NAV.forEach(function(g){
+  var lab=document.createElement('div');lab.className='nav-group';lab.textContent=g.group;nav.appendChild(lab);
+  g.items.forEach(function(it){
+    var b=document.createElement('button');
+    b.className='nav-item';b.dataset.id=it.id;b.title=it.label;
+    b.innerHTML=ic(it.icon)+'<span class="item-label">'+it.label+'</span>';
+    b.addEventListener('click',function(){navigate(it.id);});
+    nav.appendChild(b);
+  });
+});
+function movePill(el){
+  if(!el){pill.style.opacity='0';return;}
+  pill.style.opacity='1';
+  pill.style.height=el.offsetHeight+'px';
+  pill.style.transform='translateY('+(el.offsetTop-nav.scrollTop)+'px)';
+}
+
+/* ── 页面转场（方向感知） ───────────────────────────────── */
+var current='home',gen=0;
+function navigate(id){
+  if(id===current)return;
+  gen++;
+  var myGen=gen;
+  var forward=FLAT.findIndex(function(x){return x.id===id;})>FLAT.findIndex(function(x){return x.id===current;});
+  var from=$('#page-'+current),to=$('#page-'+id);
+  /* 打断进行中的转场：立即归位，不等动画 */
+  $$('.page',stage).forEach(function(p){p.classList.remove('enter-f','enter-b','leave-f','leave-b');});
+  from.classList.remove('active');
+  from.classList.add(forward?'leave-f':'leave-b');
+  void to.offsetWidth; /* 重排，保证入场动画重新起播 */
+  to.classList.add('active',forward?'enter-f':'enter-b');
+  /* 转场结束清理（令牌校验，防旧动画覆盖新状态） */
+  setTimeout(function(){
+    if(myGen!==gen)return;
+    from.classList.remove('leave-f','leave-b');
+    to.classList.remove('enter-f','enter-b');
+  },520);
+  current=id;
+  $('#page-title').textContent=TITLE[id];
+  $('#group-chip').textContent=GROUPOF[id];
+  $$('.nav-item',nav).forEach(function(b){b.classList.toggle('active',b.dataset.id===id);});
+  movePill($('.nav-item.active',nav));
+  to.scrollTop=0;
+}
+
+/* ── 分段控件（弹簧指示器） ─────────────────────────────── */
+function bindSeg(seg,cb){
+  var ind=$('.seg-indicator',seg),btns=$$('button',seg);
+  function place(btn,anim){
+    ind.style.transition=anim===false?'none':'';
+    ind.style.width=btn.offsetWidth+'px';
+    ind.style.transform='translateX('+btn.offsetLeft+'px)';
+  }
+  btns.forEach(function(b){
+    b.addEventListener('click',function(){
+      btns.forEach(function(x){x.classList.remove('active');});
+      b.classList.add('active');place(b);cb&&cb(b);
+    });
+  });
+  requestAnimationFrame(function(){place($('button.active',seg)||btns[0],false);});
+  return place;
+}
+
+/* ── Toast ──────────────────────────────────────────────── */
+var toastLayer=$('#toast-layer');
+function toast(msg,type){
+  type=type||'info';
+  var icon=type==='ok'?'check':(type==='warn'?'alert':(type==='err'?'alert':'info'));
+  var t=document.createElement('div');
+  t.className='toast '+type;t.innerHTML=ic(icon)+'<span>'+msg+'</span>';
+  toastLayer.appendChild(t);
+  setTimeout(function(){t.classList.add('out');setTimeout(function(){t.remove();},260);},2600);
+}
+
+/* ── 弹窗 ───────────────────────────────────────────────── */
+var backdrop=$('#dialog-backdrop'),dlgOk=$('#dlg-ok'),dlgCancel=$('#dlg-cancel');
+function confirmDlg(title,body,okText,onOk){
+  $('#dlg-title').textContent=title;$('#dlg-body').textContent=body;
+  dlgOk.textContent=okText||'确认';
+  backdrop.classList.add('open');
+  var done=function(){backdrop.classList.remove('open');dlgOk.onclick=null;dlgCancel.onclick=null;};
+  dlgOk.onclick=function(){done();onOk&&onOk();};
+  dlgCancel.onclick=done;
+}
+
+/* ── 状态栏 ─────────────────────────────────────────────── */
+var bars=$('#bars'),barTotal=$('#bar-total'),barPart=$('#bar-part'),
+    barTotalNum=$('#bar-total-num'),barPartNum=$('#bar-part-num'),
+    st={device:$('#st-device'),mode:$('#st-mode'),task:$('#st-task'),part:$('#st-part'),
+        speed:$('#st-speed'),total:$('#st-total'),percent:$('#st-percent')};
+function setBusy(b){bars.classList.toggle('busy',b);}
+function setBar(which,p){
+  var v=Math.round(p*100);
+  if(which==='total'){barTotal.style.width=v+'%';barTotalNum.textContent=v+'%';}
+  else{barPart.style.width=v+'%';barPartNum.textContent=v+'%';}
+  st.percent.textContent=v+'%';
+}
+function resetBars(){setBar('total',0);setBar('part',0);}
+
+/* ── 主页：设备模式 ─────────────────────────────────────── */
+var MODES={
+  none:{title:'未连接设备',hint:'通过 USB 连接设备，并开启 USB 调试',note:'未检测到设备',
+        dot:'',dev:'—',mode:'—',info:{}},
+  adb:{title:'ADB 已连接',hint:'OPPO Find X8 · Android 15 · USB 调试已开启',note:'当前将通过 ADB 下发指令',
+        dot:'live',dev:'OPPO Find X8',mode:'ADB',
+        info:{'型号':'OPPO Find X8 (PJZ110)','Android 版本':'15 (API 35)','系统版本':'ColorOS 15.0','品牌':'OPPO',
+              '产品代号':'findX8','平台':'mt6991','内核':'6.1.99-android','基带':'MOLY.NR17','内存':'16 GB',
+              '分辨率':'1440 × 3168','电量':'86%','存储':'512 GB'}},
+  fb:{title:'Fastboot 模式',hint:'Bootloader 已解锁 · 等待指令下发',note:'当前将通过 Fastboot 下发指令',
+        dot:'live',dev:'OPPO Find X8',mode:'Fastboot',
+        info:{'型号':'OPPO Find X8','Android 版本':'—','系统版本':'—','品牌':'OPPO','产品代号':'findX8',
+              '解锁状态':'已解锁','平台':'—','内核':'—','基带':'—','内存':'—','分辨率':'—','电量':'—','存储':'—'}},
+  edl:{title:'EDL 9008 紧急下载',hint:'高通紧急下载模式 · 请前往 Qualcomm 页面执行刷写',note:'紧急下载模式 · 设备操作不可用',
+        dot:'live',dev:'Qualcomm 9008',mode:'EDL',info:{}}
+};
+var INFO_KEYS=['型号','Android 版本','系统版本','品牌','产品代号','平台','内核','基带','内存','分辨率','电量','存储'];
+var mode='none';
+
+var OPS=[
+  {op:'reboot',label:'重启系统',sub:'reboot',icon:'power'},
+  {op:'recovery',label:'重启 Recovery',sub:'reboot recovery',icon:'rotate'},
+  {op:'bootloader',label:'重启 Bootloader',sub:'reboot bootloader',icon:'up'},
+  {op:'edl',label:'免 BL 进 EDL',sub:'reboot edl',icon:'bolt'},
+  {op:'unlock',label:'解锁 BL',sub:'flashing unlock',icon:'lock',fbOnly:true},
+  {op:'devmgr',label:'设备管理器',sub:'devmgmt.msc',icon:'monitor'}
+];
+function cmdFor(op){
+  if(mode==='adb')return 'adb '+({reboot:'reboot',recovery:'reboot recovery',bootloader:'reboot bootloader',edl:'reboot edl',unlock:'',devmgr:''}[op]||'');
+  if(mode==='fb')return 'fastboot '+({reboot:'reboot',recovery:'reboot recovery',bootloader:'reboot bootloader',edl:'oem edl',unlock:'flashing unlock',devmgr:''}[op]||'');
+  return '';
+}
+/* 快捷操作磁贴 */
+var tileGrid=$('#tile-grid');
+OPS.forEach(function(o){
+  var b=document.createElement('button');
+  b.className='tile';b.dataset.op=o.op;
+  b.innerHTML='<span class="tile-icon">'+ic(o.icon)+'</span><span class="tile-label">'+o.label+'</span><span class="tile-sub">'+o.sub+'</span>';
+  b.addEventListener('click',function(){
+    if(mode==='none'||mode==='edl'){toast('未检测到可用设备，请先连接','warn');return;}
+    if(o.fbOnly&&mode!=='fb'){toast('解锁 BL 仅在 Fastboot 模式下可用','warn');return;}
+    if(o.op==='devmgr'){toast('已打开设备管理器（演示）','ok');return;}
+    toast('已下发：'+cmdFor(o.op),'ok');
+  });
+  tileGrid.appendChild(b);
+});
+/* 设备信息网格 */
+var infoGrid=$('#info-grid');
+function renderInfo(){
+  var m=MODES[mode],has=Object.keys(m.info).length>0;
+  $('#info-note').textContent=has?'检测于 '+(mode==='adb'?'ADB':'Fastboot'):'等待设备连接';
+  infoGrid.innerHTML='';
+  INFO_KEYS.forEach(function(k){
+    var v=(m.info[k]!==undefined)?m.info[k]:'—';
+    var row=document.createElement('div');row.className='info-item';
+    row.innerHTML='<span class="k">'+k+'</span><span class="v">'+v+'</span>';
+    infoGrid.appendChild(row);
+  });
+}
+function applyMode(){
+  var m=MODES[mode];
+  var dot=$('#home-dot');
+  dot.className='dot'+(m.dot?' '+m.dot:'');
+  $('#home-mode-title').textContent=m.title;
+  $('#home-mode-hint').textContent=m.hint;
+  $('#quick-note').textContent=m.note;
+  st.device.textContent=m.dev;st.mode.textContent=m.mode;
+  var dead=(mode==='none'||mode==='edl');
+  $$('.tile',tileGrid).forEach(function(t){
+    t.disabled=dead||(t.dataset.op==='unlock'&&mode!=='fb');
+  });
+  renderInfo();
+}
+bindSeg($('#mode-seg'),function(btn){
+  mode=btn.dataset.mode;applyMode();
+});
+$('#home-refresh').addEventListener('click',function(){
+  var b=this,s=b.querySelector('svg');
+  s.style.transition='transform 600ms cubic-bezier(.32,.72,0,1)';
+  s.style.transform='rotate(360deg)';
+  setTimeout(function(){s.style.transition='none';s.style.transform='none';},620);
+  applyMode();
+  toast('设备信息已刷新','ok');
+});
+applyMode();
+
+/* ── Qualcomm 页 ────────────────────────────────────────── */
+var PARTS=[
+  {name:'boot',size:'64 MB'},{name:'init_boot',size:'32 MB'},{name:'recovery',size:'64 MB'},
+  {name:'vbmeta',size:'4 MB'},{name:'vbmeta_system',size:'4 MB'},{name:'dtbo',size:'8 MB'},
+  {name:'system',size:'3.4 GB'},{name:'vendor',size:'1.2 GB'},{name:'product',size:'920 MB'},
+  {name:'odm',size:'512 MB'},{name:'cache',size:'256 MB'}
+];
+var edlLog=$('#edl-log'),connected=false,flashing=false;
+function now(){var d=new Date();return ('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2)+':'+('0'+d.getSeconds()).slice(-2);}
+function log(text,level){
+  var line=document.createElement('div');
+  line.className='log-line '+(level||'info');
+  line.innerHTML='<span class="t">'+now()+'</span>'+text;
+  edlLog.appendChild(line);
+  while(edlLog.children.length>200)edlLog.removeChild(edlLog.firstChild);
+  edlLog.scrollTop=edlLog.scrollHeight;
+}
+function setEdlState(text,cls){
+  var c=$('#edl-state');c.textContent=text;c.className='chip'+(cls?' '+cls:'');
+}
+function renderTable(){
+  var table=$('#part-table');
+  $$('.tr.row',table).forEach(function(r){r.remove();});
+  var kw=$('#part-filter').value.trim().toLowerCase();
+  var shown=0;
+  PARTS.forEach(function(p,idx){
+    if(kw&&p.name.indexOf(kw)<0)return;
+    shown++;
+    var row=document.createElement('div');
+    row.className='tr row appear';row.dataset.name=p.name;
+    row.style.animationDelay=(idx*45)+'ms';
+    row.innerHTML='<input type="checkbox" aria-label="选择 '+p.name+'">'+
+      '<span class="part-name">'+p.name+'</span><span class="part-size">'+p.size+'</span>'+
+      '<span class="mini-track"><span class="mini-fill"></span></span><span class="tag">等待</span>';
+    table.appendChild(row);
+  });
+  $('#part-count').textContent=shown+' 个分区';
+}
+$('#edl-connect').addEventListener('click',function(){
+  var btn=this;
+  if(connected){
+    connected=false;
+    setEdlState('未连接','');
+    btn.textContent='连接设备';btn.classList.add('primary');
+    ['edl-read','edl-flash','edl-erase','edl-reboot'].forEach(function(id){$('#'+id).disabled=true;});
+    log('已断开连接','warn');
+    return;
+  }
+  btn.disabled=true;setEdlState('握手中…','busy');
+  log('[Sahara] 等待设备进入 9008 紧急下载模式…');
+  setTimeout(function(){log('[Sahara] 握手完成 · Programmer 已加载');},450);
+  setTimeout(function(){log('[Firehose] 会话建立 · Storage: UFS 2.2');},850);
+  setTimeout(function(){
+    log('[Firehose] GPT 解析完成','ok');
+    connected=true;btn.disabled=false;btn.textContent='断开连接';btn.classList.remove('primary');
+    setEdlState('已连接 · Firehose','ok');
+    ['edl-read','edl-flash','edl-erase','edl-reboot'].forEach(function(id){$('#'+id).disabled=false;});
+    st.device.textContent='Qualcomm 9008';st.mode.textContent='EDL';
+    toast('设备已连接 · Firehose 会话建立','ok');
+  },1250);
+});
+$('#edl-read').addEventListener('click',function(){
+  renderTable();
+  log('读取分区表完成 · 共 '+PARTS.length+' 个分区','ok');
+});
+$('#part-filter').addEventListener('input',function(){ if(connected)renderTable(); });
+$('#edl-pick').addEventListener('click',function(){toast('已选择镜像：oneplus12_15.0.0.210.zip（演示）','info');});
+$('#edl-reboot').addEventListener('click',function(){
+  log('已发送重启指令','ok');toast('已发送重启指令','ok');
+});
+$('#edl-erase').addEventListener('click',function(){
+  var rows=$$('.tr.row input:checked',$('#part-table')).map(function(c){return c.closest('.tr').dataset.name;});
+  if(!rows.length){toast('请先勾选要擦除的分区','warn');return;}
+  confirmDlg('确认擦除','将对 '+rows.length+' 个分区执行擦除：'+rows.join('、')+'。数据将无法恢复。','确认擦除',function(){
+    log('开始擦除：'+rows.join('、'),'warn');
+    setTimeout(function(){
+      $$('.tr.row',$('#part-table')).forEach(function(r){
+        if(rows.indexOf(r.dataset.name)>=0){
+          var tag=$('.tag',r);tag.textContent='已擦除';tag.className='tag done';
+          $('.mini-fill',r).style.width='100%';
+        }
+      });
+      log('擦除完成 · '+rows.length+' 个分区','ok');
+      toast('已擦除 '+rows.length+' 个分区','ok');
+    },1100);
+  });
+});
+$('#edl-flash').addEventListener('click',function(){
+  if(flashing)return;
+  var rows=$$('.tr.row input:checked',$('#part-table')).map(function(c){return c.closest('.tr');});
+  if(!rows.length){toast('请先勾选要刷写的分区','warn');return;}
+  confirmDlg('开始刷写','将对 '+rows.length+' 个分区执行刷写：'+rows.map(function(r){return r.dataset.name;}).join('、')+'。请保持 USB 连接稳定。','开始刷写',function(){
+    runFlash(rows);
+  });
+});
+function runFlash(rows){
+  flashing=true;
+  setBusy(true);resetBars();
+  st.task.textContent='刷写镜像';st.total.textContent=rows.length+' 个分区';
+  log('刷写开始 · 共 '+rows.length+' 个分区','info');
+  var i=0;
+  function next(){
+    if(i>=rows.length){
+      flashing=false;setBusy(false);
+      st.task.textContent='—';st.part.textContent='—';st.speed.textContent='—';st.total.textContent='—';
+      setTimeout(resetBars,900);
+      log('刷写完成 · '+rows.length+' 个分区，设备校验通过','ok');
+      toast('刷写完成 · '+rows.length+' 个分区','ok');
+      return;
+    }
+    var row=rows[i],tag=$('.tag',row),fill=$('.mini-fill',row);
+    st.part.textContent=row.dataset.name;
+    tag.textContent='刷写中';tag.className='tag active';
+    log('[Firehose] 正在刷写 '+row.dataset.name+' …');
+    var dur=1200+Math.random()*900,speedTick=0;
+    tween(dur,function(p){
+      setBar('part',p);
+      setBar('total',(i+p)/rows.length);
+      if(p-speedTick>.18){speedTick=p;st.speed.textContent=(28+Math.random()*62).toFixed(1)+' MB/s';}
+      fill.style.width=(p*100)+'%';
+    },function(){
+      tag.textContent='完成';tag.className='tag done';
+      log('[Firehose] '+row.dataset.name+' 写入完成','ok');
+      i++;next();
+    });
+  }
+  next();
+}
+/* rAF 补间 */
+function tween(dur,onUpdate,onDone){
+  var t0=performance.now();
+  function frame(t){
+    var p=Math.min(1,(t-t0)/dur);
+    onUpdate(p);
+    if(p<1)requestAnimationFrame(frame);else onDone&&onDone();
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ── 设置页：主题 / 动效 / 光晕 / 模糊 ──────────────────── */
+var SUN=ic('sun'),MOON=ic('moon');
+function setTheme(name){
+  document.documentElement.dataset.theme=name;
+  $('#quick-theme').innerHTML=name==='dark'?SUN:MOON;
+}
+bindSeg($('#theme-seg'),function(btn){setTheme(btn.dataset.theme);});
+$('#quick-theme').addEventListener('click',function(){
+  var dark=document.documentElement.dataset.theme==='dark';
+  setTheme(dark?'light':'dark');
+  $$('#theme-seg button').forEach(function(b){b.classList.toggle('active',b.dataset.theme===(dark?'light':'dark'));});
+});
+$('#motion-toggle').addEventListener('change',function(){
+  document.documentElement.classList.toggle('no-motion',!this.checked);
+  toast(this.checked?'界面动效已开启':'界面动效已关闭 · 过渡降级为直改','info');
+});
+$('#bloom-range').addEventListener('input',function(){
+  document.documentElement.style.setProperty('--bloom',(this.value/100).toFixed(2));
+});
+$('#blur-range').addEventListener('input',function(){
+  document.documentElement.style.setProperty('--glass-blur',this.value+'px');
+});
+setTheme('light');
+
+/* ── 导航轨收起 ─────────────────────────────────────────── */
+$('#rail-collapse').addEventListener('click',function(){
+  var rail=$('#rail');
+  rail.classList.toggle('collapsed');
+  this.querySelector('svg').innerHTML=rail.classList.contains('collapsed')
+    ?'<path d="M9 6l6 6-6 6"/>':'<path d="M15 6l-6 6 6 6"/>';
+  setTimeout(function(){movePill($('.nav-item.active',nav));},340);
+});
+
+/* ── 窗口按钮（演示） ───────────────────────────────────── */
+$$('.win-btn').forEach(function(b){
+  b.addEventListener('click',function(){toast('窗口控制按钮在原型中仅作演示','info');});
+});
+
+/* ── 初始化 ─────────────────────────────────────────────── */
+requestAnimationFrame(function(){movePill($('.nav-item.active',nav));});
+window.addEventListener('resize',function(){movePill($('.nav-item.active',nav));});
+log('等待设备连接…');
+})();
+</script>
+</body>
+</html>

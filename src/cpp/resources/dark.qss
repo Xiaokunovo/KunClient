@@ -1,0 +1,933 @@
+/* ============================================================================
+   KunClient · 深色主题 —— iOS 27 Liquid Glass 版（2026-10-16 全面重写）
+   ----------------------------------------------------------------------------
+   与 light.qss 同名规则一一对应；改一边必须同步改另一边。
+   深色玻璃的取法：卡片比页面底**更亮**（不是更暗）—— iOS 深色下玻璃是
+   「一层被提亮的膜」，用 rgba(255,255,255,.06~.08) 叠加，而不是实心灰块。
+   🔴 项目红线（保留）：「无实心填充按钮」—— 主/危险动作只靠描边 + 字重区分。
+   🔴🔴 **`border-radius` 一律写具体像素，绝不写 999px**：Qt 的 QSS 遇到超过
+      盒子一半的半径**不会夹到一半，而是直接退化成直角**（2026-10-17 实测，
+      详见 light.qss 头部注释）。胶囊半径 = 控件高度 ÷ 2，留 1~2px 余量。
+   ============================================================================ */
+* {
+    font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 13px;
+    color: #E9EDF3;
+}
+
+QMainWindow { background: transparent; }
+QFrame#root {
+    background: #14161A;
+    border: 1px solid #2E3541;
+    border-radius: 30px;
+}
+/* 内嵌 EDL 窗的根容器透明（与浅色同步，见 light.qss 同段注释）。 */
+QWidget#edlLegacyPage QFrame#root {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+QWidget { background: transparent; }
+QWidget#contentArea { background: transparent; }
+
+QFrame#titleBar, QFrame#navigation {
+    background: rgba(32, 36, 44, %GLASS_CARD%);
+    border-bottom: 1px solid #2A313B;
+}
+/* 标题栏品牌徽标：不带底板 —— 直接用 logo 图形本身（用户口径：logo 不需要背景） */
+QLabel#appBadge {
+    background: transparent;
+    border: 0;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 700;
+}
+QLabel#appTitle { color: #ffffff; font-size: 18px; font-weight: 700; letter-spacing: .01em; }
+QLabel#appVersion, QLabel#titleMeta { color: #8E9AA8; }
+
+QPushButton#windowButton, QPushButton#closeButton {
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    padding: 0;
+    color: #A6B2C0;   /* 矢量图标颜色：paintEvent 取 palette ButtonText，随 QSS color 变 */
+}
+QPushButton#windowButton:hover { background: #2A313B; color: #ffffff; }
+QPushButton#closeButton:hover { background: #FF453A; color: #ffffff; }
+
+QPushButton#navButton, QPushButton#themeButton,
+QPushButton#cardTab {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+    padding: 0 10px;
+    color: #8E9AA8;
+}
+QPushButton#navButton[active="true"], QPushButton#cardTab[active="true"] {
+    color: %ACCENT2%;
+    border-bottom: 3px solid %ACCENT%;
+    font-weight: 600;
+}
+QPushButton#navButton:disabled, QPushButton#cardTab:disabled { color: #6B7787; }
+QPushButton#themeButton { color: #A6B2C0; padding: 0 6px; }
+QPushButton#themeButton:hover { color: %ACCENT2%; }
+
+/* ── 卡片：被提亮的液态玻璃（上亮下暗渐变 + 顶边高光 + 浅描边 + 大圆角）──
+   与 light.qss 同结构：玻璃的体积感只靠「垂直渐变 + 顶边 specular」两样，
+   QSS 没有 box-shadow。🔴 四个 objectName 必须共用同一条规则 ——
+   漏一个就是「某页没有玻璃」（浅色主题里设置页/关于页曾整页裸奔）。 */
+QFrame#card, QFrame#heroCard, QFrame#settingsCard, QFrame#aboutCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(52, 58, 70, %GLASS_CARD_HI%),
+                                stop:0.55 rgba(32, 36, 44, %GLASS_CARD%),
+                                stop:1    rgba(24, 27, 34, %GLASS_CARD_LO%));
+    border: 1px solid #2E3541;
+    border-top-color: rgba(255, 255, 255, .14);
+    border-radius: 20px;
+}
+QFrame#cardTabs, QFrame#sectionHeader {
+    background: transparent;
+    border-bottom: 1px solid #2A313B;
+}
+QLabel#sectionTitle { color: #F5F8FC; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+/* 卡片内的分组小标题（与浅色同步）。 */
+QLabel#groupHeader { color: #EFF3F9; font-size: 13px; font-weight: 600; }
+QLabel#strongLabel { color: #DCE4EE; font-weight: 600; }
+/* 更新弹窗：v2.0.4 → v2.0.5 里的「新版本号」，大一号 + 强调色，一眼看到落点。 */
+QLabel#updateVersionTo { color: %ACCENT2%; font-size: 18px; font-weight: 700; }
+QLabel#emptyState { color: #8E9AA8; line-height: 1.6; }
+QLabel#infoKey { color: #8E9AA8; }
+QLabel#infoValue { color: #F5F8FC; font-size: 14px; font-weight: 600; }
+
+/* ── 主页仪表盘（2026-10-16 重做）────────────────────────────────────────
+   hero 卡（设备状态）+ 快捷操作瓦片 + 读数网格卡内滚动。
+   heroCard 的玻璃材质已并入上面那条 #card 规则（同一个材质，不能分家；
+   原来这里写死 rgba(255,255,255,.06)，导致「卡片不透明度」对 hero 卡完全无效）。 */
+QLabel#heroModeLabel { color: #F5F8FC; font-size: 22px; font-weight: 700; }
+/* 快捷操作瓦片：玻璃片 + 描边（**不做实心填充** —— 本项目的按钮红线）。
+   ⚠️ 高度必须在这里写 min-height：有样式表时 setFixedHeight() 会被 QStyleSheetStyle
+   忽略（实测设 58px 仍渲染成 20px）。 */
+QPushButton#opTile {
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid #333B47;
+    border-radius: 14px;
+    padding: 0 6px;
+    min-height: 44px;
+    color: #C7D1DC;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#opTile:hover { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, 16%); border-color: #2C5F91; color: #8EC8FF; }
+QPushButton#opTile:pressed { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, 24%); border-color: %ACCENT%; }
+QPushButton#opTile:disabled { color: #6B7787; border-color: #2A313B; background: rgba(255, 255, 255, .03); }
+/* 读数网格的卡内滚动：视口必须透明，否则会在卡上盖一块灰底。 */
+QScrollArea#infoScroll { background: transparent; border: 0; }
+QScrollArea#infoScroll QWidget { background: transparent; }
+
+QLineEdit, QComboBox {
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid #333B47;
+    border-radius: 12px;
+    padding: 7px 11px;
+    selection-background-color: %ACCENT%;
+    selection-color: #ffffff;
+    min-height: 18px;
+}
+QLineEdit:hover, QComboBox:hover { border-color: #46525F; }
+QLineEdit:focus, QComboBox:focus { border-color: %ACCENT%; background: rgba(255, 255, 255, .10); }
+QLineEdit:disabled, QComboBox:disabled { color: #66727F; background: rgba(255, 255, 255, .03); }
+QComboBox::drop-down { border: 0; width: 26px; }
+QComboBox QAbstractItemView {
+    background: #1E232B;
+    border: 1px solid #333B47;
+    border-radius: 12px;
+    selection-background-color: %ACCENT_SUBTLE%;
+    selection-color: %ACCENT2%;
+    outline: 0;
+    padding: 4px;
+}
+/* 「芯片 / 引导程序」下拉：云端引导库 249 款全平铺在里面。
+   行高由 CompactRowDelegate 定死 24px；QSS 的 min-height 只是下限，压不动
+   Windows 11 样式的 42px（与 light.qss 同口径）。 */
+QComboBox#chipsetCombo QAbstractItemView::item {
+    padding: 0px 8px;
+}
+
+/* ── 数字输入（2026-10-18，与 light.qss 同结构）──
+   设置页「线程核心」是全项目唯一的 QSpinBox，原先无规则 → 落回 Windows 原生样式。
+   🔴 不碰 ::up-button / ::down-button：写了就得给箭头指定 image，否则箭头消失。 */
+QSpinBox {
+    background: rgba(255, 255, 255, .06);
+    border: 1px solid #333B47;
+    border-radius: 12px;
+    padding: 7px 11px;
+    selection-background-color: %ACCENT%;
+    selection-color: #ffffff;
+    min-height: 18px;
+}
+QSpinBox:hover { border-color: #46525F; }
+QSpinBox:focus { border-color: %ACCENT%; background: rgba(255, 255, 255, .10); }
+QSpinBox:disabled { color: #66727F; background: rgba(255, 255, 255, .03); }
+
+/* ── 多行文本：玻璃片 + 16px 圆角（浅色同结构）──
+   `QPlainTextEdit` 原先一条规则都没有，命令行的「命令窗口」落回透明，
+   字压在壁纸上读不出来。 */
+QPlainTextEdit, QTextEdit {
+    background: rgba(32, 36, 44, %GLASS_CARD%);
+    border: 1px solid #2E3541;
+    border-top-color: rgba(255, 255, 255, .14);
+    border-radius: 16px;
+    padding: 8px 10px;
+    selection-background-color: %ACCENT%;
+    selection-color: #ffffff;
+}
+QPlainTextEdit#consoleView {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(52, 58, 70, %GLASS_CARD_HI%),
+                                stop:0.55 rgba(32, 36, 44, %GLASS_CARD%),
+                                stop:1    rgba(24, 27, 34, %GLASS_CARD_LO%));
+    border: 1px solid #2E3541;
+    border-top-color: rgba(255, 255, 255, .14);
+    border-radius: 18px;
+    padding: 10px 12px;
+    color: #E4EAF2;
+    font-family: "Cascadia Mono", "Consolas", "JetBrains Mono", monospace;
+    font-size: 12px;
+}
+
+/* ── 滑条：全站统一 iOS 胶囊轨 + 圆形滑块（裸 QSlider 原先是 Windows 原生方角）── */
+QSlider { min-height: 20px; background: transparent; }
+QSlider::groove:horizontal {
+    height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .14);
+}
+QSlider::sub-page:horizontal {
+    height: 6px; border-radius: 3px; background: %ACCENT%;
+}
+QSlider::add-page:horizontal {
+    height: 6px; border-radius: 3px; background: rgba(255, 255, 255, .14);
+}
+QSlider::handle:horizontal {
+    width: 16px; height: 16px; margin: -5px 0;
+    border-radius: 8px; background: #E9EFF7;
+    border: 1px solid rgba(0, 0, 0, .35);
+}
+QSlider::handle:horizontal:hover { border-color: %ACCENT%; }
+QSlider::handle:horizontal:pressed { background: %ACCENT_SUBTLE%; border-color: %ACCENT%; }
+QSlider::sub-page:horizontal:disabled { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .35); }
+
+/* ── 按钮：胶囊形；主/危险只用描边与字重区分（项目红线）── */
+QPushButton {
+    background: rgba(255, 255, 255, .07);
+    border: 1px solid #333B47;
+    border-radius: 14px;
+    padding: 7px 16px;
+    color: #E4EAF2;
+    min-height: 18px;
+}
+QPushButton:hover { background: rgba(255, 255, 255, .12); border-color: #4A5663; }
+QPushButton:pressed { background: rgba(255, 255, 255, .05); }
+QPushButton:disabled { color: #66727F; background: rgba(255, 255, 255, .03); border-color: #2C333D; }
+/* 主操作：强调蓝浅底 + 蓝描边 + 半粗字 —— 不是实心块 */
+QPushButton#primaryButton {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .20); border: 1.5px solid %ACCENT%; color: %ACCENT2%; font-weight: 600;
+}
+QPushButton#primaryButton:hover { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .30); border-color: %ACCENT2%; }
+QPushButton#primaryButton:pressed { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .16); }
+
+/* ── 液态玻璃浮层（BottomSheet / GlassDialog）里的按钮 ─────────────────────
+   🔴 必须走 objectName + 全局 QSS：在这些 frameless 透明窗口里，给按钮单独
+      setStyleSheet() 时 `background` 会被别处规则盖掉（color 却能生效），
+      实测主按钮永远是黑块。挂 objectName 与项目其它按钮同一套路，稳定。 */
+QPushButton#glassBtnGhost {
+    background: rgba(255, 255, 255, .10);
+    border: 1px solid rgba(255, 255, 255, .18);
+    border-radius: 18px;
+    color: #E4EAF2;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 0 16px;
+}
+QPushButton#glassBtnGhost:hover { background: rgba(255, 255, 255, .16); }
+QPushButton#glassBtnGhost:pressed { background: rgba(255, 255, 255, .06); }
+
+QPushButton#glassBtnPrimary {
+    background: %ACCENT%;
+    border: 0;
+    border-radius: 18px;
+    color: #0A1420;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 0 16px;
+}
+QPushButton#glassBtnPrimary:hover { background: %ACCENT2%; }
+QPushButton#glassBtnPrimary:pressed { background: %ACCENT_DEEP%; }
+
+QPushButton#glassBtnDanger {
+    background: #FF453A;
+    border: 0;
+    border-radius: 18px;
+    color: #FFFFFF;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 0 16px;
+}
+QPushButton#glassBtnDanger:hover { background: #FF6B61; }
+QPushButton#glassBtnDanger:pressed { background: #E0352B; }
+
+/* iOS 动作面板（BottomSheet::showActions）：整宽动作行 + 底部分隔线
+   🔴 行高必须写在 QSS 里：全局 QPushButton 带 min-height/padding，
+      控件上 setFixedHeight() 会被无声忽略，行会塌成十几像素。 */
+QPushButton#glassActionRow {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 0;
+    color: #E4EAF2;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 0 16px;
+    min-height: 46px;
+    max-height: 46px;
+}
+QPushButton#glassActionRow:hover { background: rgba(255, 255, 255, .07); }
+QPushButton#glassActionRow:pressed { background: rgba(255, 255, 255, .04); }
+
+QPushButton#glassActionDanger {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 0;
+    color: #FF6B61;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 0 16px;
+    min-height: 46px;
+    max-height: 46px;
+}
+QPushButton#glassActionDanger:hover { background: rgba(255, 69, 58, .12); }
+QPushButton#glassActionDanger:pressed { background: rgba(255, 69, 58, .07); }
+QPushButton#primaryButton:disabled { background: rgba(255, 255, 255, .03); border-color: #2C333D; color: #66727F; }
+QPushButton#dangerButton { background: rgba(255, 69, 58, .18); border: 1.5px solid #FF453A; color: #FF7B72; font-weight: 600; }
+QPushButton#dangerButton:hover { background: rgba(255, 69, 58, .26); }
+QPushButton#dangerButton:disabled { background: rgba(255, 255, 255, .03); border-color: #4A2B2B; color: #8A5A58; }
+QPushButton#debugButton:checked { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .22); border-color: %ACCENT%; color: %ACCENT2%; }
+
+QMenu#rebootMenu {
+    background: #1E232B;
+    color: #E4EAF2;
+    border: 1px solid #333B47;
+    border-radius: 16px;
+    padding: 6px;
+}
+QMenu#rebootMenu::item { padding: 9px 30px 9px 14px; border-radius: 10px; }
+QMenu#rebootMenu::item:selected { background: %ACCENT_SUBTLE%; color: %ACCENT2%; }
+QMenu#rebootMenu::separator { height: 1px; background: #2A313B; margin: 5px 8px; }
+
+QCheckBox { spacing: 7px; }
+QCheckBox::indicator { width: 16px; height: 16px; }
+QCheckBox::indicator:unchecked { image: url(:/icons/check-off-dark.png); }
+QCheckBox::indicator:checked { image: url(:/icons/check-on.png); }
+QCheckBox:disabled { color: #66727F; }
+
+/* 底色改玻璃令牌：写死 .05 = 滑条拉到底表格还是黑的（「透明度不能调节」）。
+   ⚠️ 深色下基色必须用「深灰」而不是 white —— 令牌里的数字是**基色的 alpha**，
+   拿白色乘这个 alpha 会变成一块发光的白板。 */
+QTableWidget {
+    background: rgba(40, 45, 54, %GLASS_CARD_HI%);
+    alternate-background-color: rgba(34, 38, 46, %GLASS_CARD_LO%);
+    border: 1px solid #2E3541;
+    border-radius: 16px;
+    gridline-color: #262D36;
+    selection-background-color: %ACCENT_SUBTLE%;
+    selection-color: #EAF2FB;
+    outline: 0;
+}
+QHeaderView::section {
+    /* 底色走玻璃令牌（原来写死 .06，滑条拉到底表头还是实色带）。基色用深灰不用白。 */
+    background: rgba(48, 54, 64, %GLASS_CARD_HI%);
+    color: #A6B2C0;
+    border: 0;
+    border-right: 1px solid #262D36;
+    border-bottom: 1px solid #2E3541;
+    padding: 9px;
+    font-weight: 600;
+}
+/* 表头首尾两格跟着表格圆角走（与浅色同步）。 */
+QHeaderView::section:first { border-top-left-radius: 15px; }
+QHeaderView::section:last  { border-top-right-radius: 15px; }
+
+/* 文件传输的拖放区（与浅色同步）：实色死板 → 玻璃令牌，跟着「卡片不透明度」走。
+   ⚠️ 基色用深灰不用白（令牌数字是基色 alpha，白色乘它 = 发光的白板）。 */
+QLabel#dropZone {
+    background: rgba(40, 45, 54, %GLASS_CARD%);
+    border: 1px dashed #414B58;
+    border-radius: 16px;
+    color: #8E9AA8;
+}
+/* 见 light.qss 同段注释：LogView 正文是 #logTextEdit，所有日志面板（含 EDL 页）统一走这里。 */
+QTextEdit#logTextEdit {
+    background: rgba(32, 36, 44, %GLASS_CARD%);
+    border: 1px solid #2E3541;
+    border-radius: 16px;
+    margin: 0;
+    padding: 9px;
+}
+QLabel#stateBanner {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .18);
+    color: %ACCENT2%;
+    border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .38);
+    border-radius: 9px;
+    margin: 0 10px;
+    padding: 0 14px;
+}
+
+QProgressBar {
+    background: rgba(255, 255, 255, .09);
+    border: 0;
+    border-radius: 5px;
+    min-height: 10px;
+}
+QProgressBar::chunk { background: %ACCENT%; border-radius: 5px; }
+QLabel#progressOverlay { color: #A6B2C0; }
+QLabel#speedText { color: #A6B2C0; }
+
+QFrame#footer { background: rgba(24, 28, 34, %GLASS_PANEL%); border-top: 1px solid #2A313B; }
+QLabel#footerWarning { color: #FF7B72; }
+QLabel#protocolStatus { color: #32D74B; }
+QLabel#protocolStatus[failed="true"] { color: #FF7B72; }
+QLabel#footerStatus { color: #8E9AA8; }
+QLabel#footerStatus[connected="true"] { color: #32D74B; }
+QLabel#footerStatus[failed="true"] { color: #FF7B72; }
+
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: rgba(150, 162, 178, .38); min-height: 32px; border-radius: 3px; }
+QScrollBar::handle:vertical:hover { background: rgba(150, 162, 178, .62); }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: transparent; height: 10px; }
+QScrollBar::handle:horizontal { background: rgba(150, 162, 178, .38); min-width: 80px; border-radius: 3px; }
+QScrollBar::handle:horizontal:hover { background: rgba(150, 162, 178, .62); }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QSplitter::handle { background: transparent; width: 10px; }
+
+/* ═══════════ KunClient 外壳（MainShell）═══════════ */
+QFrame#shellRoot {
+    background: transparent;
+    border: 1px solid #2E3541;
+    border-radius: 30px;
+}
+QWidget#shellBody { background: transparent; }
+
+/* ═══════════ 顶栏（品牌组 / 返回 + 页名；正中留给灵动岛）═══
+   2026-10-17 控制台重构：左导航轨与页签条一并撤掉（与浅色同步）。
+   2026-10-17 二次重做：底色由 TopBarChrome 自绘，这里让出 background。 */
+QFrame#shellTopBar {
+    background: transparent;
+    border: 0;
+}
+QLabel#pageTitle { color: #F2F6FC; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+QLabel#shellBrandName { color: #F2F6FC; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+QLabel#shellBrandVersion { color: #7C8896; font-size: 10px; font-weight: 600; }
+QLabel#shellBrandMeta { color: #7E8A98; font-size: 11px; }
+/* 品牌组（NavPill）：胶囊底由 C++ 自绘。 */
+
+/* 返回钮：30×30 圆形玻璃片（尺寸在 C++ 里定）。深色下底要「白墨」不能「黑墨」。 */
+QPushButton#shellBack {
+    background: rgba(255, 255, 255, .11);
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 16px;
+    padding: 0;
+    color: #6FB6FF;
+}
+QPushButton#shellBack:hover {
+    background: rgba(255, 255, 255, .18);
+    border-color: rgba(77, 163, 255, .55);
+    color: #A8D4FF;
+}
+QPushButton#shellBack:pressed { background: rgba(77, 163, 255, .28); }
+/* 应用动作 │ 系统动作 的分组细线。 */
+QFrame#shellSep { background: rgba(255, 255, 255, .11); border: 0; }
+QPushButton#shellThemeToggle {
+    background: transparent;
+    border: 0;
+    border-radius: 15px;
+    padding: 0;
+    outline: 0;
+    color: #A6B2C0;
+}
+QPushButton#shellThemeToggle:hover { background: rgba(255, 255, 255, .08); color: %ACCENT2%; }
+
+/* ═══════════ 控制台主屏（iOS 启动器，与浅色同步）═══
+   页面与图标网格全透，露出外壳的色晕 / 壁纸；Dock 是唯一有实体的容器。
+   图标方块由 C++ 自绘（ui/pages/ConsolePage.cpp 的 AppTile），不走 QSS。 */
+QWidget#consolePage, QWidget#consoleGrid { background: transparent; }
+QFrame#consoleDock {
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid rgba(255, 255, 255, .14);
+    border-radius: 28px;
+}
+
+QStackedWidget#pageStack {
+    /* 与浅色同步：上亮下暗的玻璃渐变，平涂在壁纸上只是一层灰纱。 */
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(26, 29, 35, %GLASS_PAGE_HI%),
+                                stop:0.45 rgba(20, 22, 26, %GLASS_PAGE%),
+                                stop:1    rgba(16, 18, 21, %GLASS_PAGE_LO%));
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}
+QStackedWidget#pageStack[console="true"] { background: transparent; }
+QWidget#edlLegacyPage { background: transparent; }
+
+/* ── 平铺页的「整页玻璃板」（BasePage::setGlassSheet(true)，与浅色同步）── */
+QWidget#basePage[glass="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(52, 58, 70, %GLASS_CARD_HI%),
+                                stop:0.55 rgba(32, 36, 44, %GLASS_CARD%),
+                                stop:1    rgba(24, 27, 34, %GLASS_CARD_LO%));
+    border: 1px solid #2E3541;
+    border-top-color: rgba(255, 255, 255, .14);
+    border-radius: 20px;
+}
+/* 状态栏下两角跟窗口一起收圆（与浅色同步，30px = #shellRoot 的圆角）。 */
+QFrame#shellStatusBar {
+    /* 与浅色同步：三行密集小字不玩半透明（%GLASS_PANEL% 压不住壁纸）。 */
+    background: rgba(20, 24, 30, .95);
+    border-top: 1px solid #2A313B;
+    border-bottom-left-radius: 30px;
+    border-bottom-right-radius: 30px;
+}
+QLabel#statusLabel { color: #6B7787; }
+QLabel#statusValue { color: #C7D1DC; }
+/* EDL 链路段（协议 / 状态）：状态: 按 linkState 属性着色。
+   🔴 属性选择器是运行时改属性驱动的，改完必须 unpolish/polish 才重绘（代码里已做）。 */
+QLabel#statusValue[linkState="ok"] { color: #32D74B; font-weight: 600; }
+QLabel#statusValue[linkState="failed"] { color: #FF453A; font-weight: 600; }
+QLabel#deviceModeLabel { font-size: 15px; font-weight: 700; }
+QLabel#deviceHintLabel { color: #8E9AA8; }
+/* ── 小米字库牌子（StorageBrandPage）结果卡（与 light.qss 同结构）───── */
+QLabel#brandVendor { color: #F5F8FC; font-size: 26px; font-weight: 700; }
+QLabel#brandName { color: #B9C6D3; font-size: 13px; font-weight: 600; }
+/* ── 云端引导库（2026-10-18 最终形态，与 light.qss 同结构）──
+   条目已直接罗列进「芯片 / 引导程序」下拉，不再有按钮 / 弹窗 / 内联面板，
+   这里不需要任何专属规则（下拉自身样式见 QComboBox 那组）。 */
+QLabel#placeholderTitle { color: #E9EDF3; }
+QLabel#placeholderMessage { color: #8E9AA8; }
+/* 状态栏跑马灯（个性签名 / 文案滚动）：一条淡强调底的窄带，读作「装饰层」而非读数槽 */
+QLabel#marqueeLabel { color: %ACCENT2%; font-size: 12px; background: transparent; }
+QLabel#marqueeLabel[tone="muted"] { color: #8E9AA8; }
+QFrame#marqueeBox {
+    /* 与浅色同步：窄条不玩半透明，给足不透明度换可读性。 */
+    background: rgba(23, 27, 33, .94);
+    border: 1px solid #2A313B;
+    /* 🔴 具体像素 = 高度 22 的一半，999px 在 Qt 里会退化成直角（见 light.qss 注释）。 */
+    border-radius: 11px;
+}
+
+/* ── 页内快捷条（EDL 刷写页：场景提示 + 快捷入口） ── */
+/* 快捷条：浮在页面顶部的圆角玻璃条（与浅色同步）。 */
+QFrame#quickBar {
+    /* 同 light.qss：不用 %GLASS_PANEL%（默认 ~16% 不透明），一条提示字压不住背景。 */
+    background: rgba(23, 27, 33, .96);
+    border: 1px solid #2A313B;
+    border-radius: 14px;
+    /* 外边距见 C++ 的 quickHost（QSS margin 会向内压内容盒）。 */
+}
+QPushButton#quickLink {
+    background: rgba(255, 255, 255, .07);
+    border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .45);
+    border-radius: 12px;
+    padding: 4px 14px;
+    font-size: 12px;
+    color: %ACCENT2%;
+}
+QPushButton#quickLink:hover { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .18); border-color: %ACCENT%; color: #8EC8FF; }
+QPushButton#quickLink:pressed { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .12); }
+
+/* ── 页签条右侧的两个下拉（2026-10-19，与 light.qss 同结构）──
+   深色下用「白 7% + 半透明蓝描边」，与 #quickLink 同一档。 */
+QComboBox#lunCombo, QComboBox#advancedCombo {
+    background: rgba(255, 255, 255, .07); border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .45);
+    border-radius: 12px; padding: 4px 10px; font-size: 12px;
+    color: %ACCENT2%; min-height: 16px;
+}
+QComboBox#lunCombo:hover, QComboBox#advancedCombo:hover {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .18); border-color: %ACCENT%;
+}
+QComboBox#lunCombo:disabled, QComboBox#advancedCombo:disabled {
+    color: #6B7787; border-color: #2A313B; background: rgba(255, 255, 255, .03);
+}
+QComboBox#lunCombo QAbstractItemView::item,
+QComboBox#advancedCombo QAbstractItemView::item { padding: 0px 8px; }
+
+/* ═══════════ 登录窗口（LoginDialog，与浅色一一对应）═══════════ */
+QFrame#loginRoot {
+    background: #1A1F26;
+    border: 1px solid #2E3541;
+    border-radius: 26px;
+}
+QFrame#loginTitleBar { background: transparent; border-bottom: 1px solid #262D36; }
+QLabel#loginTitleBrand { color: #B9C6D3; font-size: 12px; font-weight: 700; }
+QPushButton#loginCloseButton {
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    padding: 2px 9px;
+    min-height: 0;
+    color: #8E9AA8;
+    font-size: 13px;
+}
+QPushButton#loginCloseButton:hover { background: #FF453A; color: #ffffff; }
+
+QLabel#loginTitle { color: #F5F8FC; font-size: 15px; font-weight: 600; }
+QLabel#loginSubtitle { color: #8E9AA8; font-size: 11.5px; }
+QLabel#loginFieldLabel { color: #8E9AA8; font-size: 11px; }
+QLabel#loginHint { color: #7C8896; font-size: 11px; }
+QLabel#loginFooter { color: #6B7787; font-size: 10.5px; }
+
+/* ── 下划线页签（未选中底线透明以免切换时抖动） ── */
+QFrame#loginTabBar { background: transparent; border-bottom: 1px solid #2A313B; }
+QPushButton#loginTab {
+    background: transparent;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    padding: 6px 0;
+    min-height: 0;
+    color: #8E9AA8;
+    font-size: 12px;
+}
+QPushButton#loginTab:hover { color: #C6D2DF; }
+QPushButton#loginTab:checked { color: #ffffff; font-weight: 700; border-bottom: 2px solid %ACCENT%; }
+
+/* ── 状态横幅：靠 state 属性切色（error / ok） ── */
+QWidget#loginStatus { border-radius: 10px; }
+QWidget#loginStatus[state="error"] { background: rgba(255, 69, 58, .16); border: 1px solid rgba(255, 69, 58, .42); }
+QWidget#loginStatus[state="ok"]    { background: rgba(50, 215, 75, .14); border: 1px solid rgba(50, 215, 75, .40); }
+QLabel#loginStatusIcon { font-size: 13px; }
+QLabel#loginStatusText { font-size: 11.5px; }
+QWidget#loginStatus[state="error"] QLabel#loginStatusIcon { color: #FF7B72; }
+QWidget#loginStatus[state="error"] QLabel#loginStatusText { color: #FFA9A2; }
+QWidget#loginStatus[state="ok"] QLabel#loginStatusIcon { color: #32D74B; }
+QWidget#loginStatus[state="ok"] QLabel#loginStatusText { color: #74E08A; }
+
+/* ── 主动作按钮：浅底 + 描边 + 色字（守「无实心填充」红线） ── */
+QPushButton#loginAction {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .20);
+    border: 1.5px solid %ACCENT%;
+    border-radius: 14px;
+    padding: 8px 16px;
+    min-height: 20px;
+    color: %ACCENT2%;
+    font-size: 12.5px;
+    font-weight: 600;
+}
+QPushButton#loginAction:hover { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .30); border-color: %ACCENT2%; }
+QPushButton#loginAction:pressed { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .16); }
+QPushButton#loginAction:disabled { background: rgba(255, 255, 255, .03); border-color: #2C333D; color: #66727F; }
+QPushButton#loginAction[variant="success"] {
+    background: rgba(50, 215, 75, .16);
+    border-color: #32D74B;
+    color: #74E08A;
+}
+QPushButton#loginAction[variant="success"]:hover { background: rgba(50, 215, 75, .24); border-color: #5CE36F; }
+QPushButton#loginAction[variant="success"]:disabled { background: rgba(255, 255, 255, .03); border-color: #2C333D; color: #66727F; }
+
+QPushButton#loginSendCode {
+    background: rgba(255, 255, 255, .07);
+    border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .45);
+    border-radius: 12px;
+    padding: 7px 14px;
+    min-height: 0;
+    color: %ACCENT2%;
+    font-size: 11.5px;
+}
+QPushButton#loginSendCode:hover { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .18); border-color: %ACCENT%; color: #8EC8FF; }
+QPushButton#loginSendCode:disabled { background: rgba(255, 255, 255, .03); border-color: #2C333D; color: #66727F; }
+
+/* 登录双重验证页的「返回登录」：纯文字链接钮 */
+QPushButton#loginBackLink {
+    background: transparent; border: 0; border-radius: 6px;
+    padding: 4px 0; min-height: 0; color: #8E9AA8; font-size: 12px;
+    text-decoration: underline;
+}
+QPushButton#loginBackLink:hover { color: #C6D2DF; }
+QPushButton#loginBackLink:disabled { color: #5B6673; }
+
+/* ═══════════ 统一消息弹窗（ThemedMessageBox，与浅色一一对应）═══════════ */
+QFrame#msgRoot {
+    background: #1A1F26;
+    border: 1px solid #2E3541;
+    border-radius: 26px;
+}
+QFrame#msgTitleBar { background: transparent; border-bottom: 1px solid #262D36; }
+QLabel#msgTitle { color: #F5F8FC; font-size: 13px; font-weight: 600; }
+QPushButton#msgClose {
+    background: transparent; border: 0; border-radius: 10px;
+    padding: 2px 9px; min-height: 0; color: #8E9AA8; font-size: 13px;
+}
+QPushButton#msgClose:hover { background: #FF453A; color: #ffffff; }
+QFrame#msgBody { background: transparent; }
+
+/* 徽标：圆形底座 + 居中字形，颜色走 variant */
+/* 30×30 正圆：半径必须 ≤ 15（原来 22 会退化成直角方块，见 light.qss 注释）。 */
+QLabel#msgIcon { border-radius: 15px; font-size: 15px; font-weight: 700; }
+QLabel#msgIcon[variant="info"]     { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .20); color: #6DB4F2; border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .40); }
+QLabel#msgIcon[variant="warning"]  { background: rgba(255, 159, 10, .18); color: #F2C14E; border: 1px solid rgba(255, 159, 10, .38); }
+QLabel#msgIcon[variant="critical"] { background: rgba(255, 69, 58, .18); color: #FF7B72; border: 1px solid rgba(255, 69, 58, .40); }
+QLabel#msgIcon[variant="question"] { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .20); color: #6DB4F2; border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .40); }
+
+QLabel#msgText { color: #D5DEE8; font-size: 12.5px; line-height: 1.55; }
+QFrame#msgButtonRow { background: transparent; }
+
+/* 次级按钮：玻璃片 + 中性描边（守「无实心填充」红线） */
+QPushButton#msgButton {
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid #3A4450;
+    border-radius: 14px;
+    padding: 7px 18px;
+    min-height: 20px;
+    color: #E4EAF2;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#msgButton:hover { background: rgba(255, 255, 255, .14); border-color: #4A5663; color: #ffffff; }
+QPushButton#msgButton:pressed { background: rgba(255, 255, 255, .05); }
+/* 主按钮：浅底 + 描边 + 色字 */
+QPushButton#msgButton[variant="primary"] {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .20); border: 1.5px solid %ACCENT%; color: %ACCENT2%;
+}
+QPushButton#msgButton[variant="primary"]:hover { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .30); border-color: %ACCENT2%; }
+QPushButton#msgButton[variant="primary"]:pressed { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .16); }
+
+QScrollArea#msgScroll { background: transparent; border: 0; }
+QScrollArea#msgScroll QWidget { background: transparent; }
+
+/* 擦除分区确认弹窗的分区列表 */
+QListWidget#partitionList {
+    background: rgba(255, 255, 255, .05);
+    border: 1px solid #2A313B;
+    border-radius: 14px;
+    padding: 5px;
+    outline: 0;
+}
+QListWidget#partitionList::item {
+    color: #D5DEE8;
+    padding: 4px 9px;
+    border-radius: 9px;
+}
+QListWidget#partitionList::item:selected { background: %ACCENT_SUBTLE%; color: %ACCENT2%; }
+QListWidget#partitionList::item:alternate { background: rgba(255, 255, 255, .025); }
+
+/* ═══════════ FDL Auth 窗（FdlAuthDialog，与浅色一一对应）═══════════
+   卡片 / 标题栏 / 底部按钮复用上面的 #msg*，这里只加正文控件。 */
+QLabel#fdlLabel { color: #D5DEE8; font-size: 12px; font-weight: 600; }
+QLabel#fdlHint { color: #8E9AA8; font-size: 11.5px; }
+QLabel#fdlHint[error="true"] { color: #FF7B72; }
+
+/* 设置页：卡片内的说明文字 / 模块权限行（与 light.qss 同名规则一一对应） */
+QLabel#settingsHint { color: #8E9AA8; font-size: 11.5px; }
+QLabel#moduleRow { color: #D5DEE8; font-size: 12px; }
+QLabel#moduleRow[included="false"] { color: #7C8794; }
+
+QPlainTextEdit#fdlBlob, QPlainTextEdit#fdlSig {
+    background: rgba(255, 255, 255, .05);
+    border: 1px solid #2A313B;
+    border-radius: 14px;
+    padding: 8px 10px;
+    color: #E4EAF2;
+    font-size: 12px;
+    selection-background-color: %ACCENT_SUBTLE%;
+    selection-color: #F5F8FC;
+}
+QPlainTextEdit#fdlBlob { color: #B9C6D3; }
+QPlainTextEdit#fdlBlob:focus, QPlainTextEdit#fdlSig:focus { border-color: #4A5663; }
+
+QPushButton#fdlMiniButton {
+    background: rgba(255, 255, 255, .08);
+    border: 1px solid #3A4450;
+    border-radius: 11px;
+    padding: 3px 12px;
+    min-height: 0;
+    color: #E4EAF2;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+QPushButton#fdlMiniButton:hover { background: rgba(255, 255, 255, .14); border-color: #4A5663; color: #ffffff; }
+QPushButton#fdlMiniButton:pressed { background: rgba(255, 255, 255, .05); }
+
+/* ═══════════ 启动预载窗（StartupPreloadDialog，与浅色一一对应）═══════════
+   卡片与标题栏复用上面的 #msgRoot / #msgTitleBar，这里只加正文。
+   🔴 步骤状态走动态属性 `state`，**必须同时挂在 行 / 图标 / 状态字 三个控件上**并各自
+      unpolish/polish —— 只改父属性 + 后代选择器会让子控件卡在初始灰色。 */
+QLabel#preloadBrand { color: #B9C6D3; font-size: 12px; font-weight: 700; }
+QLabel#preloadTitle { color: #F5F8FC; font-size: 15px; font-weight: 700; }
+QLabel#preloadSubtitle { color: #8E9AA8; font-size: 11.5px; }
+
+QFrame#preloadSteps {
+    background: rgba(255, 255, 255, .04);
+    border: 1px solid #2A313B;
+    border-radius: 14px;
+}
+QFrame#preloadStep { background: transparent; border: 0; border-bottom: 1px solid #262D36; }
+QFrame#preloadStep[last="true"] { border-bottom: 0; }
+QFrame#preloadStep[state="active"] { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .12); }
+
+QLabel#preloadStepIcon { font-size: 12px; }
+QLabel#preloadStepName { color: #C7D1DC; font-size: 12.5px; font-weight: 600; }
+QLabel#preloadStepState { font-size: 11.5px; }
+
+QLabel#preloadStepIcon[state="pending"],
+QLabel#preloadStepState[state="pending"] { color: #6B7787; }
+QLabel#preloadStepIcon[state="active"],
+QLabel#preloadStepState[state="active"] { color: %ACCENT2%; }
+QLabel#preloadStepIcon[state="done"],
+QLabel#preloadStepState[state="done"] { color: #32D74B; }
+QLabel#preloadStepIcon[state="failed"],
+QLabel#preloadStepState[state="failed"] { color: #FFB84D; }
+
+QFrame#preloadPercentRow { background: transparent; }
+QLabel#preloadPercent { color: %ACCENT2%; font-size: 12px; font-weight: 700; }
+QProgressBar#preloadBar { min-height: 8px; max-height: 8px; border-radius: 4px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   控制中心页（ui/pages/ControlCenterPage.cpp）：芯片 / 滑杆 / 快捷入口
+   深色下玻璃是近黑的，控件底色用「白墨」而不是黑墨 —— 黑底上压黑块会糊成一片。
+   ───────────────────────────────────────────────────────────────────────── */
+QLabel#ccTitle { color: #F2F6FC; font-size: 15px; font-weight: 700; }
+
+QPushButton#ccCollapse {
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 11px;
+    padding: 4px 12px;
+    color: #C6D2E0;
+    font-size: 12px;
+}
+QPushButton#ccCollapse:hover { background: rgba(255, 255, 255, 0.18); color: #FFFFFF; }
+
+QLabel#ccChip {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 10px;
+    padding: 4px 10px;
+    color: #AEBAC8;
+    font-size: 11px;
+}
+QLabel#ccChip[state="ok"] {
+    color: #5AD98A;
+    border-color: rgba(90, 217, 138, 0.28);
+    background: rgba(90, 217, 138, 0.12);
+}
+QLabel#ccChip[state="failed"] {
+    color: #FF8A80;
+    border-color: rgba(255, 138, 128, 0.28);
+    background: rgba(255, 138, 128, 0.12);
+}
+
+QLabel#ccSliderLabel { color: #AEBAC8; font-size: 12px; }
+QLabel#ccSliderValue { color: #F2F6FC; font-size: 12px; font-weight: 600; }
+QSlider#ccSlider { min-height: 18px; }
+QSlider#ccSlider::groove:horizontal {
+    height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.16);
+}
+QSlider#ccSlider::sub-page:horizontal {
+    height: 6px; border-radius: 3px; background: #4DA3FF;
+}
+QSlider#ccSlider::handle:horizontal {
+    width: 16px; height: 16px; margin: -5px 0;
+    border-radius: 8px; background: #F5F9FF;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+}
+QSlider#ccSlider::handle:horizontal:hover { border-color: #4DA3FF; }
+
+QPushButton#ccNav {
+    background: rgba(255, 255, 255, 0.10);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 12px;
+    padding: 7px 10px;
+    color: #EAF1F9;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#ccNav:hover {
+    background: rgba(77, 163, 255, 0.20);
+    border-color: rgba(77, 163, 255, 0.45);
+    color: #FFFFFF;
+}
+
+QLabel#ccHint { color: #8B96A6; font-size: 11.5px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   使用条款 / 隐私说明弹窗（ui/dialogs/DisclaimerDialog.cpp）
+   深色下摘要卡用暖琥珀而不是警示红：这一屏是「请先读一下」，不是报错。
+   ───────────────────────────────────────────────────────────────────────── */
+/* 2026-10-21：**所有无自绘背景的弹窗**的兜底底色。
+   更新 / 下载 / 云端引导库 / 打包列表 / 日志上传 / 图标选择这些弹窗原来没有
+   QDialog 规则，深色主题下会露出系统浅色底（白底白字看不清），个别机器上整窗发黑。
+   自绘外壳的弹窗不受影响 —— 它们开了 WA_TranslucentBackground，
+   样式表背景本来就不会画到窗口上。 */
+QDialog { background: #14181F; }
+
+QDialog#disclaimerDialog { background: #14181F; }
+
+QFrame#legalHeader { background: transparent; border-bottom: 1px solid #262D36; }
+QLabel#legalTitle { color: #F2F6FC; font-size: 18px; font-weight: 700; }
+QLabel#legalSubtitle { color: #94A1B0; font-size: 12px; }
+QLabel#legalVersionPill {
+    background: rgba(77, 163, 255, 0.16);
+    border: 1px solid rgba(77, 163, 255, 0.32);
+    border-radius: 10px;
+    padding: 3px 9px;
+    color: #8FC6FF;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QFrame#legalSummary {
+    background: rgba(255, 184, 77, 0.10);
+    border: 1px solid rgba(255, 184, 77, 0.26);
+    border-left: 3px solid #FFB84D;
+    border-radius: 12px;
+}
+QLabel#legalSummaryText { color: #E4D6BE; font-size: 12px; }
+
+QLabel#legalSectionTitle { color: #6FB6FF; font-size: 13px; font-weight: 700; }
+QLabel#legalBody { color: #B9C5D3; font-size: 12px; }
+QLabel#dialogFooter { color: #6B7785; font-size: 11px; }
+QLabel#dialogHint { color: #8A96A4; font-size: 11px; }
+
+QFrame#legalFooter {
+    background: rgba(20, 24, 31, 0.92);
+    border-top: 1px solid #262D36;
+}
+QCheckBox#legalAgree { color: #C3CEDB; font-size: 12px; }
+
+QScrollArea#legalScroll, QWidget#legalHost { background: transparent; }
+QScrollArea#legalScroll > QWidget > QWidget { background: transparent; }
+
+/* 工具提示（与浅色同步）。 */
+QToolTip {
+    background: #1B2028;
+    color: #D5DEE8;
+    border: 1px solid #2C3440;
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   首次欢迎 / 引导弹窗（与浅色同步）
+   ───────────────────────────────────────────────────────────────────────── */
+QStackedWidget#welcomeStack { background: transparent; }
+QLabel#welcomeTitle { color: #F2F6FC; font-size: 22px; font-weight: 700; letter-spacing: .01em; }
+QLabel#welcomeBody { color: #B9C5D3; font-size: 13px; }
+QPushButton#welcomeSkip {
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    padding: 6px 12px;
+    color: #7E8A98;
+    font-size: 12.5px;
+}
+QPushButton#welcomeSkip:hover { background: rgba(255, 255, 255, .08); color: #E6EDF5; }

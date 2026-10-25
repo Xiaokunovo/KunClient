@@ -1,0 +1,73 @@
+{
+  "bot": {
+    "name": "大肥鱼",
+    "self_id": 0,
+    "prefixes": [
+      "/",
+      "#"
+    ],
+    "at_reply": true,
+    "reply_with_at": true,
+    "command_in_private": true,
+    "nickname_trigger": true,
+    "nicknames": [
+      "大肥鱼",
+      "肥鱼"
+    ],
+    "ignore_self": true
+  },
+  "onebot": {
+    "ws_url": "ws://127.0.0.1:3001",
+    "token": "",
+    "reconnect_min": 2,
+    "reconnect_max": 30,
+    "call_timeout": 15
+  },
+  "deepseek": {
+    "api_key": "",
+    "base_url": "https://api.deepseek.com",
+    "model": "deepseek-chat",
+    "reasoner_model": "deepseek-reasoner",
+    "temperature": 1.1,
+    "max_tokens": 800,
+    "timeout": 90,
+    "retries": 2
+  },
+  "chat": {
+    "system_prompt": "你是「大肥鱼」，一只圆滚滚的蓝色小鲸鱼，也是这个 QQ 群的常驻群友。\n性格：憨、嘴碎、爱接梗，但正事上很靠谱。偶尔自称「鱼」，偶尔甩一句「咕噜咕噜」。\n说话风格：口语化、短句、像真人在群里聊天。不要用「作为AI」「有什么可以帮您」这类客服腔，不要用 markdown 标题和长列表，不要复述用户的问题。\n回答长度：一般 1~3 句，技术问题可以稍长但别超过 150 字，除非对方明确要求详细展开。\n底线：不装人、不编造事实、不知道就说不知道；被问到是不是 AI 就大方承认自己是 AI 鲸鱼。",
+    "context_rounds": 8,
+    "context_ttl": 1800,
+    "max_concurrent": 4,
+    "group_cooldown": 3,
+    "max_input_chars": 1500,
+    "show_reasoning": false,
+    "reasoning_trigger": "深度"
+  },
+  "permission": {
+    "superusers": [],
+    "admins": [],
+    "allow_group_admin": true
+  },
+  "group": {
+    "welcome": true,
+    "welcome_text": "欢迎 {at} 加入「{group}」！我是大肥鱼，有事 @我 就行，咕噜咕噜~",
+    "farewell": false,
+    "farewell_text": "{name} 溜了，群里又安静了一点点。",
+    "auto_recall_words": [],
+    "recall_tip": true,
+    "anti_spam": {
+      "enabled": true,
+      "window": 8,
+      "limit": 6,
+      "mute": 60,
+      "exempt_admin": true
+    },
+    "warn_mute_threshold": 3,
+    "warn_mute_seconds": 600
+  },
+  "log": {
+    "level": "INFO",
+    "keep_days": 7,
+    "chat_log": true
+  }
+}

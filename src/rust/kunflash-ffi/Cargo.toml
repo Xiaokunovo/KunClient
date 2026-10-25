@@ -1,0 +1,12 @@
+[package]
+name = "kunflash-ffi"
+version.workspace = true
+edition.workspace = true
+description = "KunFlashTool 的 C ABI 出口：C# (WPF) 通过 P/Invoke 调这里"
+
+[lib]
+# cdylib = 给 C# 加载的 dll；rlib 是为了 cargo test 能链测试 harness
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+kunflash-core = { path = "../kunflash-core" }

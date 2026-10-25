@@ -1,0 +1,36 @@
+{
+  "_说明": "人工软配置：改这里即可，无需改代码。删除某字段或整文件则回退默认值；环境变量优先级更高（PORT、JWT_SECRET、JWT_SECRET_FILE、PUBLIC_URL、DB_PATH、ADMIN_USER、ADMIN_PASS、ADMIN_EMAIL、MAIL_HOST、MAIL_PORT、MAIL_SECURE、MAIL_USER、MAIL_PASS、MAIL_FROM、MAIL_DISABLE、DEVELOPER_USER、DEVELOPER_PASS）。",
+  "_优先级": "环境变量 > config.local.json > config.json > 内置默认值；本机/生产私有值建议写入 config.local.json（已被 .gitignore 忽略），字段模板见 config.example.json",
+  "port": 3000,
+  "jwt_secret": "",
+  "public_url": "http://localhost:3000",
+  "db_path": "",
+  "admin": {
+    "username": "admin",
+    "password": "",
+    "sync": false
+  },
+  "developer": {
+    "_说明": "最高权开发者账号（全局唯一）。startup 时：账号已存在则强制校正为 developer；不存在且填了 password 则创建。放在 config.json（而非只放 config.local.json）是因为部署脚本会上传本文件、不覆盖服务器上的 config.local.json —— 线上把该账号提权就靠这一行。",
+    "username": "小坤ovo",
+    "password": "",
+    "sync": false
+  },
+  "admin_email": "",
+  "mail": {
+    "enabled": false,
+    "host": "smtp.qq.com",
+    "port": 465,
+    "secure": true,
+    "user": "",
+    "pass": "",
+    "from": ""
+  },
+  "deploy": {
+    "host": "127.0.0.1",
+    "ssh_port": 22,
+    "user": "root",
+    "password": "",
+    "remote_base": "/www/wwwroot/KunClient-server"
+  }
+}

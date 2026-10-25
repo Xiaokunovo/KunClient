@@ -1,0 +1,132 @@
+// ====== 邮件视觉 v4（2026-10-18 重做）======
+// 🔴 四类邮件（验证码 / 反馈 / 环境告警 / 版本更新）与三端（客户端 / 控制台 / 官网）
+//    共用同一套品牌令牌 —— 邮件是用户唯一从「站外」看到品牌的地方，色板漂了最扎眼。
+//    令牌与 website/src/app/globals.css、server/console/index.html 的 :root 同源。
+//
+// ⚠️ 邮件客户端的硬约束（踩过就知道为什么代码长这样）：
+//    · 不认 CSS 变量、不认 <style> 里的类选择器（Gmail 会剥）、不认外部样式表；
+//    · 不认 flex / grid / position —— 布局一律 <table role="presentation">；
+//    · 按钮不能用 <a> 加 padding 就完事（Outlook 会把 padding 丢掉），必须外包一层
+//      带背景色的 <td>，<a> 只负责撑开和上色；
+//    · 所以这里是一份**无 var() 的内联副本**，别想着抽公共 CSS。
+//
+// v4 相对 v3 的改动：
+//   · 页头从「20px 深蓝大色块」改成「白底 + 顶部 4px 强调条 + 品牌行」。
+//     深色大色块在 Gmail 深色模式下会被整体反色成惨白一块，而且它把标题压得很闷；
+//   · 圆角 8 → 14（卡片）/ 8（按钮），描边换成更冷的 #e3e9f2；
+//   · 验证码从「小方框里的 28px」改成「虚线圈出的 34px 大字 + 有效期副行」，
+//     手机上第一眼就能抄；
+//   · 新增 mailButton / mailPanel / mailInfoTable 三个原语，正文不再手搓样式 ——
+//     以前每封信都在重复写 padding 和 border，改一处色值要翻四处。
+const MAIL_BRAND = {
+  accent:     '#7ab8f3',   // 品牌强调色（强调条 / 实心按钮底）
+  accentDeep: '#2f7fd0',   // 压在白底上的强调色文字（#7ab8f3 当文字用对比度不够）
+  accentInk:  '#10304f',   // 压在强调色底上的文字（= --pri-ink）
+  accentWash: '#eef5fe',   // 强调色浅底（验证码块 / 信息面板）
+  accentLine: '#a9cdf5',   // 强调色描边（虚线框）
+  page:       '#eef2f8',   // 页底（卡片之外的那一圈）
+  card:       '#ffffff',
+  ink:        '#101828',   // 正文
+  ink2:       '#4b5a71',   // 次级说明
+  ink3:       '#8a97ab',   // 标签 / 页脚
+  line:       '#e3e9f2',
+  lineSoft:   '#eff3f9',
+  danger:     '#c0392b',
+  dangerWash: '#fdf0ee',
+  dangerLine: '#f0c4bd',
+};
+
+const MAIL_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif";
+const MAIL_MONO = "'SF Mono',SFMono-Regular,Consolas,'Cascadia Mono','Courier New',monospace";
+
+/** 品牌行：左「K 徽标 + KunClient 字标」，右一枚小字 kicker。 */
+function mailBrandRow(kicker) {
+  const b = MAIL_BRAND;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>`
+    + `<td style="vertical-align:middle">`
+    + `<span style="display:inline-block;width:30px;height:30px;line-height:30px;text-align:center;`
+    + `border-radius:9px;background:${b.accentInk};color:#fff;font-size:15px;font-weight:800;`
+    + `font-family:${MAIL_FONT}">K</span>`
+    + `<span style="display:inline-block;margin-left:10px;vertical-align:middle;font-size:15px;`
+    + `font-weight:700;letter-spacing:.2px;color:${b.ink}">KunClient</span>`
+    + `</td>`
+    + `<td align="right" style="vertical-align:middle;font-size:11.5px;color:${b.ink3};`
+    + `letter-spacing:.4px;white-space:nowrap">${kicker || ''}</td>`
+    + `</tr></table>`;
+}
+
+/**
+ * 整封邮件的骨架。
+ * @param {object} o
+ * @param {string} o.kicker    品牌行右侧的小字（如「安全验证」）
+ * @param {string} o.title     大标题
+ * @param {string} o.subtitle  标题下的说明（可空）
+ * @param {string} o.body      正文 HTML（用下面的原语拼）
+ * @param {string} [o.footNote] 页脚额外一行（可空）
+ */
+function mailDocument({ kicker, title, subtitle, body, footNote }) {
+  const b = MAIL_BRAND;
+  return `<div style="margin:0;padding:30px 12px;background:${b.page}">`
+    + `<div style="max-width:560px;margin:0 auto;background:${b.card};border:1px solid ${b.line};`
+    + `border-radius:14px;overflow:hidden;color:${b.ink};font-family:${MAIL_FONT}">`
+    // 顶部 4px 强调条：font-size/line-height 归零，否则 Outlook 会撑出一行字高
+    + `<div style="height:4px;background:${b.accent};font-size:0;line-height:0">&nbsp;</div>`
+    + `<div style="padding:22px 28px 0">${mailBrandRow(kicker)}</div>`
+    + `<div style="padding:20px 28px 0">`
+    + `<div style="font-size:21px;font-weight:700;letter-spacing:-.2px;line-height:1.35">${title}</div>`
+    + (subtitle
+      ? `<div style="margin-top:7px;font-size:13px;line-height:1.7;color:${b.ink2}">${subtitle}</div>`
+      : '')
+    + `</div>`
+    + `<div style="padding:18px 28px 26px;font-size:14px;line-height:1.75;color:${b.ink}">${body}</div>`
+    + `<div style="padding:14px 28px 18px;border-top:1px solid ${b.lineSoft};`
+    + `font-size:11.5px;line-height:1.7;color:${b.ink3}">`
+    + (footNote ? footNote + '<br>' : '')
+    + `本邮件由 KunClient 系统自动发送，请勿直接回复。</div>`
+    + `</div></div>`;
+}
+
+/**
+ * 按钮。variant: 'solid'（实心强调色）/ 'ghost'（白底描边）。
+ * 🔴 背景色必须挂在 <td> 上：Outlook 会把 <a> 的 padding 丢掉，只剩一行贴边的字。
+ */
+function mailButton(href, label, variant) {
+  const b = MAIL_BRAND;
+  const solid = variant !== 'ghost';
+  const bg = solid ? b.accent : b.card;
+  const fg = solid ? b.accentInk : b.accentDeep;
+  const border = solid ? b.accent : b.accentLine;
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0"`
+    + ` style="display:inline-block;margin:0 8px 8px 0"><tr>`
+    + `<td style="background:${bg};border:1px solid ${border};border-radius:8px">`
+    + `<a href="${href}" style="display:inline-block;padding:11px 24px;font-size:13.5px;`
+    + `font-weight:700;color:${fg};text-decoration:none;border-radius:8px;`
+    + `font-family:${MAIL_FONT};white-space:nowrap">${label}</a>`
+    + `</td></tr></table>`;
+}
+
+/** 浅底面板。tone: 'accent'（默认）/ 'danger'（告警）。 */
+function mailPanel(inner, tone) {
+  const b = MAIL_BRAND;
+  const bg = tone === 'danger' ? b.dangerWash : b.accentWash;
+  const line = tone === 'danger' ? b.dangerLine : b.accentLine;
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"`
+    + ` style="margin:0 0 16px"><tr>`
+    + `<td style="background:${bg};border:1px solid ${line};border-radius:12px;padding:16px 18px">`
+    + inner + `</td></tr></table>`;
+}
+
+/** 键值信息表。rows = [[标签, 值 HTML], ...]；行间只有发丝分隔线，没有竖线。 */
+function mailInfoTable(rows) {
+  const b = MAIL_BRAND;
+  const body = rows.map(([k, v], i) => `<tr>`
+    + `<td style="padding:9px 14px 9px 0;vertical-align:top;width:84px;font-size:12.5px;`
+    + `color:${b.ink3};white-space:nowrap;`
+    + (i ? `border-top:1px solid ${b.lineSoft};` : '') + `">${k}</td>`
+    + `<td style="padding:9px 0;vertical-align:top;font-size:13.5px;line-height:1.7;`
+    + (i ? `border-top:1px solid ${b.lineSoft};` : '') + `">${v}</td>`
+    + `</tr>`).join('');
+  return `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"`
+    + ` style="border-collapse:collapse;margin:0 0 16px">${body}</table>`;
+}
+

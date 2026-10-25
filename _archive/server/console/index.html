@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="color-scheme" content="light dark">
+<title>KunClient 控制台</title>
+<link rel="icon" href="/favicon.ico" type="image/x-icon">
+<link rel="apple-touch-icon" href="/assets/logo.png">
+<link rel="stylesheet" href="./css.v2/console.css">
+<script>
+/* 主题必须在首帧之前定下来，否则深色用户会看到一次白闪。
+   与 js/core/state.js 的读法保持一致（同一个 localStorage 键）。 */
+(function () {
+  try {
+    var t = localStorage.getItem('kun_theme');
+    if (!t) t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', t === 'dark' ? 'dark' : 'light');
+  } catch (e) { }
+})();
+</script>
+</head>
+<body>
+
+<!-- ═══════════ 登录 ═══════════ -->
+<div class="login" id="loginView" hidden>
+  <div class="login-shell">
+    <aside class="login-side">
+      <div class="brand"><b>Kun</b><i>Client</i></div>
+      <h1 class="tagline">一个窗口<br>管住整条刷机链路</h1>
+      <p class="lede">
+        账户、密钥与反馈都在这里。与桌面端同一套身份 ——
+        官网下载、客户端登录、刷写记录，用的是同一个账号。
+      </p>
+      <div class="spec">
+        <div class="spec-row"><span class="k">引擎</span><span class="v">Qualcomm EDL · MediaTek BROM</span></div>
+        <div class="spec-row"><span class="k">平台</span><span class="v">Windows 10 / 11 · 64 位</span></div>
+        <div class="spec-row"><span class="k">登录态</span><span class="v">Bearer Token · 支持邮箱二次验证</span></div>
+      </div>
+      <p class="foot" id="loginFoot">单文件免安装 · 无需运行时</p>
+    </aside>
+
+    <section class="login-card">
+      <h2 id="authTitle">登录控制台</h2>
+      <p class="sub" id="authSub">使用 KunClient 账号继续</p>
+
+      <div class="tabs">
+        <div class="chips" id="authTabs">
+          <button class="chip on" data-act="auth.mode" data-mode="pwd">密码</button>
+          <button class="chip" data-act="auth.mode" data-mode="email">邮箱</button>
+          <button class="chip" data-act="auth.mode" data-mode="reg">注册</button>
+        </div>
+      </div>
+
+      <!-- 密码 -->
+      <div data-pane="pwd">
+        <div class="field">
+          <label for="lUser">用户名</label>
+          <input class="input" id="lUser" placeholder="用户名" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="lPass">密码</label>
+          <input class="input" id="lPass" type="password" placeholder="密码" autocomplete="current-password">
+        </div>
+        <button class="btn pri wide" id="lBtn" data-act="auth.login">登录</button>
+        <div style="text-align:right;margin-top:10px">
+          <button class="link-btn" data-act="auth.mode" data-mode="forgot">忘记密码？</button>
+        </div>
+      </div>
+
+      <!-- 邮箱验证码 -->
+      <div data-pane="email" hidden>
+        <div class="field">
+          <label for="lEmail">邮箱</label>
+          <input class="input" id="lEmail" type="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="lCode">验证码</label>
+          <div class="row nowrap">
+            <input class="input" id="lCode" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code">
+            <button class="btn" id="eSend" data-act="auth.sendCode" data-kind="login" style="width:112px;flex:0 0 auto">发送验证码</button>
+          </div>
+        </div>
+        <button class="btn pri wide" id="eBtn" data-act="auth.emailLogin">邮箱登录</button>
+      </div>
+
+      <!-- 注册 -->
+      <div data-pane="reg" hidden>
+        <div class="field">
+          <label for="rUser">用户名</label>
+          <input class="input" id="rUser" placeholder="2-24 位，不能是纯数字" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="rPass">密码</label>
+          <input class="input" id="rPass" type="password" placeholder="至少 6 位" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="rPass2">确认密码</label>
+          <input class="input" id="rPass2" type="password" placeholder="再次输入密码" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="rEmail">邮箱</label>
+          <div class="row nowrap">
+            <input class="input" id="rEmail" type="email" placeholder="you@example.com" autocomplete="email">
+            <button class="btn" id="rSend" data-act="auth.sendCode" data-kind="register" style="width:112px;flex:0 0 auto">发送验证码</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="rCode">邮箱验证码</label>
+          <input class="input" id="rCode" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code">
+        </div>
+        <label class="check" style="margin-bottom:6px">
+          <input type="checkbox" id="rAgree">
+          <span>我已阅读并同意
+            <a href="/terms/" target="_blank" rel="noopener">《用户协议》</a>
+            <a href="/privacy/" target="_blank" rel="noopener">《隐私政策》</a>
+            <a href="/disclaimer/" target="_blank" rel="noopener">《免责声明》</a>
+          </span>
+        </label>
+        <label class="check" style="margin-bottom:6px">
+          <input type="checkbox" id="rCross">
+          <span><strong>单独同意个人信息出境</strong>：我的账号信息与登录日志将被传输至
+            <strong>中国香港</strong>的服务器存储与处理（依据与范围见
+            <a href="/privacy/" target="_blank" rel="noopener">《隐私政策》</a>第五条）。
+            此同意独立于上述条款，可随时撤回。</span>
+        </label>
+        <p class="hint">两个勾选项都不勾无法创建账户。注册即表示您已阅读、理解并接受上述全部条款。</p>
+        <button class="btn pri wide" id="rBtn" data-act="auth.register" style="margin-top:12px">创建账户</button>
+      </div>
+
+      <!-- 找回密码 -->
+      <div data-pane="forgot" hidden>
+        <div class="field">
+          <label for="fEmail">注册邮箱</label>
+          <input class="input" id="fEmail" type="email" placeholder="you@example.com" autocomplete="email">
+        </div>
+        <div class="field">
+          <label for="fCode">邮箱验证码</label>
+          <div class="row nowrap">
+            <input class="input" id="fCode" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code">
+            <button class="btn" id="fSend" data-act="auth.sendCode" data-kind="reset" style="width:112px;flex:0 0 auto">发送验证码</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="fPass">新密码</label>
+          <input class="input" id="fPass" type="password" placeholder="至少 6 位" autocomplete="new-password">
+        </div>
+        <div class="field">
+          <label for="fPass2">确认新密码</label>
+          <input class="input" id="fPass2" type="password" placeholder="再次输入新密码" autocomplete="new-password">
+        </div>
+        <button class="btn pri wide" id="fBtn" data-act="auth.reset">重置密码</button>
+        <div class="back"><button class="link-btn" data-act="auth.mode" data-mode="pwd">返回登录</button></div>
+      </div>
+
+      <!-- 双重验证第二步 -->
+      <div data-pane="2fa" hidden>
+        <div class="field">
+          <label for="tCode">邮箱验证码</label>
+          <div class="row nowrap">
+            <input class="input" id="tCode" placeholder="6 位验证码" inputmode="numeric" autocomplete="one-time-code">
+            <button class="btn" id="tSend" data-act="auth.resend2fa" style="width:112px;flex:0 0 auto">重新发送</button>
+          </div>
+        </div>
+        <p class="hint" id="tTip">验证码已发送至你的绑定邮箱，10 分钟内有效。</p>
+        <button class="btn pri wide" id="tBtn" data-act="auth.verify2fa" style="margin-top:12px">验证并登录</button>
+        <div class="back"><button class="link-btn" data-act="auth.back2fa">返回登录</button></div>
+      </div>
+
+      <div class="form-error" id="authMsg"></div>
+      <div class="login-ver" id="loginVer"></div>
+      <div class="login-legal">
+        <a href="/terms/" target="_blank" rel="noopener">用户协议</a>
+        <a href="/privacy/" target="_blank" rel="noopener">隐私政策</a>
+        <a href="/disclaimer/" target="_blank" rel="noopener">免责声明</a>
+      </div>
+    </section>
+  </div>
+</div>
+
+<!-- ═══════════ 应用 ═══════════ -->
+<div class="app" id="appView" hidden data-rail="wide">
+  <aside class="rail">
+    <div class="rail-head">
+      <div class="brand brand-text"><b>Kun</b><i>Client</i></div>
+      <span class="brand-tag">控制台</span>
+    </div>
+    <div class="rail-scroll" id="railNav"></div>
+    <div class="rail-foot">
+      <button class="icon-btn rail-toggle" data-act="shell.rail" title="收起侧栏" aria-label="收起侧栏">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg>
+      </button>
+      <button class="icon-btn" data-act="shell.theme" title="切换主题" aria-label="切换主题">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4a6.6 6.6 0 0 0 9.2 9.2z"/></svg>
+      </button>
+      <button class="icon-btn" data-act="shell.logout" title="退出登录" aria-label="退出登录">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8M6.3 6.5a8 8 0 1 0 11.4 0"/></svg>
+      </button>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <nav class="crumb" id="crumb" aria-label="面包屑"></nav>
+      <div class="topbar-spacer"></div>
+      <button class="search-trigger" data-act="palette.open" title="搜索与跳转（Ctrl K）">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M16.5 16.5L21 21"/></svg>
+        <span>搜索或跳转</span>
+        <span class="sp"></span>
+        <kbd class="kbd">Ctrl K</kbd>
+      </button>
+      <button class="icon-btn" data-act="shell.theme" title="切换主题" aria-label="切换主题">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13.2A8.2 8.2 0 1 1 10.8 4a6.6 6.6 0 0 0 9.2 9.2z"/></svg>
+      </button>
+      <button class="who" id="whoBtn" data-act="shell.usermenu" title="账号菜单">
+        <span class="avatar" id="whoAv">?</span>
+        <span style="text-align:left">
+          <span class="nm" id="whoName">-</span>
+          <span class="rl" id="whoRole">-</span>
+        </span>
+      </button>
+    </header>
+    <main class="view" id="view">
+      <div class="view-inner" id="viewInner"></div>
+    </main>
+  </div>
+</div>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div id="modalRoot"></div>
+
+<input type="file" id="avFile" hidden accept="image/png,image/jpeg,image/webp">
+
+<script type="module" src="./js.v2/main.js"></script>
+</body>
+</html>

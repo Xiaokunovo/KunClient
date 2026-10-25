@@ -1,0 +1,75 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 24,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "ucrt64-static-release",
+      "displayName": "MSYS2 UCRT64 GCC + Static Qt6 (Release, single exe)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build-static",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "E:/msys64/ucrt64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "E:/msys64/ucrt64/bin/c++.exe",
+        "CMAKE_MAKE_PROGRAM": "E:/msys64/ucrt64/bin/ninja.exe",
+        "CMAKE_PREFIX_PATH": "E:/msys64/ucrt64/qt6-static",
+        "KC_FORCE_STATIC_DEPS": "ON",
+        "KC_SIZE_OPT": "ON",
+        "BUILD_TESTING": "OFF"
+      }
+    },
+    {
+      "name": "mingw64-release",
+      "displayName": "MSYS2 MinGW64 GCC + Ninja (Release)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "E:/msys64/mingw64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "E:/msys64/mingw64/bin/c++.exe",
+        "CMAKE_MAKE_PROGRAM": "E:/msys64/mingw64/bin/ninja.exe",
+        "BUILD_TESTING": "ON"
+      }
+    },
+    {
+      "name": "mingw64-debug",
+      "displayName": "MSYS2 MinGW64 GCC + Ninja (Debug)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "E:/msys64/mingw64/bin/gcc.exe",
+        "CMAKE_CXX_COMPILER": "E:/msys64/mingw64/bin/c++.exe",
+        "CMAKE_MAKE_PROGRAM": "E:/msys64/mingw64/bin/ninja.exe",
+        "BUILD_TESTING": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "static-release",
+      "configurePreset": "ucrt64-static-release"
+    },
+    {
+      "name": "release",
+      "configurePreset": "mingw64-release"
+    },
+    {
+      "name": "debug",
+      "configurePreset": "mingw64-debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "release-tests",
+      "configurePreset": "mingw64-release",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

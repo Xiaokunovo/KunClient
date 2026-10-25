@@ -1,50 +1,167 @@
-# ════════════════════════════════════════════════════════════════════════
-#  KunClient —— 开源仓库忽略规则（白名单模式）
+# ═══════════════════════════════════════════════════════════════════════════════
+#  KunClient — 开源仓库忽略规则
 #
-#  本仓库只公开 **C# 客户端源码**（tests/** 下的 .cs / .xaml / .csproj）。
-#  除下方显式放行的条目外，仓库内其余一切默认不纳入版本控制。
+#  设计原则：**排除式**——源码全部入库，只挡三类东西：
+#    ① 任何真实凭据（密钥 / 令牌 / 密码 / 私有配置）
+#    ② 本机开发记录与临时脚本（.workbuddy / .runtime / tmp）
+#    ③ 构建产物与二进制（build-* / dist* / 可执行文件 / 压缩包）
 #
-#  未开源的组件（仅存在于本机，不随仓库分发）：
-#    · C++/Qt6 版 EDL 引擎 —— third_party/swt-edl/（第三方组件）、src/cpp/
-#    · Rust 刷写栈（已冻结）—— src/rust/
-#    · 服务端 / 官网 / 机器人 —— server/、website/、qqbot/
-#    · 构建与部署脚本 —— tools/、*.ps1、*.bat
-#    · 设计文档与原型 —— docs/、prototype/、*.miora、logo-design*
-#    · 构建产物与临时目录 —— publish/、publish_obf/、tmp/、Testing/
-# ════════════════════════════════════════════════════════════════════════
+#  🔴 历史上本仓库是「只公开 C# 客户端」的白名单模式；
+#     2026-10-25 起改为全项目开源（C++/Qt6 + C# + 服务端 + 机器人 + 官网），
+#     因此规则从「放行少数」改成「排除敏感与产物」。
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ── 默认忽略仓库根下的一切，再按白名单放行 ──
-/*
-!/.gitignore
-!/.gitattributes
-!/LICENSE
-!/README.md
-!/KunFlashTool.slnx
-!/tests/
-
-# ── 白名单内仍需排除：构建产物 ──
-tests/**/bin/
-tests/**/obj/
-*.user
-
-# ── 白名单内仍需排除：本机私有配置与运行期日志 ──
-# 注：KunClient.config.json 已脱敏（serverUrl 为占位符）后纳入仓库 ——
-# ServerUrlGuardTests 会断言它存在，缺了会让克隆下来的测试直接失败。
-# KunClient.config.local.json 是本机私有覆盖，仍然排除。
-tests/src/KunClient.App/KunClient.config.local.json
-**/*.local.json
-*.log
-crash.log
-
-# ── 白名单内仍需排除：第三方二进制（运行期由 PlatformToolsManager 自动下载，
-#    详见 tests/src/KunClient.Core/PlatformTools/README.md）──
-tests/src/KunClient.Core/PlatformTools/adb.exe
-tests/src/KunClient.Core/PlatformTools/fastboot.exe
-tests/src/KunClient.Core/PlatformTools/AdbWinApi.dll
-tests/src/KunClient.Core/PlatformTools/AdbWinUsbApi.dll
-
-# ── 通用兜底（供未来在白名单内新增目录时沿用）──
-node_modules/
+# ── ① 凭据与私有配置（最高优先级，任何情况下都不入库）────────────────────────
+# 本地私有配置：含真实域名 / SMTP 密码 / OAuth refreshToken / JWT secret / root 密码
+config.local.json
+**/config.local.json
+*.local.json
 .env
 .env.*
 !.env.example
+
+# OAuth / 令牌缓存
+.runtime/
+**/.runtime/
+*oauth*.json
+*token*.json
+
+# 数据库（含真实用户数据）
+*.sqlite
+*.sqlite3
+*.db
+database.sqlite*
+!database.sqlite.example
+
+# 登录态 / 凭据转储
+login.dat
+
+# ── ② 开发记录与临时目录（含大量真实密钥，绝对排除）──────────────────────────
+.workbuddy/
+.workbuddy-ai/
+tmp/
+**/tmp/
+Testing/
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+
+# _archive 里的服务端 / 官网 / 机器人源码**开源**，但以下仍然排除：
+_archive/server/node_modules/
+_archive/server/database.sqlite*
+_archive/server/config.local.json
+_archive/server/.env
+_archive/server/.runtime/
+_archive/website/node_modules/
+_archive/website/.next/
+_archive/website/out/
+_archive/website/.env.local
+_archive/qqbot/config.local.json
+_archive/qqbot/data/
+
+# ── ③ 构建产物与二进制 ───────────────────────────────────────────────────────
+build/
+build-*/
+**/build/
+**/build-*/
+dist/
+dist-*/
+**/dist/
+**/dist-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+*.ninja
+.ninja_deps
+.ninja_log
+compile_commands.json
+*.o
+*.obj
+*.a
+*.lib
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+_autogen/
+**/*_autogen/
+*.moc
+
+# 发布包与压缩件
+*.7z
+*.zip
+*.tar.gz
+*.rar
+publish/
+publish_obf/
+
+# Rust 构建产物
+src/rust/target/
+**/target/
+**/*.rmeta
+**/*.rlib
+**/.fingerprint/
+
+# 浏览器 / 工具的临时数据目录
+**/tmp-legal/
+**/tmp-*/
+**/*.bin
+
+# .NET 构建中间产物
+bin/
+obj/
+**/bin/
+**/obj/
+
+# ── ④ 编辑器 / 系统 ─────────────────────────────────────────────────────────
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*~
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ── ⑤ 日志与临时输出 ────────────────────────────────────────────────────────
+*.log
+crash.log
+*.tmp
+audit-out/
+
+# 开发期截图与取证图（不是产品资源）
+*-preview.png
+*-verify.png
+before.png
+after.png
+after-small.png
+bg-before-after.png
+crop-*.png
+probe-*.png
+dash-*.png
+offline-*.png
+glass-*.png
+easter-*.png
+dashboard-*.png
+release-*.png
+verify-*.png
+
+# ── ⑥ 运行时数据（机器人 / 服务端）─────────────────────────────────────────
+qqbot-dafeiyu/data/
+qqbot-dafeiyu/__pycache__/
+qqbot-dafeiyu/napcat/
+qqbot-dafeiyu/tmp-*
+qqbot-dafeiyu/config.json
+!qqbot-dafeiyu/config.example.json
+
+**/node_modules/
+_archive/website/.next/
+_archive/website/out/
+
+# ── ⑦ 工具链缓存 ───────────────────────────────────────────────────────────
+tools/dotnet-tools/.store/
+tools/*/.store/
+7z-extra/

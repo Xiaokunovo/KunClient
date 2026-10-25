@@ -1,0 +1,13 @@
+<RCC>
+    <qresource prefix="/styles">
+        <file alias="dark.qss">dark.qss</file>
+        <file alias="light.qss">light.qss</file>
+    </qresource>
+    <qresource prefix="/icons">
+        <file alias="logo.png">logo.png</file>
+        <file alias="logo-badge.png">logo-badge.png</file>
+        <file alias="check-on.png">check-on.png</file>
+        <file alias="check-off-dark.png">check-off-dark.png</file>
+        <file alias="check-off-light.png">check-off-light.png</file>
+    </qresource>
+</RCC>

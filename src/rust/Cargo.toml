@@ -1,0 +1,34 @@
+# KunFlashTool Rust 核心 —— workspace
+#
+# 🔴 2026-10-08 重建说明：`docs/rust-ffi-migration.md`（2026-09-27）记录过「阶段 0 已完成」，
+#    但那些代码（`src/rust/kunflash-core` / `kunflash-ffi` / `package/`）在本仓库里**已经不存在**，
+#    只剩 `.workbuddy/tmp/ffi_probe/` 里的产物 dll 与探针。所以这里是从头重建，
+#    不是接着写。新建时优先服从两条既有结论：
+#      ① cdylib 路线可行、产物**不能拖 mingw 运行时**（x86_64-pc-windows-gnu）
+#      ② 单文件发布要 `IncludeNativeLibrariesForSelfExtract` + `IncludeAllContentForSelfExtract`
+#
+# ⚠️ 依赖策略：**当前刻意保持零第三方依赖**（`cargo build --offline` 必须能过）。
+#    本机 crates.io 走阿里云镜像，但离线下只有本地缓存命中才能编译 —— 而 FFI 层要的
+#    只是「XML 属性扫描 + JSON 输出」，手写两百行即可，既免了离线/版本风险，
+#    也不会把 serde 那一坨（几百 KB）塞进 dll。等真需要解压/解密（ofp/ops）时再逐个评估加依赖。
+
+[workspace]
+resolver = "3"
+members = [
+    "kunflash-core",
+    "kunflash-ffi",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+
+[profile.release]
+# 体积优先：这一条直接决定 dll 大小（用户对 exe 体积有硬要求）
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
+# 🔴 不要改成 "abort"：FFI 侧每个导出都靠 catch_unwind 把 panic 转成 JSON 错误信封。
+#    panic=abort 会让那条护栏直接失效 —— 刷机工具最可能 panic 的时刻正是「super 写了一半」。
+panic = "unwind"

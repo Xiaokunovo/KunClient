@@ -1,0 +1,77 @@
+{
+  "_说明": "KunClient 服务端配置模板。复制为 config.json（公共默认值）或 config.local.json（本机覆盖，优先级更高）后按需修改。删除某字段或整个文件则回退内置默认值；环境变量优先级最高。",
+  "_优先级": "环境变量 > config.local.json > config.json > 内置默认值",
+  "_可用环境变量": [
+    "PORT",
+    "JWT_SECRET",
+    "JWT_SECRET_FILE",
+    "PUBLIC_URL",
+    "DB_PATH",
+    "ADMIN_USER",
+    "ADMIN_PASS",
+    "ADMIN_EMAIL",
+    "MAIL_HOST",
+    "MAIL_PORT",
+    "MAIL_SECURE",
+    "MAIL_USER",
+    "MAIL_PASS",
+    "MAIL_FROM",
+    "MAIL_DISABLE",
+    "MAIL_AUTH_TYPE",
+    "MAIL_OAUTH_CLIENT_ID",
+    "MAIL_OAUTH_CLIENT_SECRET",
+    "MAIL_OAUTH_REFRESH_TOKEN",
+    "DEVELOPER_USER",
+    "DEVELOPER_PASS"
+  ],
+  "port": 3000,
+  "jwt_secret": "REPLACE_WITH_RANDOM_LONG_STRING（留空则自动生成到 server/.runtime/jwt.secret）",
+  "public_url": "http://your-server-ip:3000（留空则回退 http://localhost:<port>）",
+  "db_path": "（留空则使用 server/database.sqlite）",
+  "admin": {
+    "username": "admin",
+    "password": "REPLACE_WITH_ADMIN_PASSWORD（留空则跳过管理员播种/同步）",
+    "sync": false
+  },
+  "developer": {
+    "_说明": "开发者账号（最高权，全局唯一）。新规则下任何角色都无法『创建』开发者，首位开发者只能由这里播种；若该账号已存在，每次启动会把它校正为 developer（即『设为最高权』）。",
+    "username": "your-developer-username",
+    "password": "REPLACE_WITH_DEVELOPER_PASSWORD（账号不存在时用于创建；留空则只提升已存在的账号）",
+    "sync": false
+  },
+  "admin_email": "admin@example.com（接收验证码/反馈通知的邮箱）",
+  "mail": {
+    "_说明": "发信 SMTP。authType='password' 走基础认证(user/pass，QQ 邮箱/自建 SMTP)；authType='oauth2' 走现代认证(Outlook.com / Microsoft 365 必需)。Outlook 用 587=STARTTLS 故 secure=false。",
+    "enabled": false,
+    "host": "smtp.qq.com",
+    "port": 465,
+    "secure": true,
+    "user": "you@example.com",
+    "pass": "REPLACE_WITH_SMTP_AUTH_CODE",
+    "from": "KunClient <you@example.com>",
+    "authType": "password",
+    "oauth2": {
+      "clientId": "（仅 authType=oauth2 用；Azure 应用注册的 Application (client) ID）",
+      "clientSecret": "（机密客户端才需要；公共客户端可留空）",
+      "refreshToken": "（一次性 OAuth 授权换取的 refresh_token）",
+      "accessToken": "（可留空，nodemailer 会自动用 refreshToken 刷新）"
+    },
+    "_Outlook示例": {
+      "enabled": true,
+      "host": "smtp-mail.outlook.com",
+      "port": 587,
+      "secure": false,
+      "authType": "oauth2",
+      "user": "yourname@outlook.com",
+      "from": "KunClient <yourname@outlook.com>"
+    }
+  },
+  "deploy": {
+    "_说明": "部署脚本 tools/deploy-config.js 读取本节点；也可用环境变量 DEPLOY_HOST / DEPLOY_SSH_PORT / DEPLOY_USER / DEPLOY_PASSWORD / DEPLOY_REMOTE_BASE / DEPLOY_APP_PORT 覆盖。",
+    "host": "your-server-ip",
+    "ssh_port": 22,
+    "user": "root",
+    "password": "REPLACE_WITH_SSH_PASSWORD_OR_USE_DEPLOY_PASSWORD_ENV",
+    "remote_base": "/www/wwwroot/KunClient-server"
+  }
+}

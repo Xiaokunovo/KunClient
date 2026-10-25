@@ -1,0 +1,1108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>KunClient · C++ 代码审计仪表盘 · 43 项发现</title>
+<style>
+/* ============================================================= tokens */
+:root{
+  --bg:#05070d;
+  --glass: rgba(20,26,40,.52);
+  --glass-2: rgba(255,255,255,.045);
+  --line: rgba(255,255,255,.085);
+  --line-2: rgba(255,255,255,.14);
+  --txt: #e8eef9;
+  --txt-2: #a7b4ca;
+  --txt-3: #6f7d95;
+  --critical:#ff4d6a;
+  --high:#ff9a3c;
+  --medium:#ffd166;
+  --low:#7fa8d9;
+  --accent:#7c9cff;
+  --accent-2:#59e0c8;
+  --r-lg: 26px;
+  --r-md: 18px;
+  --r-sm: 12px;
+  --shadow: 0 28px 60px -28px rgba(0,0,0,.85), 0 2px 8px rgba(0,0,0,.35);
+  --mono: "Cascadia Mono", "SF Mono", "JetBrains Mono", "Cascadia Code", Consolas,
+          "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; min-height:100vh; color:var(--txt); font-family:var(--sans);
+  font-size:15px; line-height:1.6; letter-spacing:.01em;
+  background:var(--bg);
+  background-image:
+    radial-gradient(1200px 640px at 10% -10%, rgba(93,124,255,.22), transparent 62%),
+    radial-gradient(980px 560px at 92% -2%, rgba(255,77,106,.15), transparent 60%),
+    radial-gradient(1100px 760px at 50% 112%, rgba(70,224,200,.11), transparent 64%),
+    linear-gradient(180deg,#05070d 0%,#060911 45%,#04060b 100%);
+  background-attachment:fixed;
+  overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{ /* 顶部极光带 */
+  content:""; position:fixed; inset:-20% 0 auto 0; height:52vh; pointer-events:none; z-index:0;
+  background:
+    radial-gradient(closest-side at 30% 40%, rgba(124,156,255,.16), transparent 100%),
+    radial-gradient(closest-side at 72% 24%, rgba(255,154,60,.10), transparent 100%);
+  filter:blur(30px);
+}
+.orbs{position:fixed; inset:0; overflow:hidden; pointer-events:none; z-index:0}
+.orbs i{position:absolute; display:block; border-radius:50%; filter:blur(72px); opacity:.5}
+.orbs i:nth-child(1){width:520px;height:520px;left:-160px;top:-120px;background:rgba(86,116,255,.34)}
+.orbs i:nth-child(2){width:440px;height:440px;right:-140px;top:80px;background:rgba(255,77,106,.22)}
+.orbs i:nth-child(3){width:600px;height:600px;left:42%;top:58%;background:rgba(60,220,200,.16)}
+
+/* ============================================================= glass */
+.glass{
+  position:relative;
+  background: linear-gradient(168deg, rgba(255,255,255,.075), rgba(255,255,255,.022) 46%, rgba(255,255,255,.035));
+  border:1px solid var(--line);
+  border-radius:var(--r-lg);
+  backdrop-filter: blur(28px) saturate(170%);
+  -webkit-backdrop-filter: blur(28px) saturate(170%);
+  box-shadow: var(--shadow), inset 0 1px 0 rgba(255,255,255,.13), inset 0 -1px 0 rgba(0,0,0,.25);
+}
+.glass::after{ /* 玻璃高光边 */
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background: linear-gradient(150deg, rgba(255,255,255,.10), transparent 26%, transparent 74%, rgba(255,255,255,.05));
+  mask: linear-gradient(#000, #000) content-box, linear-gradient(#000, #000);
+  -webkit-mask: linear-gradient(#000,#000) content-box, linear-gradient(#000,#000);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  padding:1px; opacity:.55;
+}
+.skip{position:absolute;left:-9999px;top:0;z-index:99;background:#111a2b;color:#fff;padding:10px 16px;border-radius:10px}
+.skip:focus{left:12px;top:12px}
+
+/* ============================================================= topbar */
+.topbar{
+  position:sticky; top:0; z-index:40;
+  display:flex; align-items:center; gap:18px; justify-content:space-between;
+  padding:12px clamp(16px,3vw,40px);
+  background: linear-gradient(180deg, rgba(8,11,18,.86), rgba(8,11,18,.55));
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+  border-bottom:1px solid rgba(255,255,255,.07);
+}
+.brand{display:flex; align-items:center; gap:13px; min-width:0}
+.logo{
+  width:38px;height:38px;border-radius:12px;display:grid;place-items:center;flex:0 0 auto;
+  background: linear-gradient(150deg, rgba(124,156,255,.35), rgba(89,224,200,.18));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.3), 0 8px 22px -10px rgba(124,156,255,.9);
+  font-family:var(--mono); font-size:17px; color:#dfe8ff;
+}
+.brand h1{margin:0; font-size:15.5px; font-weight:650; letter-spacing:.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.brand p{margin:1px 0 0; font-size:11.5px; color:var(--txt-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.topbar-right{display:flex; align-items:center; gap:10px; flex:0 0 auto}
+.pill{
+  font-size:11.5px; color:var(--txt-2); padding:6px 12px; border-radius:999px;
+  border:1px solid var(--line-2); background:rgba(255,255,255,.04); white-space:nowrap;
+}
+.live{
+  display:flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12.5px;
+  padding:7px 14px; border-radius:999px; color:#dfe8ff;
+  border:1px solid rgba(124,156,255,.4); background:rgba(124,156,255,.13);
+  box-shadow:0 0 24px -6px rgba(124,156,255,.7) inset;
+}
+.livedot{width:7px;height:7px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 10px var(--accent-2);animation:pulse 2.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.82)}}
+
+/* ============================================================= layout */
+main{position:relative; z-index:1; width:min(1320px,100%); margin:0 auto; padding:clamp(16px,2.4vw,32px) clamp(12px,2.4vw,32px) 40px; display:grid; gap:clamp(14px,1.6vw,20px)}
+
+/* ============================================================= hero */
+.hero{display:grid; grid-template-columns: 300px 1fr; gap:clamp(14px,1.6vw,20px); align-items:stretch}
+@media (max-width:960px){.hero{grid-template-columns:1fr}}
+.ring-card{padding:22px 22px 18px; display:flex; flex-direction:column; align-items:center; gap:6px; overflow:hidden}
+.ring-wrap{position:relative; width:min(250px,64vw); aspect-ratio:1; margin:2px auto 0}
+.ring{width:100%; height:100%; display:block; overflow:visible}
+.ring-track{fill:none; stroke:rgba(255,255,255,.07); stroke-width:22}
+.ring-seg{fill:none; stroke-width:22; stroke-linecap:round; transition:opacity .3s, stroke-width .3s}
+.ring-center{position:absolute; inset:0; display:grid; place-content:center; text-align:center; gap:0}
+.ring-num{font-family:var(--mono); font-size:clamp(34px,4.2vw,44px); font-weight:600; line-height:1.05;
+  background:linear-gradient(180deg,#fff,#9fb3d5); -webkit-background-clip:text; background-clip:text; color:transparent;
+  filter:drop-shadow(0 2px 12px rgba(124,156,255,.35))}
+.ring-cap{font-size:11.5px; letter-spacing:.22em; color:var(--txt-3); text-transform:uppercase; margin-top:4px}
+.ring-sub{margin:12px 0 0; font-size:12px; color:var(--txt-3); text-align:center; line-height:1.55}
+.ring-sub b{color:#ffb3bf; font-weight:600}
+.ring-badge{display:flex; gap:8px; flex-wrap:wrap; justify-content:center; margin-top:10px}
+.rb{font-size:11px; font-family:var(--mono); padding:4px 9px; border-radius:8px; border:1px solid rgba(255,255,255,.1); color:var(--txt-2); background:rgba(255,255,255,.03)}
+
+/* ============================================================= stats */
+.stats{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:clamp(10px,1.2vw,16px)}
+@media (max-width:560px){.stats{grid-template-columns:1fr}}
+.stat{
+  position:relative; text-align:left; cursor:pointer; font-family:inherit; color:inherit;
+  padding:18px 20px 16px; border-radius:var(--r-md);
+  background: linear-gradient(160deg, rgba(var(--srgb),.16), rgba(255,255,255,.028) 58%, rgba(255,255,255,.012));
+  border:1px solid rgba(var(--srgb),.26);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 20px 44px -26px rgba(var(--srgb),.9);
+  transition: transform .22s cubic-bezier(.2,.8,.2,1), border-color .22s, box-shadow .22s, background .22s;
+  overflow:hidden; min-height:126px; display:flex; flex-direction:column; justify-content:space-between; gap:10px;
+}
+.stat::before{
+  content:""; position:absolute; width:180px; height:180px; right:-60px; top:-90px; border-radius:50%;
+  background: radial-gradient(closest-side, rgba(var(--srgb),.55), transparent); filter:blur(18px); opacity:.55;
+  transition:opacity .22s, transform .22s;
+}
+.stat:hover{transform:translateY(-2px); border-color:rgba(var(--srgb),.52); box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 26px 52px -24px rgba(var(--srgb),.95)}
+.stat:hover::before{opacity:.9; transform:scale(1.08)}
+.stat[aria-pressed="false"]{opacity:.42; filter:saturate(.35); box-shadow:none}
+.stat[aria-pressed="false"]:hover{opacity:.72; filter:saturate(.7)}
+.stat-label{display:flex; align-items:center; gap:8px; font-size:12.5px; font-weight:600; letter-spacing:.04em; color:#dce5f5; position:relative}
+.stat-dot{width:8px;height:8px;border-radius:50%;background:rgb(var(--srgb));box-shadow:0 0 12px rgba(var(--srgb),.95)}
+.stat-cn{font-weight:400; color:var(--txt-3); font-size:11.5px; letter-spacing:.06em}
+.stat-num{
+  font-family:var(--mono); font-size:clamp(36px,3.6vw,46px); font-weight:600; line-height:1;
+  color:#fff; position:relative; font-variant-numeric:tabular-nums;
+  text-shadow:0 0 26px rgba(var(--srgb),.55);
+}
+.stat-foot{display:flex; align-items:center; gap:10px; position:relative}
+.stat-bar{flex:1; height:4px; border-radius:99px; background:rgba(255,255,255,.09); overflow:hidden}
+.stat-bar i{display:block; height:100%; border-radius:99px; background:rgb(var(--srgb)); box-shadow:0 0 12px rgba(var(--srgb),.9);
+  transition:width .9s cubic-bezier(.2,.8,.2,1)}
+.stat-pct{font-family:var(--mono); font-size:11px; color:var(--txt-3); min-width:38px; text-align:right}
+.stat .stat-cn{display:inline}
+
+/* ============================================================= heatmap */
+.card-head{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; margin-bottom:16px}
+.card-head h2{margin:0; font-size:15px; font-weight:650; letter-spacing:.04em}
+.card-head .sub{font-size:12px; color:var(--txt-3)}
+.card-head .spacer{flex:1}
+.heat-card{padding:clamp(16px,2vw,24px)}
+.heat-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:10px}
+@media (max-width:520px){.heat-grid{grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px}}
+.tile{
+  position:relative; cursor:pointer; font-family:inherit; text-align:left; color:var(--txt);
+  padding:14px 14px 13px; border-radius:15px; overflow:hidden; min-height:112px;
+  display:flex; flex-direction:column; gap:7px; justify-content:space-between;
+  background: linear-gradient(158deg, var(--g1), var(--g2) 62%, rgba(255,255,255,.016));
+  border:1px solid var(--bord);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), 0 14px 34px -24px var(--glow);
+  transition: transform .2s cubic-bezier(.2,.8,.2,1), box-shadow .2s, border-color .2s, filter .2s;
+}
+.tile::before{
+  content:""; position:absolute; inset:auto -30% -60% -30%; height:120px; border-radius:50%;
+  background: radial-gradient(closest-side, var(--glow), transparent); filter:blur(16px); opacity:0; transition:opacity .25s;
+}
+.tile:hover{transform:translateY(-3px); filter:brightness(1.18) saturate(1.06); box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 22px 42px -20px var(--glow)}
+.tile:hover::before{opacity:.85}
+.tile[aria-pressed="true"]{box-shadow: inset 0 0 0 1.5px var(--bord), 0 22px 46px -18px var(--glow); filter:brightness(1.16) saturate(1.18)}
+.tile[data-empty="1"]{opacity:.34}
+.tile-top{display:flex; align-items:flex-start; justify-content:space-between; gap:8px; position:relative}
+.tile-name{font-family:var(--mono); font-size:12.5px; font-weight:600; letter-spacing:.02em; color:#eef3ff; word-break:break-all; line-height:1.35}
+.tile-num{font-family:var(--mono); font-size:20px; font-weight:600; line-height:1; color:#fff; text-shadow:0 0 16px rgba(var(--tint),.8)}
+.tile-desc{font-size:10.8px; color:rgba(226,234,248,.62); line-height:1.45; position:relative}
+.tile-mix{display:flex; gap:4px; flex-wrap:wrap; position:relative}
+.mx{font-family:var(--mono); font-size:10px; padding:1.5px 6px; border-radius:6px; border:1px solid transparent; line-height:1.5}
+.mx.c{color:#ff879a; background:rgba(255,77,106,.16); border-color:rgba(255,77,106,.32)}
+.mx.h{color:#ffbc7a; background:rgba(255,154,60,.15); border-color:rgba(255,154,60,.30)}
+.mx.m{color:#ffe09a; background:rgba(255,209,102,.13); border-color:rgba(255,209,102,.26)}
+.mx.l{color:#a9c6e8; background:rgba(127,168,217,.13); border-color:rgba(127,168,217,.26)}
+.heat-note{margin:14px 0 0; font-size:11.5px; color:var(--txt-3)}
+
+/* ============================================================= toolbar */
+.toolbar{padding:clamp(14px,1.8vw,20px); display:grid; gap:14px}
+.toolrow{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+.search{
+  position:relative; flex:1 1 320px; min-width:220px;
+}
+.search svg{position:absolute; left:14px; top:50%; transform:translateY(-50%); width:16px; height:16px; opacity:.5}
+.search input{
+  width:100%; padding:12px 40px 12px 40px; border-radius:14px; color:var(--txt);
+  background:rgba(255,255,255,.045); border:1px solid var(--line);
+  font-family:var(--sans); font-size:13.5px; outline:none;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.search input::placeholder{color:var(--txt-3)}
+.search input:focus{
+  border-color:rgba(124,156,255,.65); background:rgba(124,156,255,.075);
+  box-shadow:0 0 0 4px rgba(124,156,255,.12), 0 0 30px -8px rgba(124,156,255,.7);
+}
+.search kbd{
+  position:absolute; right:10px; top:50%; transform:translateY(-50%);
+  font-family:var(--mono); font-size:11px; color:var(--txt-3);
+  border:1px solid var(--line-2); border-radius:6px; padding:1px 6px; background:rgba(0,0,0,.25);
+}
+.search.has-q kbd{display:none}
+.search .clear{
+  position:absolute; right:8px; top:50%; transform:translateY(-50%); display:none;
+  width:24px;height:24px; border-radius:50%; border:1px solid var(--line-2); background:rgba(255,255,255,.06);
+  color:var(--txt-2); cursor:pointer; font-size:13px; line-height:1; align-items:center; justify-content:center;
+}
+.search.has-q .clear{display:flex}
+.btn{
+  cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--txt-2);
+  padding:10px 14px; border-radius:12px; border:1px solid var(--line);
+  background:rgba(255,255,255,.04); transition:all .18s; white-space:nowrap;
+}
+.btn:hover{color:var(--txt); border-color:var(--line-2); background:rgba(255,255,255,.075)}
+.btn:active{transform:translateY(1px)}
+.btn-ghost{color:var(--txt-3)}
+.filters{display:flex; gap:9px; flex-wrap:wrap; align-items:center}
+.flabel{font-size:11px; letter-spacing:.14em; color:var(--txt-3); text-transform:uppercase; margin-right:2px}
+.chips{display:flex; gap:7px; flex-wrap:wrap}
+.chip{
+  cursor:pointer; font-family:inherit; font-size:12px; color:var(--txt-2);
+  display:inline-flex; align-items:center; gap:7px; padding:6px 11px; border-radius:999px;
+  border:1px solid var(--line); background:rgba(255,255,255,.032); transition:all .18s;
+}
+.chip .n{font-family:var(--mono); font-size:10.5px; color:var(--txt-3); padding-left:2px}
+.chip:hover{color:var(--txt); border-color:var(--line-2); background:rgba(255,255,255,.06)}
+.chip[aria-pressed="true"]{color:#fff; border-color:rgba(var(--crgb,124,156,255),.62); background:rgba(var(--crgb,124,156,255),.16); box-shadow:0 0 22px -8px rgba(var(--crgb,124,156,255),.9)}
+.chip[aria-pressed="true"] .n{color:rgba(255,255,255,.72)}
+.chip.zero{opacity:.35}
+.chip.sev.active-sev{color:#fff}
+.sep-dot{width:1px; height:20px; background:var(--line); margin:0 4px}
+.hintkeys{font-size:11px; color:var(--txt-3); display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.hintkeys kbd{font-family:var(--mono); font-size:10.5px; border:1px solid var(--line-2); border-radius:5px; padding:0 5px; color:var(--txt-2); background:rgba(0,0,0,.22)}
+
+/* ============================================================= status bar */
+.statusbar{
+  padding:13px clamp(14px,1.8vw,20px); display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  border-radius:var(--r-md); overflow:hidden;
+  background: linear-gradient(96deg, rgba(124,156,255,.16), rgba(124,156,255,.05) 42%, rgba(89,224,200,.07));
+  border:1px solid rgba(124,156,255,.24);
+}
+.status-left{display:flex; align-items:baseline; gap:8px; min-width:0}
+.status-num{font-family:var(--mono); font-size:24px; font-weight:600; color:#fff; line-height:1; font-variant-numeric:tabular-nums}
+.status-of{font-size:12px; color:var(--txt-2)}
+.status-of b{font-family:var(--mono); color:var(--txt)}
+.status-filters{display:flex; gap:6px; flex-wrap:wrap; align-items:center; min-width:0}
+.tagc{
+  font-size:11px; padding:2px 8px; border-radius:7px; color:#cfe0ff;
+  background:rgba(124,156,255,.18); border:1px solid rgba(124,156,255,.32); white-space:nowrap;
+}
+.tagc.warn{color:#ffe0b0; background:rgba(255,154,60,.14); border-color:rgba(255,154,60,.3)}
+.status-track{flex:1 1 160px; height:6px; border-radius:99px; background:rgba(255,255,255,.08); overflow:hidden; min-width:120px}
+.status-track i{display:block; height:100%; width:100%; border-radius:99px;
+  background:linear-gradient(90deg,#5b7dff,#59e0c8); box-shadow:0 0 18px rgba(89,224,200,.6);
+  transition:width .55s cubic-bezier(.2,.8,.2,1)}
+.status-right{margin-left:auto; font-size:11px; color:var(--txt-3); display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.linkbtn{cursor:pointer; font-family:inherit; background:none; border:none; color:#9db6ff; font-size:11.5px; padding:0; text-decoration:underline; text-underline-offset:3px}
+.linkbtn:hover{color:#cdd9ff}
+
+/* ============================================================= list */
+.board{display:grid; gap:14px}
+.list{display:grid; gap:9px}
+.item{
+  border-radius:var(--r-md); overflow:hidden; position:relative;
+  background: linear-gradient(150deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+  border:1px solid var(--line);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  transition: border-color .2s, box-shadow .25s, transform .2s, background .2s;
+  scroll-margin-top:90px;
+}
+.item::before{ /* 级别色条 */
+  content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:rgb(var(--irgb)); box-shadow:0 0 18px rgba(var(--irgb),.85); opacity:.9;
+}
+.item:hover{border-color:rgba(255,255,255,.16); background:linear-gradient(150deg, rgba(255,255,255,.075), rgba(255,255,255,.024))}
+.item.open{border-color:rgba(var(--irgb),.48); box-shadow:0 26px 50px -30px rgba(var(--irgb),.9), inset 0 0 0 1px rgba(var(--irgb),.10)}
+.item-head{
+  width:100%; text-align:left; cursor:pointer; font-family:inherit; color:inherit; background:none; border:none;
+  display:grid; grid-template-columns:auto 1fr auto; gap:12px; align-items:center;
+  padding:13px 16px 13px 18px;
+}
+.item-head:focus-visible{outline:2px solid rgba(124,156,255,.8); outline-offset:-3px; border-radius:14px}
+.badge{
+  flex:0 0 auto; font-family:var(--mono); font-size:10.5px; font-weight:600; letter-spacing:.06em;
+  padding:6px 9px; border-radius:9px; min-width:70px; text-align:center; line-height:1;
+  color:#0a0d14;
+  background:rgb(var(--irgb));
+  box-shadow:0 0 24px -6px rgba(var(--irgb),.95), inset 0 1px 0 rgba(255,255,255,.4);
+}
+.badge.critical{color:#1a0208}
+.badge.medium{color:#231a00}
+.badge.low{color:#06101c}
+.row-main{min-width:0; display:flex; flex-direction:column; gap:3px}
+.row-line1{display:flex; align-items:baseline; gap:8px; flex-wrap:wrap; min-width:0}
+.loc{
+  font-family:var(--mono); font-size:12px; color:#cfe0ff; background:rgba(124,156,255,.13);
+  border:1px solid rgba(124,156,255,.22); padding:1px 7px; border-radius:6px; white-space:nowrap;
+}
+.loc-more{font-family:var(--mono); font-size:10.5px; color:var(--txt-3)}
+.dash{color:var(--txt-3); font-size:11px}
+.ttl{font-size:13.8px; font-weight:550; color:#e9effb; letter-spacing:.005em}
+.ttl mark{background:rgba(255,209,102,.28); color:#fff3cd; border-radius:3px; padding:0 2px}
+.row-line2{display:flex; align-items:center; gap:8px; flex-wrap:wrap; font-size:11px; color:var(--txt-3)}
+.idtag{font-family:var(--mono); color:var(--txt-3); letter-spacing:.04em}
+.modtag{
+  font-size:10.5px; padding:1.5px 7px; border-radius:6px; color:#b9c8e4;
+  background:rgba(255,255,255,.05); border:1px solid var(--line);
+}
+.modtag.alt{color:#93a3bd; background:rgba(255,255,255,.022); border-color:rgba(255,255,255,.07)}
+.chev{width:26px;height:26px; border-radius:50%; display:grid; place-items:center; flex:0 0 auto;
+  border:1px solid var(--line); color:var(--txt-3); transition:transform .25s, color .2s, border-color .2s, background .2s}
+.chev svg{width:12px;height:12px}
+.item:hover .chev{color:var(--txt-2); border-color:var(--line-2)}
+.item.open .chev{transform:rotate(180deg); color:#fff; background:rgba(var(--irgb),.22); border-color:rgba(var(--irgb),.5)}
+
+/* ============================================================= body */
+.item-body{display:none; padding:2px 18px 18px 18px; border-top:1px solid rgba(255,255,255,.07)}
+.item.open .item-body{display:block; animation:slidein .3s cubic-bezier(.2,.8,.2,1)}
+@keyframes slidein{from{opacity:0; transform:translateY(-6px)}to{opacity:1; transform:none}}
+.sec{margin-top:14px}
+.sec:first-child{margin-top:14px}
+.meta-strip{
+  display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 4px; font-size:11px; color:var(--txt-3);
+}
+.ms-item{display:inline-flex; align-items:center; gap:6px; padding:3px 9px; border-radius:8px;
+  background:rgba(255,255,255,.035); border:1px solid rgba(255,255,255,.07)}
+.ms-item i{width:6px; height:6px; border-radius:50%; display:block}
+.ms-item b{color:#cdd9ec; font-weight:600; font-family:var(--mono); font-size:10.5px}
+.item-body > .sec:first-of-type{margin-top:16px}
+.sec-h{
+  margin:0 0 8px; font-size:11px; font-weight:650; letter-spacing:.14em; text-transform:uppercase; color:#9fb0cc;
+  display:flex; align-items:center; gap:8px;
+}
+.sec-h::before{content:""; width:5px;height:5px;border-radius:50%;background:rgb(var(--irgb));box-shadow:0 0 10px rgba(var(--irgb),.9)}
+.sec-h:empty{display:none}
+.sec p{margin:0; font-size:13.2px; line-height:1.78; color:#c9d5e8}
+.sec p code, .sec td code, .notice code{
+  font-family:var(--mono); font-size:11.8px; color:#ffd9a8; background:rgba(255,154,60,.11);
+  border:1px solid rgba(255,154,60,.18); padding:.5px 5px; border-radius:5px; word-break:break-word;
+}
+.sec strong{color:#fff; font-weight:650}
+pre.code{
+  margin:0; padding:14px 16px; border-radius:14px; overflow:auto; max-height:460px;
+  background: linear-gradient(180deg, rgba(3,6,12,.82), rgba(6,10,18,.9));
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), inset 0 0 40px rgba(0,0,0,.4);
+  font-family:var(--mono); font-size:12.1px; line-height:1.72; color:#c7d3e6;
+  tab-size:2; white-space:pre; -webkit-overflow-scrolling:touch;
+}
+pre.code::-webkit-scrollbar{height:9px;width:9px}
+pre.code::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16); border-radius:9px}
+pre.code::-webkit-scrollbar-track{background:transparent}
+pre.code .cm{color:#5f728a; font-style:italic}
+pre.code .add{color:#7ee2b8; background:rgba(89,224,184,.09); display:block; margin:0 -16px; padding:0 16px}
+pre.code .del{color:#ff8a9c; background:rgba(255,77,106,.09); display:block; margin:0 -16px; padding:0 16px}
+.code-head{
+  display:flex; align-items:center; justify-content:space-between; gap:10px; margin:0 0 7px;
+  font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--txt-3);
+}
+.code-dots{display:flex; gap:5px}
+.code-dots i{width:7px;height:7px;border-radius:50%;background:rgba(255,255,255,.16);display:block}
+.notice{
+  display:flex; gap:10px; padding:12px 14px; border-radius:13px; font-size:12.8px; line-height:1.7;
+  background:rgba(124,156,255,.09); border:1px solid rgba(124,156,255,.22); color:#c9d6ef;
+}
+.notice .nt{font-weight:650; color:#dbe6ff; white-space:nowrap}
+.notice.warn{background:rgba(255,154,60,.09); border-color:rgba(255,154,60,.24); color:#f4dcc2}
+.notice.warn .nt{color:#ffcf96}
+.notice.danger{background:rgba(255,77,106,.10); border-color:rgba(255,77,106,.26); color:#f8d3da}
+.notice.danger .nt{color:#ff9fb0}
+.notice code{background:rgba(255,255,255,.07); border-color:rgba(255,255,255,.1); color:#ffe6c2}
+.tbl-wrap{overflow:auto; border-radius:13px; border:1px solid rgba(255,255,255,.09)}
+table{border-collapse:collapse; width:100%; font-size:12.4px; min-width:440px}
+thead th{
+  text-align:left; padding:9px 13px; font-size:10.5px; letter-spacing:.1em; text-transform:uppercase;
+  color:#9fb0cc; background:rgba(255,255,255,.055); border-bottom:1px solid rgba(255,255,255,.1); font-weight:600; white-space:nowrap;
+}
+tbody td{padding:9px 13px; border-bottom:1px solid rgba(255,255,255,.055); color:#c4d0e3; vertical-align:top; line-height:1.65}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:rgba(255,255,255,.025)}
+tbody td:first-child{font-family:var(--mono); color:#dbe6fa; white-space:nowrap}
+.sec-h + .tbl-wrap{margin-top:2px}
+
+/* ============================================================= empty */
+.empty{
+  padding:52px 24px; text-align:center; border-radius:var(--r-md); border:1px dashed rgba(255,255,255,.14);
+  background:rgba(255,255,255,.018);
+}
+.empty .em{font-family:var(--mono); font-size:30px; color:var(--txt-3); margin-bottom:8px}
+.empty h3{margin:0 0 6px; font-size:15px; font-weight:600}
+.empty p{margin:0 0 16px; font-size:12.5px; color:var(--txt-3)}
+
+/* ============================================================= good */
+.good-card{padding:clamp(14px,1.8vw,18px) clamp(16px,2vw,22px)}
+details.good summary{
+  cursor:pointer; list-style:none; display:flex; align-items:center; gap:10px; font-size:13px; font-weight:600; color:#dbe6f6;
+}
+details.good summary::-webkit-details-marker{display:none}
+details.good summary .okcount{font-family:var(--mono); font-size:11px; color:#7ee2b8; border:1px solid rgba(89,224,184,.35); background:rgba(89,224,184,.1); padding:2px 8px; border-radius:99px}
+details.good summary .arw{margin-left:auto; color:var(--txt-3); transition:transform .2s}
+details.good[open] summary .arw{transform:rotate(180deg)}
+.good-list{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:8px; margin-top:14px}
+.good-item{display:flex; gap:9px; padding:9px 12px; border-radius:11px; background:rgba(89,224,184,.045); border:1px solid rgba(89,224,184,.14); font-size:12.2px; color:#bfd6cd; line-height:1.55}
+.good-item b{color:#8fe8c6; font-weight:600}
+.good-item .ct{font-family:var(--mono); font-size:10.5px; color:#6fd3ae; padding-top:2px; flex:0 0 auto}
+
+footer{
+  position:relative; z-index:1; text-align:center; font-size:11.5px; color:var(--txt-3);
+  padding:8px 20px 40px; line-height:1.9;
+}
+footer b{color:var(--txt-2); font-weight:500}
+
+/* ============================================================= tooltip */
+#tip{
+  position:fixed; z-index:90; pointer-events:none; opacity:0; transform:translateY(6px) scale(.98);
+  transition:opacity .16s, transform .16s; max-width:340px;
+  padding:14px 16px; border-radius:15px;
+  background:linear-gradient(165deg, rgba(24,32,48,.97), rgba(12,18,29,.97));
+  border:1px solid rgba(255,255,255,.16);
+  box-shadow:0 30px 60px -24px rgba(0,0,0,.95), inset 0 1px 0 rgba(255,255,255,.12);
+  backdrop-filter:blur(20px);
+}
+#tip.show{opacity:1; transform:none}
+#tip .t-name{font-family:var(--mono); font-size:12px; color:#fff; font-weight:600}
+#tip .t-desc{font-size:10.8px; color:var(--txt-3); margin-top:2px}
+#tip .t-row{display:flex; gap:6px; margin-top:9px; flex-wrap:wrap}
+#tip .t-list{margin:9px 0 0; padding:8px 0 0; border-top:1px solid rgba(255,255,255,.09); display:grid; gap:5px}
+#tip .t-li{display:flex; gap:7px; font-size:11px; color:#b7c5db; line-height:1.45}
+#tip .t-li i{font-style:normal; font-family:var(--mono); font-size:9.5px; color:#0b0f17; background:rgb(var(--irgb)); border-radius:4px; padding:0 4px; flex:0 0 auto; height:15px; line-height:15px}
+#tip .t-more{font-size:10.5px; color:var(--txt-3); margin-top:4px}
+
+/* ============================================================= responsive */
+@media (max-width:860px){
+  .card-head h2{font-size:14px}
+  .item-head{padding:12px 14px 12px 16px; gap:10px}
+  .badge{min-width:64px; font-size:10px; padding:5px 7px}
+  .ttl{font-size:13px}
+}
+@media (max-width:640px){
+  body{font-size:14px}
+  .topbar{padding:10px 14px; gap:10px}
+  .brand p{display:none}
+  .pill{display:none}
+  .hero{grid-template-columns:1fr}
+  .ring-card{padding:18px 16px}
+  .heat-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .heat-card{padding:14px 13px}
+  .toolbar{gap:12px}
+  .statusbar{padding:11px 13px; gap:10px}
+  .status-track{flex:1 1 100%; order:3}
+  .item{border-radius:14px}
+  .item-head{padding:12px 12px 12px 15px; gap:9px; grid-template-columns:auto 1fr; grid-template-areas:"badge chev" "main main"; row-gap:7px}
+  .badge{grid-area:badge; justify-self:start; min-width:0}
+  .chev{grid-area:chev; justify-self:end; width:24px; height:24px}
+  .row-main{grid-area:main}
+  .row-line1{flex-direction:column; align-items:flex-start; gap:5px}
+  .dash{display:none}
+  .loc{font-size:11.5px}
+  .ttl{font-size:13px; line-height:1.5}
+  .item-body{padding:2px 12px 16px}
+  pre.code{font-size:11.2px; padding:12px 12px; border-radius:11px; max-height:340px}
+  pre.code .add,pre.code .del{margin:0 -12px; padding:0 12px}
+  .status-right{display:none}
+  .hintkeys{display:none}
+  .good-list{grid-template-columns:1fr}
+  .search{flex:1 1 100%}
+  .btn{width:100%}
+  .card-head{gap:8px}
+  .heat-note{font-size:11px}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms !important; transition-duration:.001ms !important}
+}
+</style>
+</head>
+<body>
+<a class="skip" href="#board">跳到问题清单</a>
+<div class="orbs" aria-hidden="true"><i></i><i></i><i></i></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">◈</span>
+    <div>
+      <h1>KunClient · C++ 代码审计</h1>
+      <p>297 个源文件 / 63,612 行 · 24 个 CMake 目标 · 2026-10-24</p>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <span class="pill">单文件 · 离线可用</span>
+    <div class="live" title="当前过滤结果 / 全部条目"><span class="livedot"></span><span id="liveCount">43 / 43</span></div>
+  </div>
+</header>
+
+<main>
+  <!-- ============================ 概览 -->
+  <section class="hero" aria-label="严重度概览">
+    <div class="glass ring-card">
+      <div class="ring-wrap">
+        <svg class="ring" viewBox="0 0 240 240" role="img" aria-label="问题严重度分布环形图">
+          <circle class="ring-track" cx="120" cy="120" r="96" pathLength="100"></circle>
+          <circle class="ring-seg" cx="120" cy="120" r="96" pathLength="100" stroke="rgb(255,77,106)" stroke-dasharray="2.78 97.22" transform="rotate(-82.44 120 120)" style="filter:drop-shadow(0 0 9px rgba(255,77,106,.55))"><title>Critical · 3 条</title></circle>
+      <circle class="ring-seg" cx="120" cy="120" r="96" pathLength="100" stroke="rgb(255,154,60)" stroke-dasharray="16.73 83.27" transform="rotate(-57.32 120 120)" style="filter:drop-shadow(0 0 9px rgba(255,154,60,.55))"><title>High · 9 条</title></circle>
+      <circle class="ring-seg" cx="120" cy="120" r="96" pathLength="100" stroke="rgb(255,209,102)" stroke-dasharray="46.96 53.04" transform="rotate(18.03 120 120)" style="filter:drop-shadow(0 0 9px rgba(255,209,102,.55))"><title>Medium · 22 条</title></circle>
+      <circle class="ring-seg" cx="120" cy="120" r="96" pathLength="100" stroke="rgb(127,168,217)" stroke-dasharray="16.73 83.27" transform="rotate(202.21 120 120)" style="filter:drop-shadow(0 0 9px rgba(127,168,217,.55))"><title>Low · 9 条</title></circle>
+        </svg>
+        <div class="ring-center">
+          <span class="ring-num" data-count="43">0</span>
+          <span class="ring-cap">项发现</span>
+        </div>
+      </div>
+      <p class="ring-sub">其中 <b>3 条 P0</b> 建议立即修复<br>1 条已实测复现崩溃</p>
+      <div class="ring-badge">
+        <span class="rb">18/18 测试通过</span>
+        <span class="rb">0 error</span>
+        <span class="rb">10 warning</span>
+      </div>
+    </div>
+    <div class="stats">
+      <button class="stat" type="button" data-sev="critical" aria-pressed="true" style="--srgb:255,77,106">
+          <span class="stat-label"><span class="stat-dot"></span>Critical<span class="stat-cn">严重</span></span>
+          <span class="stat-num" data-count="3">3</span>
+          <span class="stat-foot"><span class="stat-bar"><i style="width:6.98%"></i></span><span class="stat-pct">7.0%</span></span>
+        </button>
+        <button class="stat" type="button" data-sev="high" aria-pressed="true" style="--srgb:255,154,60">
+          <span class="stat-label"><span class="stat-dot"></span>High<span class="stat-cn">高危</span></span>
+          <span class="stat-num" data-count="9">9</span>
+          <span class="stat-foot"><span class="stat-bar"><i style="width:20.93%"></i></span><span class="stat-pct">20.9%</span></span>
+        </button>
+        <button class="stat" type="button" data-sev="medium" aria-pressed="true" style="--srgb:255,209,102">
+          <span class="stat-label"><span class="stat-dot"></span>Medium<span class="stat-cn">中危</span></span>
+          <span class="stat-num" data-count="22">22</span>
+          <span class="stat-foot"><span class="stat-bar"><i style="width:51.16%"></i></span><span class="stat-pct">51.2%</span></span>
+        </button>
+        <button class="stat" type="button" data-sev="low" aria-pressed="true" style="--srgb:127,168,217">
+          <span class="stat-label"><span class="stat-dot"></span>Low<span class="stat-cn">低危</span></span>
+          <span class="stat-num" data-count="9">9</span>
+          <span class="stat-foot"><span class="stat-bar"><i style="width:20.93%"></i></span><span class="stat-pct">20.9%</span></span>
+        </button>
+    </div>
+  </section>
+
+  <!-- ============================ 模块热力图 -->
+  <section class="glass heat-card" aria-labelledby="heatTitle">
+    <div class="card-head">
+      <h2 id="heatTitle">模块热力图</h2>
+      <span class="sub">颜色越亮 = 问题密度越高 · 点击任一模块可筛选</span>
+      <span class="spacer"></span>
+      <span class="sub" id="heatCount"></span>
+    </div>
+    <div class="heat-grid" id="heat"></div>
+    <p class="heat-note">多模块条目按主模块归属（如 C-3 同涉 storage）。悬停查看该模块的条目明细。</p>
+  </section>
+
+  <!-- ============================ 问题清单 -->
+  <section class="board" id="board" aria-labelledby="listTitle">
+    <div class="glass card toolbar">
+      <div class="toolrow">
+        <label class="search" id="searchWrap">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path></svg>
+          <input id="q" type="search" autocomplete="off" spellcheck="false" placeholder="搜索标题、文件名、描述、编号…">
+          <kbd>/</kbd>
+          <button class="clear" type="button" id="clearQ" aria-label="清空搜索">×</button>
+        </label>
+        <button class="btn btn-ghost" type="button" id="reset">清除全部筛选</button>
+      </div>
+      <div class="toolrow">
+        <div class="filters">
+          <span class="flabel">级别</span>
+          <div class="chips" id="sevChips">
+            <button class="chip sev" type="button" data-sev="critical" aria-pressed="true" style="--crgb:255,77,106">Critical<span class="n" data-n="critical">3</span></button>
+            <button class="chip sev" type="button" data-sev="high" aria-pressed="true" style="--crgb:255,154,60">High<span class="n" data-n="high">9</span></button>
+            <button class="chip sev" type="button" data-sev="medium" aria-pressed="true" style="--crgb:255,209,102">Medium<span class="n" data-n="medium">22</span></button>
+            <button class="chip sev" type="button" data-sev="low" aria-pressed="true" style="--crgb:127,168,217">Low<span class="n" data-n="low">9</span></button>
+          </div>
+          <span class="sep-dot" aria-hidden="true"></span>
+          <span class="flabel">模块</span>
+          <div class="chips" id="modChips"></div>
+        </div>
+        <div class="hintkeys">
+          <kbd>/</kbd>搜索 <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>级别 <kbd>Esc</kbd>重置
+        </div>
+      </div>
+    </div>
+
+    <div class="glass statusbar" id="statusbar">
+      <div class="status-left">
+        <span class="status-num" id="shown">43</span>
+        <span class="status-of">/ <b>43</b> 条</span>
+        <div class="status-filters" id="activeFilters"></div>
+      </div>
+      <div class="status-track" aria-hidden="true"><i id="statusFill"></i></div>
+      <div class="status-right">
+        <span id="statusHint">显示全部 · 点击条目展开细节</span>
+        <button class="linkbtn" type="button" id="expandAll">全部展开</button>
+      </div>
+    </div>
+
+    <h2 id="listTitle" class="sr-only" style="position:absolute;left:-9999px">问题清单</h2>
+    <div class="list" id="list"></div>
+
+    <div class="empty" id="empty" hidden>
+      <div class="em">∅</div>
+      <h3>没有匹配的条目</h3>
+      <p>试试更短的关键词，或放开级别 / 模块筛选。</p>
+      <button class="btn" type="button" id="reset2">清除全部筛选</button>
+    </div>
+  </section>
+
+  <!-- ============================ 负向结论 -->
+  <section class="glass good-card">
+    <details class="good">
+      <summary>
+        <span>已核实「无问题」的部分</span>
+        <span class="okcount">12 项负向结论</span>
+        <span class="arw" aria-hidden="true">▾</span>
+      </summary>
+      <div class="good-list" id="goodList"></div>
+    </details>
+  </section>
+</main>
+
+<footer>
+  数据来源：<b>src/cpp/CODE_AUDIT_REPORT.md</b>（2026-10-24） · 本页为单文件离线版，无任何外部资源
+  <br>行号与代码片段均逐字取自审计报告，未作改写
+</footer>
+
+<div id="tip" role="tooltip" aria-hidden="true"></div>
+
+<script>
+(function(){
+"use strict";
+const DATA = {"meta":{"total":43,"critical":3,"high":9,"medium":22,"low":9},"groups":[{"key":"其他","label":"其他","desc":"transport · kc/update · kc/media · app · kc/devices · ui 根 · ui/widgets · kc/diag","order":10,"total":11,"critical":0,"high":1,"medium":8,"low":2,"tint":"255,154,60"},{"key":"storage","label":"storage","desc":"存储与镜像解析层","order":0,"total":6,"critical":0,"high":5,"medium":1,"low":0,"tint":"255,154,60"},{"key":"kc/tools","label":"kc/tools","desc":"外部工具与 ADB / GPT","order":3,"total":5,"critical":0,"high":0,"medium":4,"low":1,"tint":"255,209,102"},{"key":"ui/pages","label":"ui/pages","desc":"页面层","order":6,"total":5,"critical":1,"high":1,"medium":2,"low":1,"tint":"255,77,106"},{"key":"kc/net","label":"kc/net","desc":"网络与下载管线","order":2,"total":4,"critical":0,"high":1,"medium":1,"low":2,"tint":"255,154,60"},{"key":"protocol","label":"protocol","desc":"协议层（Firehose / Sahara）","order":8,"total":4,"critical":0,"high":1,"medium":2,"low":1,"tint":"255,154,60"},{"key":"kc/security","label":"kc/security","desc":"安全 / 环境与摘要","order":1,"total":3,"critical":0,"high":0,"medium":1,"low":2,"tint":"255,209,102"},{"key":"kc/auth","label":"kc/auth","desc":"登录、会话与会员","order":4,"total":2,"critical":0,"high":0,"medium":2,"low":0,"tint":"255,209,102"},{"key":"kc/cloud","label":"kc/cloud","desc":"云端驱动 / 引导装载","order":5,"total":1,"critical":1,"high":0,"medium":0,"low":0,"tint":"255,77,106"},{"key":"ui/dialogs","label":"ui/dialogs","desc":"对话框层","order":7,"total":1,"critical":1,"high":0,"medium":0,"low":0,"tint":"255,77,106"},{"key":"oplus","label":"oplus","desc":"OPPO / OnePlus 固件解包","order":9,"total":1,"critical":0,"high":0,"medium":1,"low":0,"tint":"255,209,102"}],"items":[{"id":"C-1","sev":"critical","group":"ui/dialogs","mod":"ui/dialogs","loc":["DialogAsync.h:33"],"title":"队列回调按引用捕获外层的 done，worker 返回后即悬垂","sections":[{"k":"code","title":"代码片段 · ui/dialogs/DialogAsync.h:27-37","code":"// ui/dialogs/DialogAsync.h:27-37\nQThreadPool::globalInstance()->start(\n    [guard, work = std::forward\u003cWork>(work),\n     done = std::forward\u003cDone>(done)]() mutable {      // ← done 是外层 lambda 的成员\n        auto result = work();\n        if (guard.isNull()) return;\n        QMetaObject::invokeMethod(\n            guard, [&done, result = std::move(result)]() mutable {   // ← 按引用捕获成员\n                done(std::move(result));\n            },\n            Qt::QueuedConnection);\n    });    // ← 投递后 worker 立即返回，callable 被 QThreadPool 回收 → &done 悬垂"},{"k":"text","title":"为什么是真问题","body":"`&done` 引用的是第 29 行 lambda 的**成员副本**。第 32 行投递完，worker 函数返回，`QThreadPool` 随即销毁该 callable；而内层 lambda 要等 GUI 线程事件循环稍后才执行，此时 `done` 已被析构 → **use-after-free**。"},{"k":"text","title":"影响面","body":"`runAsync` 全部 10 个调用点，即**整条登录 / 2FA / 验证码 / 更新 / 下载链路**：`LoginDialog.cpp:782, 808, 971, 1014, 1046, 1080, 1133`、`UpdateDialog.cpp:281, 327`、`DownloadDialog.cpp:75`。"},{"k":"code","title":"实测复现（等价最小程序，非推测）","code":"--- safe（值捕获）---\ndone(42)\nreturned normally\n--- unsafe（&捕获）---\n[进程异常退出，exit code = 0xC0000005  ACCESS_VIOLATION]"},{"k":"note","title":"备注","body":"复现程序：`build-audit/uaf_repro.cpp`（可保留作回归参照）。为什么此前没被发现：`QThreadPool` 回收内存后，堆块常被复用为等价尺寸的对象，`std::function` 的调用可能在多数情况下“恰好”还能跑通 —— 典型的“偶发崩溃”，复现率随负载变化。","tone":"warn"},{"k":"text","title":"修复建议","body":"一行修复 —— 把成员移动进内层 lambda，而不是按引用捕获："},{"k":"code","title":"修复代码","code":"QMetaObject::invokeMethod(\n    guard, [done = std::move(done), result = std::move(result)]() mutable {\n        done(std::move(result));\n    },\n    Qt::QueuedConnection);"},{"k":"note","title":"注意","body":"`done = std::move(done)` 会移动掉外层成员，因外层只执行一次，安全。更稳妥的写法是让内层持有 `std::shared_ptr\u003cDone>`。","tone":"info"}],"also":[]},{"id":"C-2","sev":"critical","group":"ui/pages","mod":"ui/pages","loc":["MtkFlashPage.cpp:569"],"title":"连接成功后 m_busy 永不归零，整页此后完全锁死","sections":[{"k":"code","title":"代码片段 · ui/pages/MtkFlashPage.cpp:567-573","code":"// ui/pages/MtkFlashPage.cpp:567-573\nvoid MtkFlashPage::connectDevice()\n{\n    if (m_busy.fetchAndAddAcquire(1) != 0) {   // ← 先 +1\n        m_busy.fetchAndSubRelease(1);\n        return;\n    }\n    setBusy(true);"},{"k":"text","title":"m_busy 的全部增减点（已 grep 穷举）","body":""},{"k":"table","title":"","head":["行号","操作","出现场景"],"rows":[["569","+1","点「连接设备」"],["570","-1","连接请求被拒（已有操作在跑）"],["593","-1","扫描设备**失败**分支"],["522","-1","`jobsFinished`（刷写 / 读回 / 擦除结束）"],["738 / 796 / 874","`storeRelease(1)`","三个操作开始前直接置 1"]]},{"k":"text","title":"缺口","body":"连接**成功**路径（`connectionResult` 492-508、`daResult` 510-518）**从不减 1**。"},{"k":"text","title":"后果（必现，非偶发）","body":"1. 点「连接设备」→ 握手成功 → `m_busy` 恒为 1；2. 此后点「下载选中」(`:688`)、「读回选中」(`:760`)、「擦除选中」(`:820`) 全部命中 `if (m_busy.loadRelaxed() != 0)` → 一律弹「有操作正在进行中」并 `return`；3. 再点「连接设备」也在 569 直接返回。"},{"k":"note","title":"结论","body":"**MtkFlashPage 一旦连上设备就永久变砖，只能重启程序。** 这是本次审计中**唯一 100% 必现**的功能性缺陷。","tone":"danger"},{"k":"text","title":"修复建议","body":"在 `connectionResult` / `daResult` 的收尾 `updateActionButtons()` 之前补 `m_busy.fetchAndSubRelease(1);`；更根本的做法是把忙碌状态改成 RAII token（构造 +1、析构 -1），避免 6 处手工配平。"},{"k":"code","title":"修复补丁（附录 C，已验证可编译）","code":" // :507  connectionResult 收尾\n                 }\n+                m_busy.fetchAndSubRelease(1);\n                 updateActionButtons();\n             });\n \n // :517  daResult 收尾\n         } else {\n             error(message.isEmpty() ? QStringLiteral(\"DA 引导失败\") : message);\n         }\n+        m_busy.fetchAndSubRelease(1);\n         updateActionButtons();\n     });"},{"k":"note","title":"注意（这条很容易修错）","body":"`daResult` 与 `connectionResult` 是**两个独立信号**，都会在连接流程中触发。若两者都减 1 而只加过 1 次，`m_busy` 会变成负数（`QAtomicInt` 是有符号的），之后 `!= 0` 判断依旧成立 —— **等于没修**。","tone":"warn"},{"k":"text","title":"推荐做法","body":"把 +1 / -1 收敛到 `connectDevice()` 一处，用作用域守卫绑定「连接流程这一整个异步事务」，流程结束（成功或失败）自动归零："},{"k":"code","title":"RAII 作用域守卫","code":"struct BusyGuard {\n    QAtomicInt& f;\n    bool owned = false;\n    explicit BusyGuard(QAtomicInt& v) : f(v) { owned = (f.fetchAndAddAcquire(1) == 0); }\n    ~BusyGuard() { if (owned) f.fetchAndSubRelease(1); }\n    explicit operator bool() const { return owned; }\n};"}],"also":[]},{"id":"C-3","sev":"critical","group":"kc/cloud","mod":"kc/cloud","loc":["CloudLoaderIndex.cpp:98","MainWindow.cpp:1782","PayloadParser.cpp:518","CloudLoaderPickerDialog.cpp:314-316"],"also":["storage","ui/dialogs","ui"],"title":"远端下发的名字直接拼成落盘路径 —— 任意文件写（两个独立入口）","sections":[{"k":"h","title":"入口 1 · CloudLoaderIndex.cpp:98 → MainWindow.cpp:1782"},{"k":"code","title":"代码片段","code":"// kc/cloud/CloudLoaderIndex.cpp:93-101\nconst QString name = el.value(QStringLiteral(\"name\")).toString();   // ← 服务端下发，零清洗\n...\nitem.name = name;\n\n// ui/MainWindow.cpp:1781-1783\nconst QString cacheRoot = kc::AppStatePaths::Cache(QStringLiteral(\"loaders\"));\nconst QString dest = QDir::toNativeSeparators(cacheRoot + QStringLiteral(\"/\") + name);\nQDir().mkpath(QFileInfo(dest).absolutePath());        // ← 连父目录一起建出来"},{"k":"text","title":"为什么是真问题","body":"写入原语 `ChunkedDownloader.cpp:236-237` 是 `QIODevice::ReadWrite | QIODevice::Truncate` —— 目标文件会被**先截断**。同一条 `cacheRoot + \"/\" + rel` 拼接在 `MainWindow.cpp:1826`（`digest` / `signature` 伴生文件）与 `CloudLoaderPickerDialog.cpp:314-316, 370-371` 重复出现。"},{"k":"text","title":"攻击场景","body":"索引接口返回 `{\"name\":\"../../../../AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup/evil.exe\"}` → 落进用户启动目录 → 登录即执行。"},{"k":"note","title":"现状备注","body":"`downloadCloudLoader()` 当前**不可达**（`fillCloudLoaderItems` 无调用点，云端库已下线）。修 `CloudLoaderPickerDialog` 那条同样不可达。但只要该功能恢复，缺陷立即生效 —— 属**潜伏的 P0**。","tone":"warn"},{"k":"h","title":"入口 2 · PayloadParser.cpp:518 —— 同一工程内实现不一致"},{"k":"code","title":"代码片段 · storage/PayloadParser.cpp:517-521","code":"// storage/PayloadParser.cpp:517-521\nfor (const ParsedPartition& partition : targets) {\n    const QString outputPath =\n        QDir(outputDirectory).filePath(partition.name + QStringLiteral(\".img\"));   // ← 未净化\n    QFile output(outputPath);\n    if (!output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {"},{"k":"text","title":"为什么是真问题","body":"`partition.name` 直接来自 `payload.bin` 的 protobuf manifest（`:189` `QString::fromUtf8`），全程无字符或路径校验。`QDir::filePath()` 对绝对路径原样返回、对 `..` 原样保留。**这条是可达的**：用户从任意来路下载 OTA 包 → 选「提取全部分区」→ `partition_name = \"../../evil\"` 即写到输出目录之外。"},{"k":"text","title":"关键对照","body":"同一工程的 OFP 解包器**有**防护，还有单测："},{"k":"code","title":"对照实现 · oplus/OfpExtractor.cpp:127-132","code":"// oplus/OfpExtractor.cpp:127-132\nconst QString base = QDir::cleanPath(QDir(root).absolutePath());\nconst QString destination = QDir::cleanPath(base + QLatin1Char('/') + normalized);\nif (!destination.startsWith(base + QLatin1Char('/'), Qt::CaseInsensitive)) {\n    if (error) *error = QStringLiteral(\"固件表里有不安全的输出路径: %1\").arg(relative);\n    return false;\n}"},{"k":"text","title":"关键对照（续）","body":"`OpsExtractor.cpp:222-223` 同款。**唯独 PayloadParser 漏了** —— 明确是复制粘贴时漏掉，而非设计取舍。"},{"k":"text","title":"修复建议","body":"把 `resolveOutputPath` 提取成公共工具，三处共用；额外拒绝空名、Windows 保留名（`CON` / `PRN` / `AUX` / `NUL` / `COM1..9` / `LPT1..9`）、以及 `cleanPath` 后仍含 `..` 的输入。"}]},{"id":"H-1","sev":"high","group":"kc/net","mod":"kc/net","loc":["UpdateService.cpp:71-79","PlatformToolsManager.cpp:276-290","ChunkedDownloader.cpp:159"],"also":["kc/update","kc/tools","kc/cloud"],"title":"所有下载产物均无哈希 / 签名校验（供应链 RCE 面）","sections":[{"k":"table","title":"","head":["产物","唯一“校验”","后果"],"rows":[["更新包","`UpdateService.cpp:71-79`：只检查头两字节是不是 `MZ`","覆盖 `KunClient.exe` 并重启"],["平台工具包","`PlatformToolsManager.cpp:276-290`：解压后直接执行","生成 `adb.exe` / `fastboot.exe` 并运行"],["云端引导","无","直接喂给 EDL Firehose"]]},{"k":"text","title":"为什么是真问题","body":"`ChunkedDownloader::Download`（`:159`）签名里**根本没有 expected-hash 参数**，唯一的完整性检查是 `:311-316` 的字节数比对。"},{"k":"text","title":"“设施已就位、开关没接上”","body":"而 `CloudLoaderIndex` 已经解析了 `digest` / `signature` 字段（`:100-101`），但全项目 grep 显示这两个字段**从未参与过任何验算** —— 只被当成“再去下载两个文件”的路径名。"},{"k":"text","title":"修复建议","body":"`ChunkedDownloader::Download` 增加 `expectedSha256` 参数，边下边算（复用 `kc::crypto::Digest` 的流式会话，它已走 CNG）；更新包叠加 `WinVerifyTrust` 校验 Authenticode 签名主体。"}]},{"id":"H-2","sev":"high","group":"其他","mod":"kc/update","loc":["UpdateService.cpp:63-69","UpdateService.cpp:346-348"],"also":["其他"],"title":"更新通道接受任意 scheme 的绝对 URL","sections":[{"k":"code","title":"代码片段 · kc/update/UpdateService.cpp:63-69","code":"// kc/update/UpdateService.cpp:63-69\nQString resolveDownloadUrl(const QString& url) {\n    if (url.trimmed().isEmpty()) return QString();\n    const QUrl u(url);\n    if (u.isValid() && !u.scheme().isEmpty()) return u.toString();   // ← http:\u002f\u002f 也照收\n    return ClientConfig::ServerUrl() + \"/\" + ...;\n}"},{"k":"text","title":"为什么是真问题","body":"`ClientConfig` 对**服务器地址**做了 https-only + 域名白名单（`ClientConfig.cpp:168-183`，这块实现正确），但**更新包下载地址完全绕开这套策略**。服务端（或被控的响应）回 `\"downloadUrl\":\"http:\u002f\u002fattacker/k.exe\"` 即明文下载并替换自身二进制。"},{"k":"text","title":"zip 分支更差","body":"`UpdateService.cpp:346-348` 用 `QDirIterator(..., Subdirectories)` 递归找任意位置的 `KunClient.exe`。"},{"k":"text","title":"修复建议","body":"只允许相对路径，或“https 且 host 通过 `IsTrustedHost`”的绝对 URL；解压后只在固定一级目录内找 exe，并拒绝 `..` / 绝对路径条目（zip-slip）。"}]},{"id":"H-3","sev":"high","group":"storage","mod":"storage","loc":["PayloadParser.cpp:601","PayloadParser.cpp:588","PayloadParser.cpp:560"],"title":"PayloadParser 的 REPLACE / ZERO 分支缺少长度上限","sections":[{"k":"text","title":"压缩分支都有保护","body":""},{"k":"code","title":":601  REPLACE_BZ / REPLACE_XZ / REPLACE_ZSTD","code":"// :601  REPLACE_BZ / REPLACE_XZ / REPLACE_ZSTD\nif (op.dataLength == 0 || op.dataLength > kMaxOperationBytes) {   // 512 MB"},{"k":"text","title":"但未压缩的 REPLACE 和 ZERO 都没有","body":""},{"k":"code","title":":588 REPLACE 与 :560 ZERO","code":"// :588  REPLACE —— targetBytes 完全由 extent 数量决定\nconst QByteArray data = file.read(static_cast\u003cqint64>(targetBytes));\n\n// :560  ZERO —— 无溢出检查、无上限、无 cancel 检查\nquint64 remaining = extent.second * BlockSize;\nwhile (remaining > 0) { ... output.write(zeros.constData(), chunk); ... }"},{"k":"text","title":"为什么是真问题","body":"`num_blocks` 是 manifest 里的任意 varint。8 GiB 的 extent → 一次性 `read(8 GiB)` 分配；4 TiB 的 ZERO 段 → 把用户输出盘写满（`QFile::write` 越过 EOF 会继续扩展文件）。"},{"k":"text","title":"修复建议","body":"两个分支都加 `> kMaxOperationBytes` 拒绝；`extent.second * BlockSize` 前做溢出判断；并强制 `(extent.first + extent.second) * BlockSize \u003c= partitionSize`。"}],"also":[]},{"id":"H-4","sev":"high","group":"storage","mod":"storage","loc":["SystemVersionReader.cpp:467"],"title":"u32 加法回绕导致 QVector::at() 越界","sections":[{"k":"code","title":"代码片段 · :467","code":"// :467\nif(at+52>meta.size()||!le(meta,at+40,&first)||!le(meta,at+44,&count)||\n   first+count>static_cast\u003cquint32>(all.size())) return {};\nfor(quint32 x=0;x\u003ccount;++x){ part.extents.push_back(all.at(first+x)); ... }"},{"k":"text","title":"为什么是真问题","body":"`first`、`count` 均为 `quint32`，`first + count` **按 32 位无符号回绕**后再比较。取 `all.size() == 1`、`first = 0xFFFFFFFF`、`count = 2`：`0xFFFFFFFF + 2 == 1`，`1 > 1` 为假 → **通过校验**，随后 `all.at(0xFFFFFFFF)` 越界。Qt6 的 `QVector::at()` 在 Release 下只有 `Q_ASSERT`（被编译掉），是真正的堆越界读，读到的值还会被当作 `sectors` 继续参与设备读取偏移计算。"},{"k":"text","title":"触发路径","body":"`EdlWorker::readSystemVersionInfo` 对设备 `super` 分区调用 `parseLp` —— 刷入恶意镜像后点「读取系统版本」即可。"},{"k":"text","title":"修复建议","body":"用 `quint64(first) + count` 计算，并分别校验 `count \u003c= all.size()`、`first \u003c= all.size()`。"}],"also":[]},{"id":"H-5","sev":"high","group":"storage","mod":"storage","loc":["SystemVersionReader.cpp:464"],"title":"reserve(en) 由不可信字段直接控制","sections":[{"k":"code","title":"代码片段 · :464","code":"QVector\u003cLpExtent> all; all.reserve(en);    // en 来自 metadata 偏移 96，无任何关联校验"},{"k":"text","title":"为什么是真问题","body":"`en = 0xFFFFFFFF` → 尝试分配约 **103 GB**。Qt 容器不做上限截断，失败抛 `std::bad_alloc`，在 Qt 事件循环里未捕获 → `std::terminate`。"},{"k":"note","title":"值得注意","body":"紧随其后的 `for` 循环本身是安全的（`le()` 会失败返回），**唯一的伤害就是这行 reserve** —— 说明它是纯多余分配。","tone":"info"},{"k":"text","title":"修复建议","body":"`en` 先与 `(meta.size() - header - eo) / es` 比较，超界直接返回空。"}],"also":[]},{"id":"H-6","sev":"high","group":"storage","mod":"storage","loc":["DynamicSuper.cpp:218"],"title":"metadataMaxSize 无上限 → 128 GiB 分配意图","sections":[{"k":"code","title":"代码片段 · :218-223 校验缺上界","code":"// :218-223 校验缺上界\nif (metadata->metadataMaxSize \u003c 128 || metadata->metadataMaxSize % 512 != 0 || ...)\n\n// :313-320\nQByteArray padded(static_cast\u003cqsizetype>(metadata.metadataMaxSize), '\\0');\nfor (quint32 index = 0; index \u003c metadata.metadataSlotCount * 2U; ++index) {\n    result.append(padded);      // slotCount 最大 16 → 32 次\n}"},{"k":"text","title":"为什么是真问题","body":"取 `metadataMaxSize = 0xFFFFFE00`（4 GiB）× 32 次 → **128 GiB**。geometry 有 SHA-256 保护，但攻击者构造包时当然能算出正确摘要。"},{"k":"text","title":"触发路径","body":"`DynamicSuperPlanner::create` ← `RawProgramParser::parse`。**只需打开恶意包，不需要连设备。**"},{"k":"text","title":"修复建议","body":"给 `metadataMaxSize` 加上界（真实 LP 元数据是 512 KB ~ 2 MB 量级，取 4 MiB 足够），并校验 `slotCount * metadataMaxSize \u003c= blockDeviceSize`。"}],"also":[]},{"id":"H-7","sev":"high","group":"storage","mod":"storage","loc":["SystemVersionReader.cpp:126"],"title":"ext4 extent 树递归无深度上限 → 栈溢出","sections":[{"k":"code","title":"代码片段 · :126-153","code":"// :126-153\nbool appendExtentNode(const QByteArray& node, quint64 maximum, QByteArray* out)\n{\n    quint16 magic = 0, entries = 0, depth = 0;\n    ...\n    } else {\n        if (!appendExtentNode(m_reader.read(leaf * m_blockSize, m_blockSize), maximum, out)) return false;\n    }"},{"k":"text","title":"为什么是真问题","body":"`depth` 被读出来了（第 130 行），但**从未用于限制递归** —— 每层都从当前节点重新读 `depth`，既不递减也不与层数比较。构造一个 `ei_leaf` 指向自身的节点即是无限递归，每层帧还带一个 `QByteArray`（4 KB），几千层足够打爆线程栈。"},{"k":"text","title":"修复建议","body":"递归时传 `expectedDepth`（子节点必须 `parent.depth - 1`），并在 `depth > 5`（ext4 实际上限）时拒绝。"}],"also":[]},{"id":"H-8","sev":"high","group":"protocol","mod":"protocol","loc":["Firehose.cpp:411"],"title":"XML 帧无累计上限","sections":[{"k":"code","title":"代码片段 · :411-425","code":"// :411-425\nfor (int frameIndex = 0; frameIndex \u003c 1024; ++frameIndex) {\n    if (!m_transport.readUntil(..., 2 * 1024 * 1024, remaining, error)) ...\n    response->xml += current.xml;            // ← 单帧 2MB × 1024 帧 = 最坏 2GB\n    response->messages += current.messages;"},{"k":"text","title":"为什么是真问题","body":"单帧有 2 MB 上限、帧数有 1024 上限，但**总量没有**。设备连续吐 `\u003clog value=\"...\"/>` 而不回 ACK/NAK 即可 OOM。`waitForVipPartitionRequest`、`receiveVipPartitionResult` 同结构同问题。"},{"k":"text","title":"为什么算真问题","body":"本工具的核心场景就是给**来路不明**的设备刷机，协议层不该假设设备友善。（实际触发前会先撞上 `timeoutMs` 总超时，故实际危害受超时值约束 —— 但 `timeoutMs` 在长刷写路径上设得很宽松。）"},{"k":"text","title":"修复建议","body":"加累计字节上限（8 MB / 4 MB messages），超限即失败。"}],"also":[]},{"id":"H-9","sev":"high","group":"ui/pages","mod":"ui/pages","loc":["MtkFlashPage.cpp:538-548","MainWindow.cpp:717-721","VideoBackground.cpp:498-517"],"also":["ui","其他"],"title":"线程析构契约未兑现：wait() 超时后仍无条件 delete","sections":[{"k":"code","title":"代码片段 · ui/pages/MtkFlashPage.cpp:538-548","code":"// ui/pages/MtkFlashPage.cpp:538-548\nif (m_worker) m_worker->requestCancel();\nif (m_workerThread->isRunning() && m_worker) {\n    QMetaObject::invokeMethod(m_worker, \"closeSession\", Qt::BlockingQueuedConnection);\n    m_workerThread->quit();\n    m_workerThread->wait(5000);        // ← 返回值被忽略\n}\ndelete m_worker;                       // ← 线程可能仍在跑\ndelete m_workerThread;                 // ← QThread 仍在 running → qFatal → abort"},{"k":"text","title":"为什么是真问题","body":"worker 正卡在 `writeFromDevice` / `readToDevice` 的长循环（每 512 KB 才看一次 cancel）时，`wait(5000)` 很可能超时；随后 `delete m_worker`（其 `QSerialPort` 仍在另一活线程上）是 UB。典型现象：**刷写中途关窗 / 切页崩溃**。"},{"k":"text","title":"同款问题","body":"`MainWindow.cpp:717-721` 同款（`:720` 忽略返回值，`~QThread` 在 running 状态会 `qFatal`）。"},{"k":"text","title":"VideoBackground.cpp:498-517 更危险 —— terminate() 后立即 delete","body":""},{"k":"code","title":"代码片段 · kc/media/VideoBackground.cpp","code":"if (!m_thread->wait(5000)) {\n    m_thread->terminate();\n    m_thread->wait(1000);      // ← 也可能超时，且 terminate 本身不保证释放锁\n}\ndelete m_worker;               // ← \"线程已停，此刻删是安全的\" —— 这句注释在超时路径上不成立"},{"k":"text","title":"修复建议","body":"检查 `wait()` 返回值；超时时不要删（泄漏优于 abort），改为 `m_workerThread->setParent(nullptr)` 并放弃；正常路径用 `connect(thread, &QThread::finished, worker, &QObject::deleteLater)` 让线程自己收尾。"}]},{"id":"M-1","sev":"medium","group":"其他","mod":"kc/media","loc":["VideoBackground.cpp:465-486"],"title":"VideoBackground 的超时路径仍写栈变量（UAF）","sections":[{"k":"text","title":"问题","body":"`sizeOut` / `errorOut` 是**栈变量**，传给 worker；5 秒超时路径 `close()` 可能等不到线程结束，之后 worker 仍写这两个变量 → UAF。"},{"k":"text","title":"修复建议","body":"改 `shared_ptr`；`announce()` 前先查 `stop`。"}],"also":[]},{"id":"M-2","sev":"medium","group":"kc/tools","mod":"kc/tools","loc":["AdbGptReader.cpp:388-391"],"title":"AdbGptReader 的 partition 名未清洗，拼进 su -c","sections":[{"k":"text","title":"问题","body":"`remote` 名清洗了，但 `sources` 里的 `partition` 没洗，直接拼进 `su -c \"...\"` → 设备端命令注入。"},{"k":"text","title":"修复建议","body":"统一白名单 `[A-Za-z0-9_.-]`，`su -c` 单引号包裹并转义。"}],"also":[]},{"id":"M-3","sev":"medium","group":"kc/tools","mod":"kc/tools","loc":["PlatformToolsManager.cpp:67-71","FastbootSizeFallback.cpp:111-112"],"title":"从 PATH 收集目录找 AdbWinApi.dll / fastboot.exe","sections":[{"k":"text","title":"问题","body":"从 `PATH` 收集目录去找 `AdbWinApi.dll` 并拷进 adb 同目录；从 `PATH` 找 `fastboot.exe` 拿来刷机。"},{"k":"text","title":"修复建议","body":"只从 `System32` + 程序自身目录取，且校验签名。"}],"also":[]},{"id":"M-4","sev":"medium","group":"kc/tools","mod":"kc/tools","loc":["PlatformToolsManager.cpp:821-830"],"title":"checkAdbDevice() 恒为真","sections":[{"k":"text","title":"问题","body":"`checkAdbDevice()` 恒为真：`adb devices` 表头 `\"List of devices attached\"` 就含 `\"device\"`。"},{"k":"text","title":"修复建议","body":"逐行匹配 `^\\S+\\s+(device|fastboot)$`，排除 `unauthorized|offline`。"}],"also":[]},{"id":"M-5","sev":"medium","group":"kc/security","mod":"kc/security","loc":["EnvReportService.cpp:17-31"],"title":"环境上报 HMAC 密钥硬编码在客户端","sections":[{"k":"text","title":"问题","body":"环境上报的 HMAC 密钥**硬编码在客户端**（乱序拆分 + 索引表就在旁边）→ 可伪造“环境干净”上报绕过封禁。"},{"k":"text","title":"修复建议","body":"客户端只持公钥；或把 key 绑定到会话 `secret` 做一次性派生。"}],"also":[]},{"id":"M-6","sev":"medium","group":"kc/auth","mod":"kc/auth","loc":["LoginStorage.cpp:22-32"],"title":"DPAPI 熵硬编码，且明文密码随 JSON 一起落盘","sections":[{"k":"text","title":"问题","body":"DPAPI 熵是硬编码 `\"KunClient2024\"`；且明文密码随 JSON 一起加密存盘 → token 生命周期被拉长成密码泄露。"},{"k":"text","title":"修复建议","body":"熵改为每用户随机；不存密码只存 token。"}],"also":[]},{"id":"M-7","sev":"medium","group":"kc/net","mod":"kc/net","loc":["ChunkedDownloader.cpp:269-275"],"title":"分片下载不校验 Content-Range 起始偏移","sections":[{"k":"text","title":"问题","body":"分片请求不校验 `Content-Range` 起始偏移，只按长度截 → 静默写坏固件（长度对、内容错）。"},{"k":"text","title":"修复建议","body":"断言 `S == pos && E == pos + size - 1`。"}],"also":[]},{"id":"M-8","sev":"medium","group":"kc/auth","mod":"kc/auth","loc":["MembershipService.cpp:480-508"],"title":"GUI 线程同步 HTTP 12 秒，且 g_limits 锁外写","sections":[{"k":"text","title":"问题","body":"GUI 线程同步 HTTP（最长 12 s），且 `g_limits` 在锁外写。"},{"k":"text","title":"修复建议","body":"投 `QThreadPool`；读写统一走 `g_gate`。"}],"also":[]},{"id":"M-9","sev":"medium","group":"其他","mod":"kc/update","loc":["UpdateService.cpp:246"],"title":"固定临时目录 + 固定 bat → 可被预置 junction / 替换","sections":[{"k":"text","title":"问题","body":"固定临时目录 `%TEMP%\\KunClient_Update` + 固定 `apply_update.bat` → 同机低权限进程可预置 junction 或替换 bat。"},{"k":"text","title":"修复建议","body":"用 `QTemporaryDir`（随机名）。"}],"also":[]},{"id":"M-10","sev":"medium","group":"kc/tools","mod":"kc/tools","loc":["PlatformToolsManager.cpp:93-103"],"title":"PowerShell 单引号“转义”其实把 ' 换成 2","sections":[{"k":"text","title":"问题","body":"PowerShell `Expand-Archive` 的单引号“转义”是把 `'` 换成 `2`（正确做法是双写 `''`）→ 静默改错路径；虽是拼接但当前不可直接利用。"},{"k":"text","title":"修复建议","body":"改用参数数组，或统一走 `tar.exe`（`extractTarGz` 的写法是对的）。"}],"also":[]},{"id":"M-11","sev":"medium","group":"其他","mod":"transport","loc":["SerialTransport.cpp:172-175"],"title":"fillBuffer 内层循环无上限","sections":[{"k":"text","title":"问题","body":"`fillBuffer` 内层 `while(waitForReadyRead(2))` 无上限，可能把整段传输吸进 buffer。"},{"k":"text","title":"修复建议","body":"加 `m_buffer.size() \u003c 上限`。"}],"also":[]},{"id":"M-12","sev":"medium","group":"oplus","mod":"oplus","loc":["OfpExtractor.cpp:224,226,236","OpsExtractor.cpp:309"],"title":"value * pageSize 有符号溢出 UB","sections":[{"k":"text","title":"问题","body":"`value * pageSize` 有符号溢出 UB（`toLongLong` 可给 `INT64_MAX`）。"},{"k":"text","title":"修复建议","body":"乘前判 `> INT64_MAX / pageSize`。"}],"also":[]},{"id":"M-13","sev":"medium","group":"其他","mod":"app","loc":["EdlWorker.cpp:763-769"],"title":"GPT backupLba 直接当 LUN 容量，越界擦除校验失效","sections":[{"k":"text","title":"问题","body":"GPT `backupLba` 直接当 LUN 容量，未与 `getstorageinfo` 交叉校验 → 越界擦除校验失效。"},{"k":"text","title":"修复建议","body":"取交集 / 取小，差距过大 fail-closed。"}],"also":[]},{"id":"M-14","sev":"medium","group":"protocol","mod":"protocol","loc":["Firehose.cpp:624","OcdtGenerator.cpp:404"],"title":"先 readAll() 后检查大小，上限形同虚设","sections":[{"k":"text","title":"问题","body":"先 `readAll()` 后检查大小，上限形同虚设。"},{"k":"text","title":"修复建议","body":"先 `file.size()` 再读。"}],"also":[]},{"id":"M-15","sev":"medium","group":"storage","mod":"storage","loc":["PayloadParser.cpp:346-378"],"title":"extent.second * BlockSize 裸 u64 乘法回绕","sections":[{"k":"text","title":"问题","body":"`extent.second * BlockSize` 裸 u64 乘法回绕 → “数据比目标区间短”检查失效，**解包出的镜像静默错位**。"},{"k":"text","title":"修复建议","body":"统一走显式溢出检查。"}],"also":[]},{"id":"M-16","sev":"medium","group":"protocol","mod":"protocol","loc":["Sahara.cpp:571-627"],"title":"Sahara 上传循环无总时限","sections":[{"k":"text","title":"问题","body":"上传循环无总时限，设备反复 `READ_DATA offset=0` 即可让主机无限转。"},{"k":"text","title":"修复建议","body":"加累计期限 + 重复 offset 计数判死。"}],"also":[]},{"id":"M-17","sev":"medium","group":"ui/pages","mod":"ui/pages","loc":["MtkFlashPage.cpp:541,623","MainWindow.cpp:718"],"title":"UI 线程 BlockingQueuedConnection 等长任务","sections":[{"k":"text","title":"问题","body":"UI 线程 `BlockingQueuedConnection` 等 worker 长任务 → 界面“未响应”。"},{"k":"text","title":"修复建议","body":"先 cancel，改用 `QueuedConnection` + 回投信号。"}],"also":[]},{"id":"M-18","sev":"medium","group":"ui/pages","mod":"ui/pages","loc":["AppManagerPage.cpp:229","BasePage.cpp:47-51"],"title":"裸 this 回投 UI，页面销毁后 UAF","sections":[{"k":"text","title":"问题","body":"线程池任务用裸 `this` 回投 UI，页面销毁后仍 `invokeMethod` → UAF（同项目 `CloudDriverPage.cpp:281` 已有正确的 `QPointer` 范式）。"},{"k":"text","title":"修复建议","body":"捕获 `QPointer`，投递前判空。"}],"also":[]},{"id":"M-19","sev":"medium","group":"其他","mod":"ui（根）","loc":["MainWindow.cpp:2096-2104"],"title":"GUI 线程递归扫描包目录，且重复触发两次","sections":[{"k":"text","title":"问题","body":"GUI 线程递归扫描包目录（`discoverPackage` 默认 `recursive=true`），且 `setChecked(true)` 无 `QSignalBlocker` 再触发两次扫描。"},{"k":"text","title":"修复建议","body":"显式传 `false`；加 `QSignalBlocker`。"}],"also":[]},{"id":"M-20","sev":"medium","group":"其他","mod":"ui（根）","loc":["MainShell.cpp:601-622"],"title":"析构未清 s_instance，全局单例悬空","sections":[{"k":"text","title":"问题","body":"析构未清 `s_instance`，全局单例悬空（头文件注释明确写了“析构里清”但没实现）。"},{"k":"text","title":"修复建议","body":"析构首行 `s_instance = nullptr`。"}],"also":[]},{"id":"M-21","sev":"medium","group":"其他","mod":"ui/widgets","loc":["LogView.cpp:413","SessionLog.cpp:111-112"],"title":"每条日志在 UI 线程 write + flush","sections":[{"k":"text","title":"问题","body":"每条日志在 UI 线程做一次 `write + flush`。"},{"k":"text","title":"修复建议","body":"定时批量 flush 或挪到写线程。"}],"also":[]},{"id":"M-22","sev":"medium","group":"其他","mod":"ui（根）","loc":["MainShell.cpp:2492-2521"],"title":"detach 的 std::thread 在 qApp 析构后仍回投","sections":[{"k":"text","title":"问题","body":"detach 的 `std::thread` 在 `qApp` 析构后仍 `invokeMethod`。"},{"k":"text","title":"修复建议","body":"改 `QThreadPool` + `QPointer`。"}],"also":[]},{"id":"L-1","sev":"low","group":"其他","mod":"ui（根）","loc":["MainWindow.cpp:1870-1893"],"title":"shared_ptr 自引用环，确定性泄漏（仅探针路径）","sections":[{"k":"text","title":"问题","body":"`shared_ptr` 自引用环（捕获持有自己的 `shared_ptr`），确定性泄漏；仅 `--cloud-panel-popup` 探针路径。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-2","sev":"low","group":"kc/security","mod":"kc/security","loc":["EnvInspector.cpp:749-756"],"title":"KUN_ALLOW_DEBUG 反调试后门保留在 release 构建","sections":[{"k":"text","title":"问题","body":"`KUN_ALLOW_DEBUG` 反调试后门保留在 release 构建（好在会自报 `debug_bypassed`，属“留痕后门”）。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-3","sev":"low","group":"kc/net","mod":"kc/net","loc":["HttpClient.cpp:106-111"],"title":"KC_TIMING 下把含 ticket 的完整 URL 打到 stderr","sections":[{"k":"text","title":"问题","body":"`KC_TIMING` 下把含 `?t=\u003cticket>` 的完整 URL 打到 stderr。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-4","sev":"low","group":"kc/net","mod":"kc/net","loc":["ChunkedDownloader.cpp:70-73"],"title":"下载失败无条件删调用方传入的路径","sections":[{"k":"text","title":"问题","body":"下载失败无条件删调用方传入的路径（`Truncate` 已先清空过）。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-5","sev":"low","group":"kc/security","mod":"kc/security","loc":["Sha256.cpp:85-91"],"title":"BCryptHashData 返回值被丢弃，可能得到半截摘要","sections":[{"k":"text","title":"问题","body":"`BCryptHashData` 返回值被丢弃，失败会得到“算了一半”的合法长度摘要。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-6","sev":"low","group":"kc/tools","mod":"kc/tools","loc":["FirmwareChecksum.cpp:44-45","AndroidToolsPage.cpp:1686-1687"],"title":"接受 40 位 SHA-1，但算法反推必判不一致","sections":[{"k":"text","title":"问题","body":"接受 40 位 SHA-1 记录，但算法反推只按 `32→MD5，否则 SHA-256`，40 位必判“不一致”。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-7","sev":"low","group":"其他","mod":"kc/devices","loc":["DeviceWatcher.cpp:243-249"],"title":"对 const 容器元素 const_cast 写入，UB","sections":[{"k":"text","title":"问题","body":"对 `const` 容器元素 `const_cast` 写入，UB。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-8","sev":"low","group":"protocol","mod":"protocol","loc":["Firehose.cpp:1234-1239"],"title":"patch 的 start_sector / value 未转义拼进 XML 属性","sections":[{"k":"text","title":"问题","body":"`patch` 的 `start_sector` / `value` 未转义拼进 XML 属性。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]},{"id":"L-9","sev":"low","group":"ui/pages","mod":"ui/pages","loc":["SettingsPage.cpp:104"],"title":"levelLabel() 定义未使用（编译器已警告）","sections":[{"k":"text","title":"问题","body":"`levelLabel()` 定义未使用（编译器已警告）。"},{"k":"note","title":"报告说明","body":"Low 区为摘要列表，报告未附代码片段与修复建议。","tone":"info"}],"also":[]}]};
+const ITEMS = DATA.items;
+const GROUPS = DATA.groups;
+const SEVS = ["critical","high","medium","low"];
+const SEV_LABEL = {critical:"Critical", high:"High", medium:"Medium", low:"Low"};
+const SEV_CN = {critical:"严重", high:"高危", medium:"中危", low:"低危"};
+const SEV_RGB = {critical:"255,77,106", high:"255,154,60", medium:"255,209,102", low:"127,168,217"};
+const TOTAL = ITEMS.length;
+
+const $ = (s, r) => (r || document).querySelector(s);
+const $$ = (s, r) => Array.prototype.slice.call((r || document).querySelectorAll(s));
+const listEl = $("#list"), emptyEl = $("#empty"), heatEl = $("#heat"),
+      modChipsEl = $("#modChips"), sevChipsEl = $("#sevChips"),
+      qEl = $("#q"), searchWrap = $("#searchWrap"),
+      shownEl = $("#shown"), fillEl = $("#statusFill"),
+      activeEl = $("#activeFilters"), liveEl = $("#liveCount"),
+      hintEl = $("#statusHint"), tipEl = $("#tip");
+
+const state = { sevs: new Set(SEVS), groups: new Set(), q: "" };
+
+/* ---------------------------------------------------------- utils */
+function esc(s){
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+                  .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function md(s){
+  let h = esc(s);
+  h = h.replace(/`([^`\n]+)`/g, function(_,p){ return "<code>"+p+"</code>"; });
+  h = h.replace(/\*\*([^*]+)\*\*/g, function(_,p){ return "<strong>"+p+"</strong>"; });
+  return h;
+}
+function codeHTML(src, lang){
+  return String(src).split("\n").map(function(line){
+    if(lang === "diff"){
+      if(/^\+(?!\+\+)/.test(line)) return '<span class="add">'+esc(line)+'</span>';
+      if(/^-(?!--)/.test(line)) return '<span class="del">'+esc(line)+'</span>';
+      return esc(line);
+    }
+    const i = line.indexOf("//");
+    if(i >= 0){
+      const before = line.slice(0,i);
+      const quotes = (before.match(/"/g) || []).length;
+      if(quotes % 2 === 0) return esc(before) + '<span class="cm">' + esc(line.slice(i)) + "</span>";
+    }
+    return esc(line);
+  }).join("\n");
+}
+function textOf(item){
+  const parts = [item.id, item.title, item.mod, item.group].concat(item.loc || []);
+  (item.sections || []).forEach(function(s){
+    if(s.title) parts.push(s.title);
+    if(s.code) parts.push(s.code);
+    if(s.body) parts.push(s.body);
+    if(s.head) parts.push(s.head.join(" "));
+    if(s.rows) s.rows.forEach(function(r){ parts.push(r.join(" ")); });
+  });
+  return parts.join(" ").replace(/[`*_#>]/g, " ").toLowerCase();
+}
+ITEMS.forEach(function(it){ it._blob = textOf(it); });
+
+/* ---------------------------------------------------------- sections */
+function sectionHTML(sec, sev){
+  let h = "";
+  if(sec.k === "h"){
+    return '<div class="sec"><h3 class="sec-h" style="margin-top:20px">'+esc(sec.title)+"</h3></div>";
+  }
+  if(sec.k === "code"){
+    const head = sec.title
+      ? '<div class="code-head"><span>'+esc(sec.title)+'</span><span class="code-dots"><i></i><i></i><i></i></span></div>'
+      : "";
+    return '<div class="sec">'+head+'<pre class="code"><code>'+codeHTML(sec.code, sec.lang)+"</code></pre></div>";
+  }
+  if(sec.k === "text"){
+    if(!sec.body) return sec.title ? '<div class="sec"><h3 class="sec-h">'+esc(sec.title)+"</h3></div>" : "";
+    return '<div class="sec">'+(sec.title ? '<h3 class="sec-h">'+esc(sec.title)+"</h3>" : "")+
+           "<p>"+md(sec.body)+"</p></div>";
+  }
+  if(sec.k === "note"){
+    const tone = sec.tone ? " "+sec.tone : "";
+    return '<div class="sec"><div class="notice'+tone+'"><span class="nt">'+esc(sec.title)+"</span><span>"+md(sec.body)+"</span></div></div>";
+  }
+  if(sec.k === "table"){
+    const head = "<thead><tr>"+sec.head.map(function(c){return "<th>"+esc(c)+"</th>";}).join("")+"</tr></thead>";
+    const body = "<tbody>"+sec.rows.map(function(r){
+      return "<tr>"+r.map(function(c){return "<td>"+md(c)+"</td>";}).join("")+"</tr>";
+    }).join("")+"</tbody>";
+    return '<div class="sec">'+(sec.title?'<h3 class="sec-h">'+esc(sec.title)+"</h3>":"")+
+           '<div class="tbl-wrap"><table>'+head+body+"</table></div></div>";
+  }
+  return "";
+}
+function bodyHTML(it){
+  return (it.sections || []).map(function(s){ return sectionHTML(s, it.sev); }).join("");
+}
+
+/* ---------------------------------------------------------- list */
+function markTitle(title, q){
+  if(!q) return esc(title);
+  const lower = title.toLowerCase(), idx = lower.indexOf(q);
+  if(idx < 0) return esc(title);
+  return esc(title.slice(0,idx)) + "<mark>" + esc(title.slice(idx, idx + q.length)) + "</mark>" + esc(title.slice(idx + q.length));
+}
+function buildList(){
+  const frag = document.createDocumentFragment();
+  ITEMS.forEach(function(it){
+    const art = document.createElement("article");
+    art.className = "item";
+    art.dataset.id = it.id;
+    art.dataset.sev = it.sev;
+    art.dataset.group = it.group;
+    art.style.setProperty("--irgb", SEV_RGB[it.sev]);
+    const extra = it.loc.length > 1 ? '<span class="loc-more">+' + (it.loc.length - 1) + " 处</span>" : "";
+    art.innerHTML =
+      '<button class="item-head" type="button" aria-expanded="false">' +
+        '<span class="badge '+it.sev+'">'+SEV_LABEL[it.sev]+"</span>" +
+        '<span class="row-main">' +
+          '<span class="row-line1">' +
+            '<code class="loc">'+esc(it.loc[0])+"</code>"+extra+
+            '<span class="dash">—</span>' +
+            '<span class="ttl">'+esc(it.title)+"</span>" +
+          "</span>" +
+          '<span class="row-line2">' +
+            '<span class="idtag">'+esc(it.id)+"</span>" +
+            '<span class="modtag">'+esc(it.mod)+"</span>" +
+            (it.mod === it.group ? "" : '<span class="modtag alt">'+esc(it.group)+"</span>") +
+          "</span>" +
+        "</span>" +
+        '<span class="chev" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg></span>' +
+      "</button>" +
+      '<div class="item-body"><div class="meta-strip">' +
+        '<span class="ms-item"><i style="background:rgb(var(--irgb))"></i>'+SEV_LABEL[it.sev]+' · '+SEV_CN[it.sev]+"</span>" +
+        '<span class="ms-item">编号 <b>'+esc(it.id)+"</b></span>" +
+        '<span class="ms-item">模块 <b>'+esc(it.mod)+"</b></span>" +
+        '<span class="ms-item">位置 <b>'+esc(it.loc.join(" · "))+"</b></span>" +
+      "</div>"+bodyHTML(it)+"</div>";
+    frag.appendChild(art);
+  });
+  listEl.appendChild(frag);
+}
+
+/* ---------------------------------------------------------- heatmap */
+function buildHeat(){
+  const max = Math.max.apply(null, GROUPS.map(function(g){return g.total;}));
+  heatEl.innerHTML = GROUPS.map(function(g){
+    const a = 0.075 + (g.total / max) * 0.40;              // 色块深浅 = 问题密度
+    const rgb = g.tint;
+    const g1 = "rgba(" + rgb + "," + (a * 1.55).toFixed(3) + ")";
+    const g2 = "rgba(" + rgb + "," + (a * 0.62).toFixed(3) + ")";
+    const bord = "rgba(" + rgb + "," + (a * 1.15 + 0.10).toFixed(3) + ")";
+    const glow = "rgba(" + rgb + "," + (a * 2.4).toFixed(3) + ")";
+    const mix = SEVS.filter(function(s){return g[s] > 0;}).map(function(s){
+      return '<b class="mx '+s[0]+'">'+g[s]+"</b>";
+    }).join("");
+    return '<button class="tile" type="button" data-group="'+esc(g.label)+'" aria-pressed="false" ' +
+           'style="--tint:'+rgb+';--g1:'+g1+';--g2:'+g2+';--bord:'+bord+';--glow:'+glow+';">' +
+             '<span class="tile-top"><span class="tile-name">'+esc(g.label)+"</span>" +
+             '<span class="tile-num">'+g.total+"</span></span>" +
+             '<span class="tile-desc">'+esc(g.desc)+"</span>" +
+             '<span class="tile-mix">'+mix+"</span>" +
+           "</button>";
+  }).join("");
+  $("#heatCount").textContent = GROUPS.length + " 个模块 / " + TOTAL + " 条";
+  $$(".tile", heatEl).forEach(function(t){
+    t.addEventListener("mouseenter", function(e){ showTip(t.dataset.group, e.clientX, e.clientY); });
+    t.addEventListener("mousemove", function(e){ moveTip(e.clientX, e.clientY); });
+    t.addEventListener("mouseleave", hideTip);
+    t.addEventListener("focus", function(){ const r = t.getBoundingClientRect(); showTip(t.dataset.group, r.left + r.width/2, r.top + r.height/2); });
+    t.addEventListener("blur", hideTip);
+    t.addEventListener("click", function(){ toggleGroup(t.dataset.group); });
+  });
+}
+
+/* ---------------------------------------------------------- tooltip */
+let tipGroup = null;
+function showTip(label, x, y){
+  const g = GROUPS.filter(function(x){return x.label === label;})[0];
+  if(!g) return;
+  tipGroup = g;
+  const sub = ITEMS.filter(function(i){ return i.group === g.label; })
+                   .sort(function(a,b){ return SEVS.indexOf(a.sev) - SEVS.indexOf(b.sev); });
+  const rows = sub.slice(0,6).map(function(i){
+    return '<span class="t-li" style="--irgb:'+SEV_RGB[i.sev]+'"><i>'+esc(i.id)+"</i><span>"+esc(i.title)+"</span></span>";
+  }).join("");
+  tipEl.innerHTML =
+    '<div class="t-name">'+esc(g.label)+'</div>' +
+    '<div class="t-desc">'+esc(g.desc)+"</div>" +
+    '<div class="t-row">'+SEVS.filter(function(s){return g[s]>0;}).map(function(s){
+        return '<b class="mx '+s[0]+'">'+SEV_LABEL[s]+" "+g[s]+"</b>";
+      }).join("")+"</div>" +
+    '<div class="t-list">'+rows+(sub.length>6 ? '<span class="t-more">…另有 '+(sub.length-6)+" 条，点击模块筛选查看</span>" : "")+"</div>";
+  tipEl.classList.add("show");
+  tipEl.setAttribute("aria-hidden","false");
+  moveTip(x, y);
+}
+function moveTip(x, y){
+  const w = tipEl.offsetWidth || 320, h = tipEl.offsetHeight || 160;
+  let left = x + 16, top = y + 16;
+  if(left + w > window.innerWidth - 12) left = Math.max(12, x - w - 16);
+  if(top + h > window.innerHeight - 12) top = Math.max(12, y - h - 16);
+  tipEl.style.left = left + "px";
+  tipEl.style.top = top + "px";
+}
+function hideTip(){ tipEl.classList.remove("show"); tipEl.setAttribute("aria-hidden","true"); }
+
+/* ---------------------------------------------------------- chips */
+function buildModChips(){
+  const all = '<button class="chip" type="button" data-group="" aria-pressed="true">全部模块<span class="n">'+TOTAL+"</span></button>";
+  modChipsEl.innerHTML = all + GROUPS.slice().sort(function(a,b){return a.order-b.order;}).map(function(g){
+    return '<button class="chip" type="button" data-group="'+esc(g.label)+'" aria-pressed="false" style="--crgb:'+g.tint+'">'+
+           esc(g.label)+'<span class="n">'+g.total+"</span></button>";
+  }).join("");
+  $$(".chip", modChipsEl).forEach(function(c){
+    c.addEventListener("click", function(){ toggleGroup(c.dataset.group); });
+  });
+  $$(".chip", sevChipsEl).forEach(function(c){
+    c.addEventListener("click", function(){ toggleSev(c.dataset.sev); });
+  });
+  $$(".stat").forEach(function(s){
+    s.addEventListener("click", function(){ toggleSev(s.dataset.sev); });
+  });
+}
+function toggleGroup(g){
+  if(!g){ state.groups.clear(); }
+  else if(state.groups.has(g)){ state.groups.delete(g); }
+  else { state.groups.add(g); }
+  render();
+}
+function toggleSev(s){
+  // 全选状态下点击任一徽章 = 只看该级别；已进入筛选态则按多选切换
+  if(state.sevs.size === SEVS.length){
+    state.sevs = new Set([s]);
+  } else if(state.sevs.has(s)){
+    state.sevs.delete(s);
+    if(state.sevs.size === 0){ SEVS.forEach(function(x){ state.sevs.add(x); }); }
+  } else {
+    state.sevs.add(s);
+  }
+  render();
+}
+
+/* ---------------------------------------------------------- filter */
+function baseMatch(it){
+  if(state.groups.size && !state.groups.has(it.group)) return false;
+  if(state.q && it._blob.indexOf(state.q) < 0) return false;
+  return true;
+}
+function matches(it){
+  return state.sevs.has(it.sev) && baseMatch(it);
+}
+
+let lastShown = -1;
+function render(){
+  const q = state.q.trim().toLowerCase();
+  state.q = q;
+  let shown = 0;
+  $$(".item", listEl).forEach(function(el){
+    const it = ITEMS.filter(function(x){return x.id === el.dataset.id;})[0];
+    const ok = matches(it);
+    if(ok){ shown++; el.removeAttribute("hidden"); } else { el.setAttribute("hidden",""); }
+    const ttl = $(".ttl", el);
+    if(ok){ ttl.innerHTML = markTitle(it.title, q); }
+  });
+  shownEl.textContent = shown;
+  fillEl.style.width = (shown / TOTAL * 100).toFixed(2) + "%";
+  liveEl.textContent = shown + " / " + TOTAL;
+  emptyEl.hidden = shown !== 0;
+  listEl.style.display = shown === 0 ? "none" : "";
+
+  // severity chips
+  $$(".chip.sev").forEach(function(c){
+    const s = c.dataset.sev;
+    const n = ITEMS.filter(function(i){ return i.sev === s && baseMatch(i); }).length;
+    c.setAttribute("aria-pressed", state.sevs.has(s) ? "true" : "false");
+    $(".n", c).textContent = n;
+    c.classList.toggle("zero", n === 0 && !state.sevs.has(s));
+  });
+  // stat cards
+  $$(".stat").forEach(function(card){
+    card.setAttribute("aria-pressed", state.sevs.has(card.dataset.sev) ? "true" : "false");
+  });
+  // module chips + tiles
+  $$(".chip", modChipsEl).forEach(function(c){
+    const g = c.dataset.group;
+    const n = g ? ITEMS.filter(function(i){ return i.group === g && state.sevs.has(i.sev) && state.q && i._blob.indexOf(state.q)>=0; }).length : 0;
+    const emptyBySev = g && !ITEMS.some(function(i){ return i.group === g && state.sevs.has(i.sev) && (!state.q || i._blob.indexOf(state.q)>=0); });
+    c.setAttribute("aria-pressed", (!g && state.groups.size === 0) || state.groups.has(g) ? "true" : "false");
+    c.classList.toggle("zero", !!emptyBySev);
+  });
+  $$(".tile", heatEl).forEach(function(t){
+    const g = t.dataset.group;
+    t.setAttribute("aria-pressed", state.groups.has(g) ? "true" : "false");
+    const empty = !ITEMS.some(function(i){ return i.group === g && state.sevs.has(i.sev) && (!state.q || i._blob.indexOf(state.q)>=0); });
+    t.dataset.empty = empty ? "1" : "0";
+  });
+  // active filter summary
+  let tags = "";
+  if(state.sevs.size < SEVS.length){
+    tags += '<span class="tagc">级别：' + SEVS.filter(function(s){return state.sevs.has(s);}).map(function(s){return SEV_LABEL[s];}).join(" / ") + "</span>";
+  }
+  if(state.groups.size){
+    tags += '<span class="tagc">模块：' + Array.from(state.groups).join(" / ") + "</span>";
+  }
+  if(state.q){ tags += '<span class="tagc warn">关键词：“' + esc(state.q) + "”</span>"; }
+  activeEl.innerHTML = tags;
+  const filtered = state.sevs.size < SEVS.length || state.groups.size || state.q;
+  hintEl.textContent = filtered ? "筛选中 · 共 " + shown + " 条命中" : "显示全部 · 点击条目展开细节";
+  searchWrap.classList.toggle("has-q", !!state.q);
+  document.title = "KunClient · C++ 代码审计仪表盘 · " + shown + " / " + TOTAL + " 条";
+  lastShown = shown;
+}
+
+/* ---------------------------------------------------------- actions */
+function resetAll(){
+  state.sevs = new Set(SEVS);
+  state.groups.clear();
+  state.q = "";
+  qEl.value = "";
+  render();
+  qEl.blur();
+}
+$("#reset").addEventListener("click", resetAll);
+$("#reset2").addEventListener("click", resetAll);
+$("#clearQ").addEventListener("click", function(){ state.q = ""; qEl.value = ""; render(); qEl.focus(); });
+qEl.addEventListener("input", function(){ state.q = qEl.value; render(); });
+qEl.addEventListener("keydown", function(e){ if(e.key === "Escape"){ e.stopPropagation(); resetAll(); } });
+
+listEl.addEventListener("click", function(e){
+  const head = e.target.closest(".item-head");
+  if(!head) return;
+  const art = head.closest(".item");
+  const open = art.classList.toggle("open");
+  head.setAttribute("aria-expanded", open ? "true" : "false");
+  if(open){
+    $$(".item.open", listEl).forEach(function(o){ if(o !== art){ o.classList.remove("open"); $(".item-head", o).setAttribute("aria-expanded","false"); } });
+    history.replaceState(null, "", "#" + art.dataset.id);
+  }
+});
+$("#expandAll").addEventListener("click", function(){
+  const anyOpen = $$(".item.open", listEl).length > 0;
+  $$(".item", listEl).forEach(function(o){
+    if(o.hidden) return;
+    const head = $(".item-head", o);
+    if(anyOpen){ o.classList.remove("open"); head.setAttribute("aria-expanded","false"); }
+    else { o.classList.add("open"); head.setAttribute("aria-expanded","true"); }
+  });
+  this.textContent = anyOpen ? "全部展开" : "全部收起";
+});
+
+/* ---------------------------------------------------------- keyboard */
+function isTyping(el){
+  if(!el) return false;
+  const t = el.tagName;
+  return t === "INPUT" || t === "TEXTAREA" || t === "SELECT" || el.isContentEditable;
+}
+document.addEventListener("keydown", function(e){
+  if(e.key === "/" && !isTyping(document.activeElement)){
+    e.preventDefault(); qEl.focus(); qEl.select();
+    return;
+  }
+  if(e.key === "Escape"){
+    if(document.activeElement === qEl){ qEl.blur(); }
+    resetAll();
+    return;
+  }
+  if(isTyping(document.activeElement)) return;
+  if(e.ctrlKey || e.metaKey || e.altKey) return;
+  if(/^[1-4]$/.test(e.key)){
+    e.preventDefault();
+    const s = SEVS[parseInt(e.key,10) - 1];
+    // 切换：再次按同一键回到全部；否则只显示该级别
+    if(state.sevs.size === 1 && state.sevs.has(s)){ SEVS.forEach(function(x){ state.sevs.add(x); }); }
+    else { state.sevs = new Set([s]); }
+    render();
+  }
+});
+
+/* ---------------------------------------------------------- negative findings */
+const GOOD = [
+  ["密码学","Sha256 / Digest 是 Windows CNG 封装，非自实现；RFC 4231 与 FIPS 180-4 向量钉死"],
+  ["随机数","全项目无 qrand / srand / rand()；nonce 用 QRandomGenerator::system()"],
+  ["TLS","无 VerifyNone、无 ignoreSslErrors、无 QSslConfiguration 覆写；拒绝 HTTPS→HTTP 降级"],
+  ["主机白名单","IsTrustedHost 用精确匹配或 . 前缀，挡住 kunawa.cn.evil.com"],
+  ["DPAPI","无 LOCAL_MACHINE、带 UI_FORBIDDEN、LocalFree 正确"],
+  ["QProcess 参数","adb / fastboot 走 setProgram + setNativeArguments，不经 cmd.exe"],
+  ["GptParser","所有读取先校验 size，乘法溢出有检查 —— 全项目解析器最好的一份"],
+  ["SparseImage","cursor + totalSize、RAW 长度、块越界校验完整"],
+  ["AesCfb","S 盒与块内索引有界，密钥 / IV 强制 16 字节"],
+  ["MtkWorker","moveToThread + 原子取消 + QSaveFile 原子提交，防“检查后被替换”"],
+  ["UI singleShot","全部带 context 或 QPointer；无 context 的写法零命中"],
+  ["RequestSigner","QMutex 保护、绑定 scheme://host:port、5 分钟提前过期、401 仅重放一次"]
+];
+$("#goodList").innerHTML = GOOD.map(function(g,i){
+  return '<div class="good-item"><span class="ct">'+String(i+1).padStart(2,"0")+"</span><span><b>"+esc(g[0])+"</b> — "+esc(g[1])+"</span></div>";
+}).join("");
+
+/* ---------------------------------------------------------- counter animation */
+function animateNumbers(){
+  const nodes = $$("[data-count]");
+  const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  nodes.forEach(function(n){
+    const target = parseInt(n.dataset.count, 10) || 0;
+    if(reduce){ n.textContent = target; return; }
+    const dur = 900, t0 = performance.now();
+    function step(t){
+      const p = Math.min(1, (t - t0) / dur);
+      const e = 1 - Math.pow(1 - p, 3);
+      n.textContent = Math.round(target * e);
+      if(p < 1) requestAnimationFrame(step); else n.textContent = target;
+    }
+    requestAnimationFrame(step);
+  });
+}
+
+/* ---------------------------------------------------------- init */
+buildList();
+buildHeat();
+buildModChips();
+render();
+animateNumbers();
+
+// deep link: #C-1 opens that finding
+if(location.hash){
+  const id = location.hash.slice(1);
+  const art = $$(".item", listEl).filter(function(x){return x.dataset.id === id;})[0];
+  if(art){
+    art.classList.add("open");
+    $(".item-head", art).setAttribute("aria-expanded","true");
+    setTimeout(function(){ art.scrollIntoView({behavior:"smooth", block:"center"}); }, 300);
+  }
+}
+window.addEventListener("hashchange", function(){
+  const id = location.hash.slice(1);
+  const art = $$(".item", listEl).filter(function(x){return x.dataset.id === id;})[0];
+  if(art){
+    $$(".item.open", listEl).forEach(function(o){ o.classList.remove("open"); $(".item-head", o).setAttribute("aria-expanded","false"); });
+    art.classList.add("open");
+    $(".item-head", art).setAttribute("aria-expanded","true");
+    art.scrollIntoView({behavior:"smooth", block:"center"});
+  }
+});
+window.addEventListener("scroll", hideTip, {passive:true});
+})();
+</script>
+</body>
+</html>

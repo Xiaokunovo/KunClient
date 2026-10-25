@@ -1,0 +1,901 @@
+/* ============================================================================
+   KunClient · 浅色主题 —— iOS 27 Liquid Glass 版（2026-10-16 全面重写）
+   ----------------------------------------------------------------------------
+   设计语言（对齐上一轮 HTML 原型 prototype/ios27/）：
+     · 材质：半透明玻璃底 + 浅色描边（Qt QSS 无 box-shadow，玻璃感靠
+       「比页面底更亮的填充 + 极浅描边」表达，不靠投影）；
+     · 形状：连续大圆角 —— 胶囊 12~14（按控件高度写死）/ 控件 12 / 卡片 20 / 弹窗 26 / 壳根 30；
+     · 字型：PingFang → HarmonyOS Sans → 微软雅黑 → Segoe UI 回退链；
+     · 强调：iOS 系统蓝 %ACCENT%，浅底 %ACCENT_SUBTLE%，文字压浅底用 %ACCENT_DEEP%。
+   🔴 项目红线（保留）：「无实心填充按钮」—— 主/危险动作只靠**描边 + 字重**区分，
+      因此 #primaryButton / #dangerButton 都是「浅底 + 描边 + 半粗字」，不是实心块。
+   🔴 与 dark.qss 同名规则必须一一对应；改一边必须同步改另一边。
+   🔴🔴 **`border-radius` 一律写具体像素，绝不写 999px**：Qt 的 QSS 遇到超过
+      盒子一半的半径**不会夹到一半，而是直接退化成直角**（2026-10-17 实测：
+      22px 高的 #marqueeBox 写 999px 时左右两端是竖直截断，改成 11px 立刻变圆头；
+      全项目的按钮因此一直是方的）。胶囊半径 = 控件高度 ÷ 2，留 1~2px 余量。
+   ============================================================================ */
+* {
+    font-family: "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", "Segoe UI", sans-serif;
+    font-size: 13px;
+    color: #1C1C1E;
+}
+
+QMainWindow { background: transparent; }
+QFrame#root {
+    background: #F2F5FB;
+    border: 1px solid #D8E1EE;
+    border-radius: 30px;
+}
+/* 内嵌在 EdlFlashPage 里的旧 EDL 窗（swt::edl::MainWindow）：
+   它的根容器必须**透明**，否则整页被刷成一块死白 —— 外壳的玻璃底、壁纸全被挡住，
+   观感和其它页完全不是一套皮（2026-10-17 用户截图：「edl界面和其他界面都不一样」）。
+   用后代选择器而不是 [embedded] 属性分支：内嵌窗一定是 edlLegacyPage 的子孙，
+   这个判据在构造期就是确定的，不依赖 repolish 时机。 */
+QWidget#edlLegacyPage QFrame#root {
+    background: transparent;
+    border: 0;
+    border-radius: 0;
+}
+QWidget { background: transparent; }
+QWidget#contentArea { background: transparent; }
+
+QFrame#titleBar, QFrame#navigation {
+    background: rgba(255, 255, 255, %GLASS_CARD%);
+    border-bottom: 1px solid #E4EAF4;
+}
+/* 标题栏品牌徽标：不带底板 —— 直接用 logo 图形本身（用户口径：logo 不需要背景） */
+QLabel#appBadge { background: transparent; border: 0; color: #12161C; font-size: 12px; font-weight: 700; }
+QLabel#appTitle { color: #12161C; font-size: 18px; font-weight: 700; letter-spacing: .01em; }
+QLabel#appVersion, QLabel#titleMeta { color: #7A8794; }
+QPushButton#windowButton, QPushButton#closeButton {
+    background: transparent; border: 0; border-radius: 10px; padding: 0; color: #5F6B7A;
+}
+QPushButton#windowButton:hover { background: #E9EEF6; color: #12161C; }
+QPushButton#closeButton:hover { background: #FF3B30; color: #ffffff; }
+
+QPushButton#navButton, QPushButton#themeButton, QPushButton#cardTab {
+    background: transparent; border: 0; border-radius: 0; padding: 0 10px; color: #66727F;
+}
+QPushButton#navButton[active="true"], QPushButton#cardTab[active="true"] {
+    color: %ACCENT_DEEP%; border-bottom: 3px solid %ACCENT%; font-weight: 600;
+}
+QPushButton#navButton:disabled, QPushButton#cardTab:disabled { color: #9BA6B2; }
+QPushButton#themeButton { color: #5F6B7A; padding: 0 6px; }
+QPushButton#themeButton:hover { color: %ACCENT_DEEP%; }
+
+/* ── 卡片：液态玻璃（上亮下暗渐变 + 顶边高光 + 浅描边 + 大圆角）──
+   2026-10-17：原来是一层平涂 rgba(255,255,255,α)，压在深色壁纸上读成「磨砂塑料」，
+   用户点名「有些页面都没实现液态玻璃」。iOS 的体积感来自两样东西：
+     ① 垂直渐变（顶亮底暗，模拟光源在上）；
+     ② 顶边一条更亮的描边（specular 高光）。
+   QSS 没有 box-shadow，这两样就是玻璃的全部本钱。
+   🔴 四个 objectName 必须共用同一条规则 —— 漏一个就是「某页没有玻璃」。 */
+QFrame#card, QFrame#heroCard, QFrame#settingsCard, QFrame#aboutCard {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(255, 255, 255, %GLASS_CARD_HI%),
+                                stop:0.55 rgba(255, 255, 255, %GLASS_CARD%),
+                                stop:1    rgba(255, 255, 255, %GLASS_CARD_LO%));
+    border: 1px solid #DFE6F2;
+    border-top-color: rgba(255, 255, 255, .95);
+    border-radius: 20px;
+}
+QFrame#cardTabs, QFrame#sectionHeader { background: transparent; border-bottom: 1px solid #E6ECF5; }
+QLabel#sectionTitle { color: #12161C; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+/* 卡片内的分组小标题（工具页每张功能卡的抬头） */
+QLabel#groupHeader { color: #12161C; font-size: 13px; font-weight: 600; }
+QLabel#strongLabel { color: #2A3441; font-weight: 600; }
+/* 更新弹窗：v2.0.4 → v2.0.5 里的「新版本号」，大一号 + 强调色，一眼看到落点。 */
+QLabel#updateVersionTo { color: %ACCENT_DEEP%; font-size: 18px; font-weight: 700; }
+QLabel#emptyState { color: #7A8794; }
+QLabel#infoKey { color: #74818F; }
+QLabel#infoValue { color: #12161C; font-size: 14px; font-weight: 600; }
+
+/* ── 主页仪表盘（2026-10-16 重做）────────────────────────────────────────
+   hero 卡（设备状态）+ 快捷操作瓦片 + 读数网格卡内滚动。
+   heroCard 的玻璃材质与 #card 合并到上面那条规则里（同一个材质，不能分家）。 */
+QLabel#heroModeLabel { color: #12161C; font-size: 22px; font-weight: 700; }
+/* 快捷操作瓦片：玻璃片 + 描边（**不做实心填充** —— 本项目的按钮红线）。
+   ⚠️ 高度必须在这里写 min-height：有样式表时 setFixedHeight() 会被 QStyleSheetStyle
+   忽略（实测设 58px 仍渲染成 20px）。 */
+QPushButton#opTile {
+    background: rgba(255, 255, 255, .72);
+    border: 1px solid #DCE4F0;
+    border-radius: 14px;
+    padding: 0 6px;
+    min-height: 44px;
+    color: #2A3441;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#opTile:hover { background: #F2F7FF; border-color: #B9D5F5; color: %ACCENT_DEEP%; }
+QPushButton#opTile:pressed { background: #E4EFFF; border-color: %ACCENT%; }
+QPushButton#opTile:disabled { color: #A3AEBA; border-color: #E6ECF5; background: rgba(255, 255, 255, .5); }
+/* 读数网格的卡内滚动：视口必须透明，否则会在卡上盖一块灰底。 */
+QScrollArea#infoScroll { background: transparent; border: 0; }
+QScrollArea#infoScroll QWidget { background: transparent; }
+
+/* ── 输入类：玻璃片 + 12px 圆角 ── */
+QLineEdit, QComboBox {
+    background: rgba(255, 255, 255, .78); border: 1px solid #D8E1EE; border-radius: 12px;
+    padding: 7px 11px; selection-background-color: %ACCENT%; selection-color: #ffffff; min-height: 18px;
+}
+QLineEdit:hover, QComboBox:hover { border-color: #B9C6D8; }
+QLineEdit:focus, QComboBox:focus { border-color: %ACCENT%; background: #ffffff; }
+QLineEdit:disabled, QComboBox:disabled { color: #9BA6B2; background: rgba(240, 244, 250, .8); }
+QComboBox::drop-down { border: 0; width: 26px; }
+QComboBox QAbstractItemView {
+    background: #ffffff; border: 1px solid #DFE6F2; border-radius: 12px;
+    selection-background-color: %ACCENT_SUBTLE%; selection-color: %ACCENT_DEEP%; outline: 0; padding: 4px;
+}
+/* 「芯片 / 引导程序」下拉：云端引导库 249 款全平铺在里面。
+   行高由 MainWindow 里的 CompactRowDelegate 定死 24px ——
+   🔴 这里写 min-height 是**无效**的：QSS 的 min-height 只是下限，Windows 11
+      样式自算的 42px 比它大，规则等于没写（实测仍 42px/行）。别指望改这里。
+   只保留 padding 收窄左右留白。 */
+QComboBox#chipsetCombo QAbstractItemView::item {
+    padding: 0px 8px;
+}
+
+/* ── 数字输入（2026-10-18）：设置页「线程核心」是**全项目唯一**一个 QSpinBox ──
+   之前一条规则都没有 → 落回 Windows 原生样式，在一堆玻璃片中间格外扎眼。
+   与 QLineEdit 同材质。
+   🔴 **只画外框，不碰 ::up-button / ::down-button**：一旦给这两个子控件写规则，
+   就必须同时给 ::up-arrow / ::down-arrow 指定 image，否则箭头直接消失
+   （项目里没有箭头 png，也不该为一个控件去加）。留给原生样式画箭头。 */
+QSpinBox {
+    background: rgba(255, 255, 255, .78); border: 1px solid #D8E1EE; border-radius: 12px;
+    padding: 7px 11px; selection-background-color: %ACCENT%; selection-color: #ffffff;
+    min-height: 18px;
+}
+QSpinBox:hover { border-color: #B9C6D8; }
+QSpinBox:focus { border-color: %ACCENT%; background: #ffffff; }
+QSpinBox:disabled { color: #9BA6B2; background: rgba(240, 244, 250, .8); }
+
+/* ── 多行文本：玻璃片 + 16px 圆角 ──
+   2026-10-17：`QPlainTextEdit` 在本项目里**一条规则都没有**，命令行的「命令窗口」
+   因此落回 QWidget 的 transparent —— 整块直接透明，字压在壁纸上根本读不出来。
+   这里补通用规则，具名的（#logTextEdit / #consoleView）在后面覆盖。 */
+QPlainTextEdit, QTextEdit {
+    background: rgba(255, 255, 255, %GLASS_CARD%);
+    border: 1px solid #DFE6F2;
+    border-top-color: rgba(255, 255, 255, .95);
+    border-radius: 16px;
+    padding: 8px 10px;
+    selection-background-color: %ACCENT%; selection-color: #ffffff;
+}
+/* 命令行页的命令窗口（CommandConsolePage 的 m_console）。
+   比通用多两条：等宽字（adb 输出对不齐就没法读）+ 更实的底（长命令要能看清）。 */
+QPlainTextEdit#consoleView {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(255, 255, 255, %GLASS_CARD_HI%),
+                                stop:0.55 rgba(255, 255, 255, %GLASS_CARD%),
+                                stop:1    rgba(255, 255, 255, %GLASS_CARD_LO%));
+    border: 1px solid #DFE6F2;
+    border-top-color: rgba(255, 255, 255, .95);
+    border-radius: 18px;
+    padding: 10px 12px;
+    color: #1C1C1E;
+    font-family: "Cascadia Mono", "Consolas", "JetBrains Mono", monospace;
+    font-size: 12px;
+}
+
+/* ── 滑条：全站统一 iOS 胶囊轨 + 圆形滑块 ──
+   2026-10-17：原来只有控制中心的 #ccSlider 有样式，设置页的裸 QSlider 落到
+   Windows 原生控件 —— 方头轨道 + 方肩滑块，就是用户说的「圆角不对」。
+   这里补通用规则，具名的 #ccSlider 仍在后面覆盖（不动它）。 */
+QSlider { min-height: 20px; background: transparent; }
+QSlider::groove:horizontal {
+    height: 6px; border-radius: 3px; background: rgba(15, 23, 42, .12);
+}
+QSlider::sub-page:horizontal {
+    height: 6px; border-radius: 3px; background: %ACCENT%;
+}
+QSlider::add-page:horizontal {
+    height: 6px; border-radius: 3px; background: rgba(15, 23, 42, .12);
+}
+QSlider::handle:horizontal {
+    width: 16px; height: 16px; margin: -5px 0;
+    border-radius: 8px; background: #FFFFFF;
+    border: 1px solid rgba(15, 23, 42, .18);
+}
+QSlider::handle:horizontal:hover { border-color: %ACCENT%; }
+QSlider::handle:horizontal:pressed { background: %ACCENT_SUBTLE%; border-color: %ACCENT%; }
+QSlider::sub-page:horizontal:disabled { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .35); }
+
+/* ── 按钮：胶囊形（iOS 词汇）；主/危险只用描边与字重区分（项目红线）── */
+QPushButton {
+    background: rgba(255, 255, 255, .82); border: 1px solid #D8E1EE; border-radius: 14px;
+    padding: 7px 16px; color: #2A3441; min-height: 18px;
+}
+QPushButton:hover { background: #F2F6FD; border-color: #A8BBD2; }
+QPushButton:pressed { background: #E6EDF8; }
+QPushButton:disabled { color: #A3AEBA; background: rgba(244, 246, 250, .9); border-color: #E2E8F1; }
+/* 主操作：浅蓝底 + 蓝描边 + 半粗字 —— 不是实心块 */
+QPushButton#primaryButton {
+    background: %ACCENT_SUBTLE%; border: 1.5px solid %ACCENT%; color: %ACCENT_DEEP%; font-weight: 600;
+}
+QPushButton#primaryButton:hover { background: #DCEBFF; border-color: %ACCENT_DEEP%; }
+QPushButton#primaryButton:pressed { background: #CFE2FF; }
+QPushButton#primaryButton:disabled { background: rgba(240, 244, 250, .9); border-color: #D5DEEA; color: #A3AEBA; }
+
+/* ── 液态玻璃浮层（BottomSheet / GlassDialog）里的按钮 ─────────────────────
+   与深色一一对应；🔴 走 objectName + 全局 QSS，别用控件级 setStyleSheet ——
+   在 frameless 透明窗口里 background 会被盖掉（见 dark.qss 同段注释）。 */
+QPushButton#glassBtnGhost {
+    background: rgba(0, 0, 0, .06);
+    border: 1px solid rgba(0, 0, 0, .12);
+    border-radius: 18px;
+    color: #12161C;
+    font-size: 12.5px;
+    font-weight: 600;
+    padding: 0 16px;
+}
+QPushButton#glassBtnGhost:hover { background: rgba(0, 0, 0, .10); }
+QPushButton#glassBtnGhost:pressed { background: rgba(0, 0, 0, .04); }
+
+QPushButton#glassBtnPrimary {
+    background: %ACCENT%;
+    border: 0;
+    border-radius: 18px;
+    color: #FFFFFF;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 0 16px;
+}
+QPushButton#glassBtnPrimary:hover { background: %ACCENT2%; }
+QPushButton#glassBtnPrimary:pressed { background: %ACCENT_DEEP%; }
+
+QPushButton#glassBtnDanger {
+    background: #FF3B30;
+    border: 0;
+    border-radius: 18px;
+    color: #FFFFFF;
+    font-size: 12.5px;
+    font-weight: 700;
+    padding: 0 16px;
+}
+QPushButton#glassBtnDanger:hover { background: #FF6259; }
+QPushButton#glassBtnDanger:pressed { background: #D92C20; }
+
+/* iOS 动作面板（BottomSheet::showActions）：整宽动作行 + 底部分隔线 */
+QPushButton#glassActionRow {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(0, 0, 0, .08);
+    border-radius: 0;
+    color: #12161C;
+    font-size: 13.5px;
+    font-weight: 500;
+    padding: 0 16px;
+}
+QPushButton#glassActionRow:hover { background: rgba(0, 0, 0, .05); }
+QPushButton#glassActionRow:pressed { background: rgba(0, 0, 0, .03); }
+
+QPushButton#glassActionDanger {
+    background: transparent;
+    border: 0;
+    border-bottom: 1px solid rgba(0, 0, 0, .08);
+    border-radius: 0;
+    color: #D92C20;
+    font-size: 13.5px;
+    font-weight: 600;
+    padding: 0 16px;
+}
+QPushButton#glassActionDanger:hover { background: rgba(255, 59, 48, .10); }
+QPushButton#glassActionDanger:pressed { background: rgba(255, 59, 48, .06); }
+QPushButton#dangerButton { background: #FDECEA; border: 1.5px solid #FF3B30; color: #D92C20; font-weight: 600; }
+QPushButton#dangerButton:hover { background: #FBDDD9; }
+QPushButton#dangerButton:disabled { background: rgba(244, 246, 250, .9); border-color: #EBC3C0; color: #C9A09C; }
+QPushButton#debugButton:checked { background: %ACCENT_SUBTLE%; border-color: %ACCENT%; color: %ACCENT_DEEP%; }
+
+QMenu#rebootMenu {
+    background: #ffffff; color: #2A3441; border: 1px solid #DFE6F2;
+    border-radius: 16px; padding: 6px;
+}
+QMenu#rebootMenu::item { padding: 9px 30px 9px 14px; border-radius: 10px; }
+QMenu#rebootMenu::item:selected { background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; }
+QMenu#rebootMenu::separator { height: 1px; background: #E6ECF5; margin: 5px 8px; }
+
+QCheckBox { spacing: 7px; }
+QCheckBox::indicator { width: 16px; height: 16px; }
+QCheckBox::indicator:unchecked { image: url(:/icons/check-off-light.png); }
+QCheckBox::indicator:checked { image: url(:/icons/check-on.png); }
+QCheckBox:disabled { color: #9BA6B2; }
+
+/* ── 表格 ──
+   2026-10-17：底色从写死的 .72 改成玻璃令牌 —— 写死 = 滑条拉到底表格还是白的，
+   用户看到的就是「透明度不能调节」。表格比卡片亮一档（HI），读作卡里的一个凹槽。 */
+QTableWidget {
+    background: rgba(255, 255, 255, %GLASS_CARD_HI%);
+    alternate-background-color: rgba(255, 255, 255, %GLASS_CARD_LO%);
+    border: 1px solid #DFE6F2; border-radius: 16px; gridline-color: #EBF0F7;
+    selection-background-color: %ACCENT_SUBTLE%; selection-color: #12161C; outline: 0;
+}
+/* 表头：底色也走玻璃令牌（原来写死 .9 —— 滑条拉到最透，表头仍是一条实色带，
+   用户看到的就是「有的地方能调、有的地方调不动」）。 */
+QHeaderView::section {
+    background: rgba(255, 255, 255, %GLASS_CARD_HI%);
+    color: #5F6B7A; border: 0; border-right: 1px solid #EBF0F7;
+    border-bottom: 1px solid #DFE6F2; padding: 9px; font-weight: 600;
+}
+/* 表头首尾两格跟着表格的 16px 圆角走 —— 否则表头两个尖角会顶在圆角外面。 */
+QHeaderView::section:first { border-top-left-radius: 15px; }
+QHeaderView::section:last  { border-top-right-radius: 15px; }
+/* 文件传输的拖放区：原来是 .9 实色，压在壁纸上是一块死白 —— 改成玻璃令牌 +
+   虚线描边，跟卡片一起跟着「卡片不透明度」走。 */
+QLabel#dropZone {
+    background: rgba(255, 255, 255, %GLASS_CARD%);
+    border: 1px dashed #B9C6D8; border-radius: 16px; color: #7A8794;
+}
+/* LogView（ui/widgets/LogView.*）的正文是 QTextEdit#logTextEdit —— 所有日志面板统一走这里 */
+QTextEdit#logTextEdit {
+    background: rgba(255, 255, 255, %GLASS_CARD%);
+    border: 1px solid #DFE6F2; border-radius: 16px;
+    margin: 0; padding: 9px;
+}
+QLabel#stateBanner {
+    background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; border: 1px solid #C3DDFF;
+    border-radius: 9px; margin: 0 10px; padding: 0 14px;
+}
+QProgressBar { background: #E8EDF5; border: 0; border-radius: 5px; min-height: 10px; }
+QProgressBar::chunk { background: %ACCENT%; border-radius: 5px; }
+QLabel#progressOverlay { color: #5F6B7A; }
+QLabel#speedText { color: #5F6B7A; }
+
+QFrame#footer { background: rgba(240, 244, 251, %GLASS_PANEL%); border-top: 1px solid #E4EAF4; }
+QLabel#footerWarning { color: #D92C20; }
+QLabel#protocolStatus { color: #1A8F3C; }
+QLabel#protocolStatus[failed="true"] { color: #D92C20; }
+QLabel#footerStatus { color: #74818F; }
+QLabel#footerStatus[connected="true"] { color: #1A8F3C; }
+QLabel#footerStatus[failed="true"] { color: #D92C20; }
+
+QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
+QScrollBar::handle:vertical { background: rgba(120, 132, 148, .45); min-height: 32px; border-radius: 3px; }
+QScrollBar::handle:vertical:hover { background: rgba(120, 132, 148, .7); }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+QScrollBar:horizontal { background: transparent; height: 10px; }
+QScrollBar::handle:horizontal { background: rgba(120, 132, 148, .45); min-width: 80px; border-radius: 3px; }
+QScrollBar::handle:horizontal:hover { background: rgba(120, 132, 148, .7); }
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0; }
+QSplitter::handle { background: transparent; width: 10px; }
+
+/* ═══════════ KunClient 外壳（MainShell）═══════════ */
+/* 🔴 外壳底色必须**透明**（与 dark 同步，2026-10-12 修「自定义背景失效」）：
+   MainShell::paintEvent 在窗口自身上依次画「底色 + 环境色晕 + 壁纸」，
+   而 #shellRoot 是铺满整窗(0,0 WxH)的子控件 —— 这里一旦写不透明色，
+   它就把整层背景（尤其壁纸）盖得一个像素都不剩。
+   判据：浅色下设置任意壁纸，窗口里搜不到壁纸色像素（曾实测 0/1049600）。 */
+QFrame#shellRoot {
+    background: transparent;
+    border: 1px solid #D8E1EE;
+    border-radius: 30px;
+}
+QWidget#shellBody { background: transparent; }
+
+/* ═══════════ 顶栏（品牌组 / 返回 + 页名；正中留给灵动岛）═══
+   2026-10-17 控制台重构：左导航轨与页签条一并撤掉。
+   2026-10-17 二次重做：底色改由 TopBarChrome 自绘（半透明 + 上高光 + 下收边），
+   这里必须让出 background，否则 QSS 会把自绘的那层糊掉；返回钮从「‹ 控制台」
+   文字胶囊改成圆形 chevron —— 文字留给 tooltip。 */
+QFrame#shellTopBar {
+    background: transparent;
+    border: 0;
+}
+QLabel#pageTitle { color: #12161C; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
+QLabel#shellBrandName { color: #12161C; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
+QLabel#shellBrandVersion { color: #8E9AA7; font-size: 10px; font-weight: 600; }
+QLabel#shellBrandMeta { color: #98A2AE; font-size: 11px; }
+/* 品牌组（NavPill）：胶囊底由 C++ 自绘（主屏压着壁纸才染），这里不给背景。 */
+
+/* 返回钮：30×30 圆形玻璃片（尺寸在 C++ 里定，这里只管皮）。 */
+QPushButton#shellBack {
+    background: rgba(255, 255, 255, .92);
+    border: 1px solid rgba(15, 23, 42, .13);
+    border-radius: 16px;
+    padding: 0;
+    color: %ACCENT_DEEP%;
+}
+QPushButton#shellBack:hover {
+    background: rgba(255, 255, 255, .96);
+    border-color: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .40);
+    color: %ACCENT%;
+}
+QPushButton#shellBack:pressed { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .14); }
+/* 应用动作 │ 系统动作 的分组细线。 */
+QFrame#shellSep { background: rgba(15, 23, 42, .10); border: 0; }
+QPushButton#shellThemeToggle {
+    background: transparent;
+    border: 0;
+    border-radius: 15px;
+    padding: 0;
+    outline: 0;
+    color: #5F6B7A;
+}
+QPushButton#shellThemeToggle:hover { background: #E6EDF8; color: %ACCENT_DEEP%; }
+
+/* ═══════════ 控制台主屏（iOS 启动器）═══
+   页面与图标网格全透 —— 直接露出外壳画在窗口上的色晕 / 壁纸（图标浮在壁纸上，
+   这正是 iOS 主屏的观感）。Dock 是主屏唯一有实体的容器：半透明玻璃长条。
+   图标方块本身由 C++ 自绘（ui/pages/ConsolePage.cpp 的 AppTile），不走 QSS。 */
+QWidget#consolePage, QWidget#consoleGrid { background: transparent; }
+QFrame#consoleDock {
+    background: rgba(255, 255, 255, .42);
+    border: 1px solid rgba(255, 255, 255, .66);
+    border-radius: 28px;
+}
+
+QStackedWidget#pageStack {
+    /* 页面底也走「上亮下暗」的玻璃渐变，和卡片同一套光源逻辑；
+       纯平涂的 rgba(251,252,255,α) 在壁纸上是一层灰纱，读不出玻璃。 */
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(251, 252, 255, %GLASS_PAGE_HI%),
+                                stop:0.45 rgba(251, 252, 255, %GLASS_PAGE%),
+                                stop:1    rgba(247, 250, 254, %GLASS_PAGE_LO%));
+    /* 顶部圆角：内容区像一张从顶栏下面浮出来的纸，而不是和顶栏糊成一片。
+       控制台主屏要露出壁纸，走 [console="true"] 分支去掉底色（见 MainShell）。 */
+    border-top-left-radius: 20px;
+    border-top-right-radius: 20px;
+}
+QStackedWidget#pageStack[console="true"] { background: transparent; }
+/* EDL 老页面的根容器：必须透明，否则会盖掉 pageStack 的玻璃底（默认 QWidget 已透明，
+   这里显式写一条是为了不被将来的通用规则误伤）。 */
+QWidget#edlLegacyPage { background: transparent; }
+
+/* ── 平铺页的「整页玻璃板」（BasePage::setGlassSheet(true)）──
+   一批功能页（MTK / 应用管理 / 可视刷写 / 小米 EDL / 命令行）是裸行布局，
+   一条 #card 都没有，控件直接浮在壁纸上 —— 用户口径「这页没实现液态玻璃」。
+   这张板子给它们一层与卡片同材质的底，控件落上去观感立刻统一。
+   ⚠️ 只给没有卡片的页开；已有 #card 的页面开了会玻璃叠玻璃。 */
+QWidget#basePage[glass="true"] {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0    rgba(255, 255, 255, %GLASS_CARD_HI%),
+                                stop:0.55 rgba(255, 255, 255, %GLASS_CARD%),
+                                stop:1    rgba(255, 255, 255, %GLASS_CARD_LO%));
+    border: 1px solid #DFE6F2;
+    border-top-color: rgba(255, 255, 255, .95);
+    border-radius: 20px;
+}
+/* 状态栏贴窗口下沿：两个下角必须跟着窗口收圆（30px，与 #shellRoot 同值），
+   否则它用方角把窗口的圆角盖掉 —— 和顶栏是同一个毛病。上沿是内部接缝，保持直角。 */
+QFrame#shellStatusBar {
+    /* 🔴 状态栏是三行密集小字（设备/模式/任务/进度 + 跑马灯），**不能用 %GLASS_PANEL%**
+       （默认只有 ~16% 不透明）：压在照片/视频壁纸上时，整条栏跟着壁纸一起变深，
+       而 #statusLabel 是 #93A0AD 的灰字 —— 屏上等于看不见（2026-10-17 截图实测）。
+       与 #quickBar / #marqueeBox 同一个口径：窄条实色换可读性。
+       色值刻意取顶栏 #ECF1F9 那一档 —— 上下两条同色，窗口像个书立。 */
+    background: rgba(236, 241, 249, .96);
+    border-top: 1px solid #E4EAF4;
+    border-bottom-left-radius: 30px;
+    border-bottom-right-radius: 30px;
+}
+QLabel#statusLabel { color: #93A0AD; }
+QLabel#statusValue { color: #2A3441; }
+/* EDL 链路段（协议 / 状态）：状态: 按 linkState 属性着色。
+   🔴 属性选择器是运行时改属性驱动的，改完必须 unpolish/polish 才重绘（代码里已做）。 */
+QLabel#statusValue[linkState="ok"] { color: #1A8F3C; font-weight: 600; }
+QLabel#statusValue[linkState="failed"] { color: #D92C20; font-weight: 600; }
+QLabel#deviceModeLabel { font-size: 15px; font-weight: 700; }
+QLabel#deviceHintLabel { color: #74818F; }
+/* ── 小米字库牌子（StorageBrandPage）结果卡 ─────────────────────────────
+   牌子大字走「一个答案」的层级：26px/700，比页头还大 —— 维修现场是隔着
+   半米看屏幕念出来的，不需要第二眼。副行给 loader 原始厂商串，核对用。 */
+QLabel#brandVendor { color: #12161C; font-size: 26px; font-weight: 700; }
+QLabel#brandName { color: #4A5765; font-size: 13px; font-weight: 600; }
+/* ── 云端引导库（2026-10-18 最终形态）────────────────────────────────────
+   条目已**直接罗列在「芯片 / 引导程序」下拉里**（按品牌分组），不再有独立的
+   按钮 / 弹窗 / 内联面板，所以这一块没有任何 QSS 规则 —— 下拉本身的样式由
+   QComboBox 那组规则覆盖。 */
+QLabel#placeholderTitle { color: #12161C; }
+QLabel#placeholderMessage { color: #74818F; }
+/* 状态栏跑马灯（个性签名 / 文案滚动）：一条淡强调底的窄带，读作「装饰层」而非读数槽 */
+QLabel#marqueeLabel { color: %ACCENT_DEEP%; font-size: 12px; background: transparent; }
+QLabel#marqueeLabel[tone="muted"] { color: #74818F; }
+QFrame#marqueeBox {
+    /* 22px 高的一条字，压在带照片/视频的壁纸上 —— 原来是 8% 的淡蓝底，
+       屏上蓝字直接糊进深色背景（2026-10-17 用户截图：「字都看不到了」）。
+       与 #quickBar 同一个口径：**窄条给足不透明度换可读性**，
+       玻璃质感留给卡片，别拿一条字去试壁纸的运气。 */
+    background: rgba(255, 255, 255, .92);
+    border: 1px solid #E4EAF4;
+    /* 🔴 必须写**具体像素**（= 高度 22 的一半），不能写 999px：
+       999 这种超出盒子的半径在 Qt 里算出来是直角 —— 2026-10-17 实测
+       （胶囊左右两端都是竖直截断，见 .workbuddy/tmp/r10 的像素扫描）。 */
+    border-radius: 11px;
+}
+
+/* ── 页内快捷条（EDL 刷写页：场景提示 + 快捷入口） ── */
+/* 快捷条：从「通栏直角条」改成浮在页面顶部的圆角玻璃条 —— 通栏 + 直角是整页里
+   最硬的一道边，用户点名要圆角。margin 走 QSS box model，只缩背景不占布局。 */
+QFrame#quickBar {
+    /* 🔴 这里**不用** %GLASS_PANEL%：那是「卡片不透明度 × SurfaceAlt」的乘积，
+       默认只有 ~16% 不透明。页签条那么矮的一条字压在有照片的自定义背景上，
+       实测完全看不清（2026-10-17 截图）。一条 38px 的提示条不需要玻璃质感，
+       给足不透明度换可读性。 */
+    background: rgba(247, 250, 254, .96);
+    border: 1px solid #E4EAF4;
+    border-radius: 14px;
+    /* 外边距由 C++ 的外层容器给（quickHost），别写在这里：QSS 的 margin 是
+       向内压内容盒，会把条里的按钮挤扁。 */
+}
+QPushButton#quickLink {
+    background: rgba(255, 255, 255, .86);
+    border: 1px solid #B9D5F5;
+    border-radius: 12px;
+    padding: 4px 14px;
+    font-size: 12px;
+    color: %ACCENT_DEEP%;
+}
+QPushButton#quickLink:hover { border-color: %ACCENT%; color: #0857AE; background: #F2F7FF; }
+QPushButton#quickLink:pressed { background: #E4EFFF; }
+
+/* ── 页签条右侧的两个下拉（2026-10-19：高级功能弹窗 → 下拉选择框）─────────
+   与 #quickLink 同材质（淡蓝描边 + 12px 圆角），但把内边距压到 4px/10px，
+   免得在 40px 高的页签条里比「刷机界面」标题还重。
+   🔴 行高由 C++ 的 CompactRowDelegate 定（28px）：QSS 的 min-height 是下限，
+      压不动 Win11 样式自算的 42px —— 与「芯片 / 引导程序」下拉同一坑。 */
+QComboBox#lunCombo, QComboBox#advancedCombo {
+    background: rgba(255, 255, 255, .86); border: 1px solid #B9D5F5;
+    border-radius: 12px; padding: 4px 10px; font-size: 12px;
+    color: %ACCENT_DEEP%; min-height: 16px;
+}
+QComboBox#lunCombo:hover, QComboBox#advancedCombo:hover {
+    border-color: %ACCENT%; background: #F2F7FF;
+}
+QComboBox#lunCombo:disabled, QComboBox#advancedCombo:disabled {
+    color: #9BA6B2; border-color: #E6ECF5; background: rgba(255, 255, 255, .5);
+}
+QComboBox#lunCombo QAbstractItemView::item,
+QComboBox#advancedCombo QAbstractItemView::item { padding: 0px 8px; }
+
+/* ═══════════ 登录窗口（LoginDialog）═══════════
+   与 dark.qss 同名规则一一对应；改一边必须同步改另一边。 */
+QFrame#loginRoot { background: #ffffff; border: 1px solid #DFE6F2; border-radius: 26px; }
+QFrame#loginTitleBar { background: transparent; border-bottom: 1px solid #EEF2F8; }
+QLabel#loginTitleBrand { color: #4A5765; font-size: 12px; font-weight: 700; }
+QPushButton#loginCloseButton {
+    background: transparent; border: 0; border-radius: 10px;
+    padding: 2px 9px; min-height: 0; color: #74818F; font-size: 13px;
+}
+QPushButton#loginCloseButton:hover { background: #FF3B30; color: #ffffff; }
+
+QLabel#loginTitle { color: #12161C; font-size: 15px; font-weight: 600; }
+QLabel#loginSubtitle { color: #66727F; font-size: 11.5px; }
+QLabel#loginFieldLabel { color: #74818F; font-size: 11px; }
+QLabel#loginHint { color: #7A8794; font-size: 11px; }
+QLabel#loginFooter { color: #93A0AD; font-size: 10.5px; }
+
+QFrame#loginTabBar { background: transparent; border-bottom: 1px solid #E6ECF5; }
+QPushButton#loginTab {
+    background: transparent; border: 0; border-bottom: 2px solid transparent;
+    border-radius: 0; padding: 6px 0; min-height: 0; color: #74818F; font-size: 12px;
+}
+QPushButton#loginTab:hover { color: #2A3441; }
+QPushButton#loginTab:checked { color: #12161C; font-weight: 700; border-bottom: 2px solid %ACCENT%; }
+
+QWidget#loginStatus { border-radius: 10px; }
+QWidget#loginStatus[state="error"] { background: #FDECEA; border: 1px solid #F5C2BD; }
+QWidget#loginStatus[state="ok"]    { background: #E8F7EE; border: 1px solid #A9DEC0; }
+QLabel#loginStatusIcon { font-size: 13px; }
+QLabel#loginStatusText { font-size: 11.5px; }
+QWidget#loginStatus[state="error"] QLabel#loginStatusIcon { color: #D92C20; }
+QWidget#loginStatus[state="error"] QLabel#loginStatusText { color: #B3241A; }
+QWidget#loginStatus[state="ok"] QLabel#loginStatusIcon { color: #1A8F3C; }
+QWidget#loginStatus[state="ok"] QLabel#loginStatusText { color: #126C42; }
+
+QPushButton#loginAction {
+    background: %ACCENT_SUBTLE%; border: 1.5px solid %ACCENT%; border-radius: 14px;
+    padding: 8px 16px; min-height: 20px; color: %ACCENT_DEEP%; font-size: 12.5px; font-weight: 600;
+}
+QPushButton#loginAction:hover { background: #DCEBFF; border-color: %ACCENT_DEEP%; }
+QPushButton#loginAction:pressed { background: #CFE2FF; }
+QPushButton#loginAction:disabled { background: rgba(244, 246, 250, .9); border-color: #D8E1EE; color: #A3AEBA; }
+QPushButton#loginAction[variant="success"] {
+    background: #E8F7EE; border-color: #1A8F3C; color: #126C42;
+}
+QPushButton#loginAction[variant="success"]:hover { background: #D9F1E4; border-color: #146E2F; }
+QPushButton#loginAction[variant="success"]:disabled { background: rgba(244, 246, 250, .9); border-color: #D8E1EE; color: #A3AEBA; }
+
+QPushButton#loginSendCode {
+    background: rgba(255, 255, 255, .86); border: 1px solid #B9D5F5; border-radius: 12px;
+    padding: 7px 14px; min-height: 0; color: %ACCENT_DEEP%; font-size: 11.5px;
+}
+QPushButton#loginSendCode:hover { background: #F2F7FF; border-color: %ACCENT%; color: #0857AE; }
+QPushButton#loginSendCode:disabled { background: rgba(244, 246, 250, .9); border-color: #E2E8F1; color: #A3AEBA; }
+
+/* 登录双重验证页的「返回登录」：纯文字链接钮 */
+QPushButton#loginBackLink {
+    background: transparent; border: 0; border-radius: 6px;
+    padding: 4px 0; min-height: 0; color: #74818F; font-size: 12px;
+    text-decoration: underline;
+}
+QPushButton#loginBackLink:hover { color: #2A3441; }
+QPushButton#loginBackLink:disabled { color: #A3AEBA; }
+
+/* ═══════════ 统一消息弹窗（ThemedMessageBox）═══════════
+   与 dark.qss 同名规则一一对应；改一边必须同步改另一边。 */
+QFrame#msgRoot { background: #ffffff; border: 1px solid #DFE6F2; border-radius: 26px; }
+QFrame#msgTitleBar { background: transparent; border-bottom: 1px solid #EEF2F8; }
+QLabel#msgTitle { color: #12161C; font-size: 13px; font-weight: 600; }
+QPushButton#msgClose {
+    background: transparent; border: 0; border-radius: 10px;
+    padding: 2px 9px; min-height: 0; color: #74818F; font-size: 13px;
+}
+QPushButton#msgClose:hover { background: #FF3B30; color: #ffffff; }
+QFrame#msgBody { background: transparent; }
+
+/* 徽标：圆形底座 + 居中字形，颜色走 variant */
+/* 消息框图标块：30×30（kBadgeSize）的正圆。
+   🔴 原来写 22px —— 超过一半（15），Qt 直接退化成**直角方块**，屏上像个方按钮
+   （2026-10-18 用户「有些按钮没有圆角」指的就是这类）。半径必须 ≤ 边长÷2。 */
+QLabel#msgIcon { border-radius: 15px; font-size: 15px; font-weight: 700; }
+QLabel#msgIcon[variant="info"]     { background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; border: 1px solid #B9D5F5; }
+QLabel#msgIcon[variant="warning"]  { background: #FEF4E4; color: #B5750A; border: 1px solid #EBCB8E; }
+QLabel#msgIcon[variant="critical"] { background: #FDECEA; color: #D92C20; border: 1px solid #F5C2BD; }
+QLabel#msgIcon[variant="question"] { background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; border: 1px solid #B9D5F5; }
+
+QLabel#msgText { color: #2A3441; font-size: 12.5px; line-height: 1.55; }
+QFrame#msgButtonRow { background: transparent; }
+
+QPushButton#msgButton {
+    background: rgba(255, 255, 255, .9);
+    border: 1px solid #D8E1EE;
+    border-radius: 14px;
+    padding: 7px 18px;
+    min-height: 20px;
+    color: #2A3441;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#msgButton:hover { background: #F2F6FD; border-color: #A8BBD2; color: #12161C; }
+QPushButton#msgButton:pressed { background: #E6EDF8; }
+QPushButton#msgButton[variant="primary"] {
+    background: %ACCENT_SUBTLE%; border: 1.5px solid %ACCENT%; color: %ACCENT_DEEP%;
+}
+QPushButton#msgButton[variant="primary"]:hover { background: #DCEBFF; border-color: %ACCENT_DEEP%; }
+QPushButton#msgButton[variant="primary"]:pressed { background: #CFE2FF; }
+
+QScrollArea#msgScroll { background: transparent; border: 0; }
+QScrollArea#msgScroll QWidget { background: transparent; }
+
+/* 擦除分区确认弹窗的分区列表 */
+QListWidget#partitionList {
+    background: rgba(247, 250, 254, .9);
+    border: 1px solid #E6ECF5;
+    border-radius: 14px;
+    padding: 5px;
+    outline: 0;
+}
+QListWidget#partitionList::item {
+    color: #2A3441;
+    padding: 4px 9px;
+    border-radius: 9px;
+}
+QListWidget#partitionList::item:selected { background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; }
+QListWidget#partitionList::item:alternate { background: rgba(240, 244, 251, .8); }
+
+/* ═══════════ FDL Auth 窗（FdlAuthDialog：原 token + sig）═══════════
+   卡片 / 标题栏 / 底部按钮复用上面的 #msg*，这里只加正文控件。
+   与 dark.qss 同名规则一一对应；改一边必须同步改另一边。 */
+QLabel#fdlLabel { color: #2A3441; font-size: 12px; font-weight: 600; }
+QLabel#fdlHint { color: #74818F; font-size: 11.5px; }
+QLabel#fdlHint[error="true"] { color: #D92C20; }
+
+/* 设置页：卡片内的说明文字 / 模块权限行（2026-10-18「刷机引擎」「账号与会员」两张卡）
+   [included="false"] 是**属性选择器**：属性在 new 出来之后、显示之前设置，
+   QLabel 是普通控件（非自绘），属性选择器对它可靠（对照 #fdlHint[error="true"]）。 */
+QLabel#settingsHint { color: #74818F; font-size: 11.5px; }
+QLabel#moduleRow { color: #2A3441; font-size: 12px; }
+QLabel#moduleRow[included="false"] { color: #8A95A3; }
+
+QPlainTextEdit#fdlBlob, QPlainTextEdit#fdlSig {
+    background: rgba(247, 250, 254, .9);
+    border: 1px solid #E6ECF5;
+    border-radius: 14px;
+    padding: 8px 10px;
+    color: #12161C;
+    font-size: 12px;
+    selection-background-color: #CFE2FF;
+    selection-color: #12161C;
+}
+QPlainTextEdit#fdlBlob { color: #4A5765; }
+QPlainTextEdit#fdlBlob:focus, QPlainTextEdit#fdlSig:focus { border-color: #A8BBD2; }
+
+QPushButton#fdlMiniButton {
+    background: rgba(255, 255, 255, .9);
+    border: 1px solid #D8E1EE;
+    border-radius: 11px;
+    padding: 3px 12px;
+    min-height: 0;
+    color: #2A3441;
+    font-size: 11.5px;
+    font-weight: 600;
+}
+QPushButton#fdlMiniButton:hover { background: #F2F6FD; border-color: #A8BBD2; color: #12161C; }
+QPushButton#fdlMiniButton:pressed { background: #E6EDF8; }
+
+/* ═══════════ 启动预载窗（StartupPreloadDialog）═══════════
+   卡片与标题栏复用上面的 #msgRoot / #msgTitleBar，这里只加正文。
+   与 dark.qss 同名规则一一对应；改一边必须同步改另一边。
+
+   🔴 步骤状态走动态属性 `state`（pending/active/done/failed）。**必须把 state 同时挂在
+      行 / 图标 / 状态字三个控件上**，不要用「父属性 + 后代选择器」：子控件构造时就按
+      pending 算过一次样式，之后只改父属性、只 polish 父控件的话，子控件会一直卡在
+      初始灰色（2026-10-16 实测踩过）。每个控件改属性后各自 unpolish/polish。 */
+QLabel#preloadBrand { color: #4A5765; font-size: 12px; font-weight: 700; }
+QLabel#preloadTitle { color: #12161C; font-size: 15px; font-weight: 700; }
+QLabel#preloadSubtitle { color: #66727F; font-size: 11.5px; }
+
+QFrame#preloadSteps {
+    background: rgba(240, 244, 251, %GLASS_PANEL%);
+    border: 1px solid #E4EAF4;
+    border-radius: 14px;
+}
+QFrame#preloadStep { background: transparent; border: 0; border-bottom: 1px solid #E9EEF6; }
+QFrame#preloadStep[last="true"] { border-bottom: 0; }
+QFrame#preloadStep[state="active"] { background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, .06); }
+
+QLabel#preloadStepIcon { font-size: 12px; }
+QLabel#preloadStepName { color: #3A4553; font-size: 12.5px; font-weight: 600; }
+QLabel#preloadStepState { font-size: 11.5px; }
+
+QLabel#preloadStepIcon[state="pending"],
+QLabel#preloadStepState[state="pending"] { color: #A3AEBA; }
+QLabel#preloadStepIcon[state="active"],
+QLabel#preloadStepState[state="active"] { color: %ACCENT_DEEP%; }
+QLabel#preloadStepIcon[state="done"],
+QLabel#preloadStepState[state="done"] { color: #1A8F3C; }
+QLabel#preloadStepIcon[state="failed"],
+QLabel#preloadStepState[state="failed"] { color: #B5750A; }
+
+QFrame#preloadPercentRow { background: transparent; }
+QLabel#preloadPercent { color: %ACCENT_DEEP%; font-size: 12px; font-weight: 700; }
+QProgressBar#preloadBar { min-height: 8px; max-height: 8px; border-radius: 4px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   控制中心页（ui/pages/ControlCenterPage.cpp）：芯片 / 滑杆 / 快捷入口
+   面板本身在 paintEvent 里自绘玻璃，这里只管里面的文字控件。
+   底/边一律用「淡墨 + 极淡描边」：玻璃上不能出现实心色块，否则整块面板
+   会看起来像贴在玻璃上的白纸。
+   ───────────────────────────────────────────────────────────────────────── */
+QLabel#ccTitle { color: #10151C; font-size: 15px; font-weight: 700; }
+
+QPushButton#ccCollapse {
+    background: rgba(15, 23, 42, 0.06);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 11px;
+    padding: 4px 12px;
+    color: #4A5563;
+    font-size: 12px;
+}
+QPushButton#ccCollapse:hover { background: rgba(15, 23, 42, 0.11); color: #10151C; }
+
+QLabel#ccChip {
+    background: rgba(255, 255, 255, 0.58);
+    border: 1px solid rgba(15, 23, 42, 0.07);
+    border-radius: 10px;
+    padding: 4px 10px;
+    color: #55606E;
+    font-size: 11px;
+}
+QLabel#ccChip[state="ok"] {
+    color: #0B7A3E;
+    border-color: rgba(11, 122, 62, 0.24);
+    background: rgba(11, 122, 62, 0.10);
+}
+QLabel#ccChip[state="failed"] {
+    color: #B3261E;
+    border-color: rgba(179, 38, 30, 0.24);
+    background: rgba(179, 38, 30, 0.10);
+}
+
+QLabel#ccSliderLabel { color: #55606E; font-size: 12px; }
+QLabel#ccSliderValue { color: #10151C; font-size: 12px; font-weight: 600; }
+QSlider#ccSlider { min-height: 18px; }
+QSlider#ccSlider::groove:horizontal {
+    height: 6px; border-radius: 3px; background: rgba(15, 23, 42, 0.13);
+}
+QSlider#ccSlider::sub-page:horizontal {
+    height: 6px; border-radius: 3px; background: %ACCENT%;
+}
+QSlider#ccSlider::handle:horizontal {
+    width: 16px; height: 16px; margin: -5px 0;
+    border-radius: 8px; background: #FFFFFF;
+    border: 1px solid rgba(15, 23, 42, 0.18);
+}
+QSlider#ccSlider::handle:horizontal:hover { border-color: %ACCENT%; }
+
+QPushButton#ccNav {
+    background: rgba(255, 255, 255, 0.62);
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 12px;
+    padding: 7px 10px;
+    color: #10151C;
+    font-size: 12px;
+    font-weight: 600;
+}
+QPushButton#ccNav:hover {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, 0.13);
+    border-color: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, 0.36);
+    color: %ACCENT_DEEP%;
+}
+
+QLabel#ccHint { color: #8A95A3; font-size: 11.5px; }
+
+/* ─────────────────────────────────────────────────────────────────────────
+   使用条款 / 隐私说明弹窗（ui/dialogs/DisclaimerDialog.cpp）
+   结构：品牌头 → 摘要卡 → 分节正文（滚动）→ 勾选 + 按钮。
+   底色只上在这一个弹窗上（#disclaimerDialog），不影响其它无边框弹窗。
+   ───────────────────────────────────────────────────────────────────────── */
+/* 2026-10-21：**所有无自绘背景的弹窗**的兜底底色。
+   更新 / 下载 / 云端引导库 / 打包列表 / 日志上传 / 图标选择这些弹窗原来没有
+   QDialog 规则，深色主题下会露出系统浅色底（白底白字看不清），个别机器上整窗发黑。
+   自绘外壳的弹窗不受影响 —— 它们开了 WA_TranslucentBackground，
+   样式表背景本来就不会画到窗口上。 */
+QDialog { background: #F7F9FD; }
+
+QDialog#disclaimerDialog { background: #F7F9FD; }
+
+QFrame#legalHeader { background: transparent; border-bottom: 1px solid #E4EAF4; }
+QLabel#legalTitle { color: #10151C; font-size: 18px; font-weight: 700; }
+QLabel#legalSubtitle { color: #6A7685; font-size: 12px; }
+QLabel#legalVersionPill {
+    background: rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, 0.12);
+    border: 1px solid rgba(%ACCENT_R%, %ACCENT_G%, %ACCENT_B%, 0.26);
+    border-radius: 10px;
+    padding: 3px 9px;
+    color: %ACCENT_DEEP%;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+QFrame#legalSummary {
+    background: rgba(255, 193, 7, 0.10);
+    border: 1px solid rgba(197, 138, 0, 0.26);
+    border-left: 3px solid #C58A00;
+    border-radius: 12px;
+}
+QLabel#legalSummaryText { color: #4C4331; font-size: 12px; }
+
+QLabel#legalSectionTitle { color: %ACCENT_DEEP%; font-size: 13px; font-weight: 700; }
+QLabel#legalBody { color: #3A4450; font-size: 12px; }
+QLabel#dialogFooter { color: #98A2AE; font-size: 11px; }
+QLabel#dialogHint { color: #7A8794; font-size: 11px; }
+
+QFrame#legalFooter {
+    background: rgba(255, 255, 255, 0.86);
+    border-top: 1px solid #E4EAF4;
+}
+QCheckBox#legalAgree { color: #4A5563; font-size: 12px; }
+
+QScrollArea#legalScroll, QWidget#legalHost { background: transparent; }
+QScrollArea#legalScroll > QWidget > QWidget { background: transparent; }
+
+/* 工具提示：Qt 默认是方角系统气泡，和整套圆角语言打架。 */
+QToolTip {
+    background: #FFFFFF;
+    color: #2A3441;
+    border: 1px solid #D8E1EE;
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 12px;
+}
+
+
+/* ─────────────────────────────────────────────────────────────────────────
+   首次欢迎 / 引导弹窗（ui/dialogs/WelcomeDialog.cpp）
+   窗口本体在 paintEvent 里自绘圆角玻璃，这里只管文字与「跳过」。
+   ───────────────────────────────────────────────────────────────────────── */
+QStackedWidget#welcomeStack { background: transparent; }
+QLabel#welcomeTitle { color: #10151C; font-size: 22px; font-weight: 700; letter-spacing: .01em; }
+QLabel#welcomeBody { color: #4A5563; font-size: 13px; }
+QPushButton#welcomeSkip {
+    background: transparent;
+    border: 0;
+    border-radius: 10px;
+    padding: 6px 12px;
+    color: #8A96A4;
+    font-size: 12.5px;
+}
+QPushButton#welcomeSkip:hover { background: rgba(15, 23, 42, .06); color: #2A3441; }

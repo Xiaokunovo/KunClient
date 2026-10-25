@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KunClient · Transition Lab</title>
+<style>
+/* ============================================================
+   Transition Lab —— KunClient 转场实验台
+   页面级：Fluid / Cube / Zoom / Depth
+   控件级：控制中心抽屉 / 灵动岛展开 / 对话框
+   全部由 JS 逐帧驱动（便于定格取证与调参）
+   ============================================================ */
+:root{
+  --ease-silk:cubic-bezier(.32,.72,0,1);
+  --ease-spring:cubic-bezier(.34,1.4,.64,1);
+  --ease-decel:cubic-bezier(.16,1,.3,1);
+
+  --bg:#05070c;
+  --win:#080d14;
+  --win-2:#0b121b;
+  --panel:rgba(255,255,255,.042);
+  --panel-2:rgba(255,255,255,.068);
+  --line:rgba(255,255,255,.075);
+  --line-2:rgba(255,255,255,.13);
+  --text:#e9eef6;
+  --text2:#93a2b8;
+  --text3:#5b6a7e;
+
+  --teal:#2fe3c4;
+  --blue:#5b8cff;
+  --violet:#9d8cff;
+  --amber:#f5b84c;
+  --rose:#ff7a90;
+  --lime:#8fe36a;
+
+  --font:"Segoe UI","Microsoft YaHei UI","PingFang SC",system-ui,sans-serif;
+  --mono:"Cascadia Code","JetBrains Mono",Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{
+  font-family:var(--font);background:var(--bg);color:var(--text);
+  display:grid;place-items:center;overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body::before{
+  content:"";position:fixed;inset:0;pointer-events:none;
+  background:
+    radial-gradient(1000px 620px at 18% 6%,rgba(64,120,255,.16),transparent 62%),
+    radial-gradient(880px 560px at 86% 94%,rgba(38,198,190,.12),transparent 62%),
+    radial-gradient(700px 500px at 50% 50%,rgba(120,90,220,.07),transparent 70%);
+}
+
+/* ── 实验台外壳 ───────────────────────────────────────── */
+.lab{position:relative;display:flex;flex-direction:column;gap:14px;align-items:center}
+
+.lab-head{
+  display:flex;align-items:center;gap:22px;width:min(1180px,92vw);
+  flex-wrap:wrap;
+}
+.brand{display:flex;align-items:baseline;gap:10px;font-size:11px;letter-spacing:.32em;font-weight:600;color:rgba(233,238,246,.8)}
+.brand i{
+  font-style:normal;width:6px;height:6px;border-radius:50%;background:var(--teal);
+  box-shadow:0 0 10px 2px rgba(47,227,196,.7);display:inline-block;transform:translateY(-2px);
+}
+.brand span{color:var(--text3);letter-spacing:.22em;font-weight:400;font-size:10px}
+
+.chips{display:flex;gap:6px;align-items:center}
+.chips .tag{font-size:10px;letter-spacing:.18em;color:var(--text3);margin-right:4px}
+.chip{
+  font:inherit;font-size:11.5px;letter-spacing:.04em;color:var(--text2);
+  padding:6px 13px;border-radius:999px;cursor:pointer;
+  background:rgba(255,255,255,.035);border:1px solid var(--line);
+  transition:background .22s ease,color .22s ease,border-color .22s ease,transform .18s ease;
+  white-space:nowrap;
+}
+.chip:hover{background:rgba(255,255,255,.075);color:var(--text)}
+.chip:active{transform:scale(.97)}
+.chip.on{
+  color:#04120f;background:linear-gradient(180deg,#5cf0d4,#22cdb2);
+  border-color:transparent;font-weight:600;
+  box-shadow:0 6px 18px -8px rgba(47,227,196,.8);
+}
+.chip.ghost.on{color:#0a1020;background:linear-gradient(180deg,#a9c0ff,#6f95f8);box-shadow:0 6px 18px -8px rgba(91,140,255,.8)}
+
+/* ── 窗口 ─────────────────────────────────────────────── */
+.stage{
+  position:relative;
+  width:min(1180px,92vw);height:min(700px,76vh);
+  perspective:1600px;perspective-origin:50% 46%;
+}
+.win{
+  position:absolute;inset:0;border-radius:18px;overflow:hidden;
+  background:var(--win);
+  border:1px solid rgba(255,255,255,.09);
+  box-shadow:
+    0 60px 120px -40px rgba(0,0,0,.9),
+    0 0 0 1px rgba(0,0,0,.4),
+    inset 0 1px 0 rgba(255,255,255,.08);
+  display:flex;flex-direction:column;
+  transform-style:preserve-3d;
+}
+.win::before{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:0;
+  background:
+    radial-gradient(760px 420px at 12% -8%,rgba(64,120,255,.14),transparent 62%),
+    radial-gradient(640px 420px at 92% 108%,rgba(38,198,190,.10),transparent 62%);
+}
+
+/* 顶栏 */
+.bar{
+  position:relative;z-index:30;height:52px;flex:none;
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
+  padding:0 14px 0 12px;
+  border-bottom:1px solid rgba(255,255,255,.06);
+  background:rgba(10,15,22,.55);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+.bar-l{display:flex;align-items:center;gap:10px;min-width:0}
+.bar-r{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+
+.back{
+  width:28px;height:28px;border-radius:9px;display:grid;place-items:center;
+  background:rgba(255,255,255,.05);border:1px solid var(--line);cursor:pointer;
+  color:var(--text2);transition:background .2s,color .2s,transform .2s;
+  opacity:0;transform:translateX(-6px);pointer-events:none;
+}
+.back.show{opacity:1;transform:none;pointer-events:auto}
+.back:hover{background:rgba(255,255,255,.1);color:var(--text)}
+.back:active{transform:scale(.94)}
+
+.page-name{
+  font-size:13px;font-weight:600;letter-spacing:.02em;white-space:nowrap;
+  transition:opacity .18s ease,transform .18s ease;
+}
+.page-name.fade{opacity:0;transform:translateY(4px)}
+
+.wbtn{
+  width:26px;height:26px;border-radius:8px;display:grid;place-items:center;
+  color:var(--text3);cursor:pointer;transition:background .2s,color .2s;
+}
+.wbtn:hover{background:rgba(255,255,255,.07);color:var(--text)}
+
+/* 灵动岛 */
+.island{
+  position:relative;height:26px;min-width:96px;padding:0 14px;border-radius:999px;
+  background:#05080d;border:1px solid rgba(255,255,255,.09);
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  font-size:10.5px;letter-spacing:.06em;color:var(--text2);cursor:pointer;
+  box-shadow:0 4px 16px -6px rgba(0,0,0,.9);
+  transition:background .3s,box-shadow .3s;
+  z-index:60;
+}
+.island .dot{width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px rgba(47,227,196,.9)}
+.island:hover{background:#080d14}
+
+.island-panel{
+  position:absolute;left:50%;top:52px;width:340px;margin-left:-170px;z-index:70;
+  border-radius:20px;padding:16px;overflow:hidden;
+  background:rgba(13,18,26,.975);border:1px solid var(--line-2);
+  backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  box-shadow:0 30px 70px -24px rgba(0,0,0,.95);
+  opacity:0;pointer-events:none;transform-origin:50% 0;
+  transform:translateY(-14px) scale(.86,.6);
+  transition:opacity .26s var(--ease-decel),transform .42s var(--ease-spring);
+}
+.island-panel.open{opacity:1;pointer-events:auto;transform:none}
+.island-panel h4{font-size:12px;letter-spacing:.1em;color:var(--text3);font-weight:600;margin-bottom:12px}
+.ip-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-top:1px solid rgba(255,255,255,.055)}
+.ip-row:first-of-type{border-top:0}
+.ip-row b{font-size:12.5px;font-weight:600}
+.ip-row span{margin-left:auto;font-size:11.5px;color:var(--text2);font-family:var(--mono)}
+
+/* ── 视口 / 页面 ───────────────────────────────────────── */
+.viewport{
+  position:relative;flex:1;overflow:hidden;
+  perspective:1600px;perspective-origin:50% 50%;
+}
+.page{
+  position:absolute;inset:0;overflow:hidden;
+  display:flex;flex-direction:column;
+  background:var(--win);
+  backface-visibility:hidden;
+  will-change:transform,opacity,filter;
+  transform-origin:50% 50%;
+}
+.page[hidden]{display:none}
+
+.pad{padding:22px 26px 26px;overflow-y:auto;flex:1}
+.pad::-webkit-scrollbar{width:8px}
+.pad::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:4px;border:2px solid transparent;background-clip:padding-box}
+
+/* 控制台 */
+.hello{display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:20px}
+.hello h2{font-size:21px;font-weight:600;letter-spacing:-.01em}
+.hello p{font-size:12px;color:var(--text3);margin-top:5px}
+.pill{
+  display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--text2);
+  padding:6px 12px;border-radius:999px;background:rgba(47,227,196,.09);
+  border:1px solid rgba(47,227,196,.22);
+}
+.pill .dot{width:5px;height:5px;border-radius:50%;background:var(--teal);box-shadow:0 0 8px rgba(47,227,196,.9)}
+
+.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.tile{
+  position:relative;display:flex;flex-direction:column;align-items:center;gap:10px;
+  padding:18px 8px 14px;border-radius:18px;cursor:pointer;
+  background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.022));
+  border:1px solid var(--line);
+  transition:transform .28s var(--ease-spring),background .22s,border-color .22s,box-shadow .28s;
+}
+.tile:hover{
+  transform:translateY(-3px);
+  background:linear-gradient(180deg,rgba(255,255,255,.085),rgba(255,255,255,.035));
+  border-color:var(--line-2);
+  box-shadow:0 18px 34px -22px rgba(0,0,0,.9);
+}
+.tile:active{transform:translateY(-1px) scale(.985)}
+.tile-ic{
+  width:46px;height:46px;border-radius:14px;display:grid;place-items:center;
+  color:#fff;
+}
+.tile-lb{font-size:12px;font-weight:500;color:var(--text)}
+.tile-sb{font-size:10px;color:var(--text3);margin-top:-6px}
+
+.dock{
+  margin-top:20px;display:flex;gap:10px;justify-content:center;
+  padding:10px;border-radius:20px;
+  background:rgba(255,255,255,.045);border:1px solid var(--line);
+  backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+}
+.dock button{
+  width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
+  background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.07);
+  color:var(--text2);cursor:pointer;transition:transform .24s var(--ease-spring),background .2s;
+}
+.dock button:hover{transform:translateY(-4px) scale(1.06);background:rgba(255,255,255,.11)}
+
+/* 功能页通用 */
+.sect{margin-bottom:18px}
+.sect-h{font-size:10.5px;letter-spacing:.16em;color:var(--text3);font-weight:600;margin-bottom:10px}
+.card{
+  border-radius:16px;padding:16px 18px;
+  background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.022));
+  border:1px solid var(--line);
+}
+.row{display:flex;align-items:center;gap:12px;padding:11px 0;border-top:1px solid rgba(255,255,255,.05)}
+.row:first-child{border-top:0;padding-top:0}
+.row:last-child{padding-bottom:0}
+.row .k{font-size:12.5px;color:var(--text2)}
+.row .v{margin-left:auto;font-size:12.5px;font-family:var(--mono);color:var(--text)}
+
+.pkg{display:flex;align-items:center;gap:14px}
+.pkg .ico{width:44px;height:44px;border-radius:13px;background:rgba(91,140,255,.16);color:var(--blue);display:grid;place-items:center}
+.pkg b{font-size:13.5px;display:block}
+.pkg small{font-size:11.5px;color:var(--text3);font-family:var(--mono)}
+
+.bar-track{height:6px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden;margin:16px 0 10px}
+.bar-fill{
+  height:100%;width:0%;border-radius:3px;
+  background:linear-gradient(90deg,#22cdb2,#5cf0d4);
+  box-shadow:0 0 14px rgba(47,227,196,.6);
+  transition:width .3s linear;
+}
+.bar-meta{display:flex;justify-content:space-between;font-size:11px;color:var(--text3);font-family:var(--mono)}
+
+.log{
+  font-family:var(--mono);font-size:11.5px;line-height:1.95;color:var(--text2);
+  max-height:210px;overflow:hidden;
+}
+.log div{display:flex;gap:10px}
+.log i{font-style:normal;color:var(--text3);flex:none}
+.log em{font-style:normal;color:var(--teal)}
+.log s{text-decoration:none;color:var(--amber)}
+
+/* 设置 */
+.set-row{display:flex;align-items:center;gap:12px;padding:13px 0;border-top:1px solid rgba(255,255,255,.05);cursor:pointer}
+.set-row:first-child{border-top:0}
+.set-row .lb{font-size:12.5px}
+.set-row .ds{font-size:11px;color:var(--text3);margin-top:3px}
+.sw{width:38px;height:22px;border-radius:11px;background:rgba(255,255,255,.12);position:relative;margin-left:auto;flex:none;transition:background .25s}
+.sw::after{content:"";position:absolute;left:2px;top:2px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .28s var(--ease-spring)}
+.sw.on{background:var(--teal)}
+.sw.on::after{transform:translateX(16px)}
+
+/* ── 控制中心 ─────────────────────────────────────────── */
+.cc{
+  position:absolute;left:0;right:0;top:52px;z-index:20;
+  padding:0 16px 18px;border-radius:0 0 26px 26px;
+  background:rgba(10,14,20,.94);
+  backdrop-filter:blur(34px) saturate(140%);-webkit-backdrop-filter:blur(34px) saturate(140%);
+  border-bottom:1px solid rgba(255,255,255,.1);
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.9);
+  transform:translateY(-100%);
+  transition:transform .46s cubic-bezier(.16,1,.3,1);
+  will-change:transform;
+}
+.cc.open{transform:translateY(0)}
+.cc-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px}
+.cc-t{
+  border-radius:16px;padding:12px;min-height:74px;
+  background:rgba(255,255,255,.055);border:1px solid rgba(255,255,255,.07);
+  display:flex;flex-direction:column;justify-content:space-between;
+  font-size:11px;color:var(--text2);
+}
+.cc-t.hot{background:rgba(47,227,196,.14);border-color:rgba(47,227,196,.3);color:#bff7ee}
+.cc-t b{font-size:12.5px;color:var(--text);font-weight:600}
+.cc-t.hot b{color:#dffff9}
+.cc-grip{width:38px;height:4px;border-radius:2px;background:rgba(255,255,255,.18);margin:0 auto}
+
+/* ── 对话框 ───────────────────────────────────────────── */
+.mask{
+  position:absolute;inset:0;z-index:90;display:grid;place-items:center;
+  background:rgba(3,6,11,.55);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  opacity:0;pointer-events:none;
+  transition:opacity .26s ease;
+}
+.mask.open{opacity:1;pointer-events:auto}
+.dialog{
+  width:360px;border-radius:20px;padding:22px;
+  background:rgba(16,22,32,.96);border:1px solid var(--line-2);
+  box-shadow:0 40px 80px -30px rgba(0,0,0,.95);
+  transform:scale(.9) translateY(10px);
+  transition:transform .38s var(--ease-spring);
+}
+.mask.open .dialog{transform:none}
+.dialog h3{font-size:15px;margin-bottom:8px}
+.dialog p{font-size:12.5px;color:var(--text2);line-height:1.7}
+.dialog .acts{display:flex;gap:10px;justify-content:flex-end;margin-top:20px}
+.dialog .acts button{
+  font:inherit;font-size:12.5px;padding:8px 18px;border-radius:11px;cursor:pointer;
+  background:rgba(255,255,255,.07);border:1px solid var(--line);color:var(--text);
+  transition:background .2s;
+}
+.dialog .acts button.pri{background:linear-gradient(180deg,#5cf0d4,#22cdb2);color:#04120f;border-color:transparent;font-weight:600}
+.dialog .acts button:hover{filter:brightness(1.1)}
+
+/* ── 底部提示 ─────────────────────────────────────────── */
+.lab-foot{
+  display:flex;gap:20px;align-items:center;font-size:11px;color:var(--text3);
+  width:min(1180px,92vw);letter-spacing:.04em;
+}
+.lab-foot kbd{
+  font-family:var(--mono);font-size:10px;padding:2px 6px;border-radius:5px;
+  background:rgba(255,255,255,.06);border:1px solid var(--line);color:var(--text2);
+}
+.lab-foot .sp{margin-left:auto;font-family:var(--mono);color:var(--text2)}
+</style>
+</head>
+<body>
+
+<div class="lab">
+  <div class="lab-head">
+    <div class="brand"><i></i>TRANSITION LAB<span>KUNCLIENT</span></div>
+
+    <div class="chips" id="modeChips">
+      <span class="tag">页面转场</span>
+      <button class="chip on" data-mode="fluid">Fluid</button>
+      <button class="chip" data-mode="cube">Cube</button>
+      <button class="chip" data-mode="zoom">Zoom</button>
+      <button class="chip" data-mode="depth">Depth</button>
+    </div>
+
+    <div class="chips" id="fxChips">
+      <span class="tag">控件动效</span>
+      <button class="chip ghost" data-fx="cc">控制中心</button>
+      <button class="chip ghost" data-fx="island">灵动岛</button>
+      <button class="chip ghost" data-fx="dialog">对话框</button>
+    </div>
+  </div>
+
+  <div class="stage">
+    <div class="win" id="win">
+
+      <!-- 顶栏 -->
+      <div class="bar">
+        <div class="bar-l">
+          <div class="back" id="back" title="返回控制台">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+          </div>
+          <div class="page-name" id="pageName">控制台</div>
+        </div>
+
+        <div class="island" id="island">
+          <span class="dot"></span>
+          <span id="islandText">MT6789 · 已连接</span>
+        </div>
+
+        <div class="bar-r">
+          <div class="wbtn" id="ccBtn" title="控制中心">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 12h4M12 12h8M4 17h12M20 17h0"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="17" r="2"/></svg>
+          </div>
+          <div class="wbtn" title="最小化"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></div>
+          <div class="wbtn" title="关闭"><svg width="14" height="14" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></div>
+        </div>
+      </div>
+
+      <!-- 视口 -->
+      <div class="viewport" id="vp">
+
+        <!-- 控制台 -->
+        <section class="page" id="pg-console" data-key="console">
+          <div class="pad">
+            <div class="hello">
+              <div>
+                <h2>晚上好，Kun</h2>
+                <p>KunClient 2.0.1 · 就绪</p>
+              </div>
+              <div class="pill"><span class="dot"></span>设备已连接</div>
+            </div>
+
+            <div class="tiles">
+              <div class="tile" data-go="flash">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#4b8dff,#2b5fd9)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg>
+                </div>
+                <div class="tile-lb">刷写</div><div class="tile-sb">EDL / MTK</div>
+              </div>
+
+              <div class="tile" data-go="device">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#9d8cff,#6b53d6)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v2M14 3v2M10 19v2M14 19v2M3 10h2M3 14h2M19 10h2M19 14h2"/></svg>
+                </div>
+                <div class="tile-lb">设备信息</div><div class="tile-sb">芯片 / 存储</div>
+              </div>
+
+              <div class="tile" data-go="settings">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#2fe3c4,#12a894)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>
+                </div>
+                <div class="tile-lb">设置</div><div class="tile-sb">外观 / 动画</div>
+              </div>
+
+              <div class="tile" data-go="flash">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#f5b84c,#d1892a)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18"/></svg>
+                </div>
+                <div class="tile-lb">分区表</div><div class="tile-sb">GPT</div>
+              </div>
+
+              <div class="tile" data-go="device">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#ff7a90,#d94a63)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="9" cy="12" r="3"/><path d="M12 12h9M18 12v3"/></svg>
+                </div>
+                <div class="tile-lb">FDL 签名</div><div class="tile-sb">卡密</div>
+              </div>
+
+              <div class="tile" data-go="flash">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#8fe36a,#4fae35)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 6h16M4 12h10M4 18h13"/></svg>
+                </div>
+                <div class="tile-lb">日志</div><div class="tile-sb">实时</div>
+              </div>
+
+              <div class="tile" data-go="device">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#5fd8ff,#2a86c9)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg>
+                </div>
+                <div class="tile-lb">备份</div><div class="tile-sb">镜像</div>
+              </div>
+
+              <div class="tile" data-go="settings">
+                <div class="tile-ic" style="background:linear-gradient(160deg,#b0bccc,#77869a)">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v5l3 2"/></svg>
+                </div>
+                <div class="tile-lb">关于</div><div class="tile-sb">v2.0.1</div>
+              </div>
+            </div>
+
+            <div class="sect" style="margin-top:18px">
+              <div class="sect-h">最近</div>
+              <div class="card">
+                <div class="row"><span class="k">RMX3834 · super.img</span><span class="v">21:06 完成</span></div>
+                <div class="row"><span class="k">FDL 签名额度</span><span class="v">剩余 42 次</span></div>
+              </div>
+            </div>
+
+            <div class="dock">
+              <button title="刷写"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg></button>
+              <button title="设备"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 3v2M14 3v2M10 19v2M14 19v2M3 10h2M3 14h2M19 10h2M19 14h2"/></svg></button>
+              <button title="设置"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 刷写 -->
+        <section class="page" id="pg-flash" data-key="flash" hidden>
+          <div class="pad">
+            <div class="sect">
+              <div class="sect-h">当前固件包</div>
+              <div class="card">
+                <div class="pkg">
+                  <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M13 2L4.5 13.5H11L10 22l8.5-11.5H12z"/></svg></div>
+                  <div>
+                    <b>RMX3834_11_A.31</b>
+                    <small>rawprogram0.xml · 4.2 GB · 23 个分区</small>
+                  </div>
+                </div>
+                <div class="bar-track"><div class="bar-fill" id="barFill"></div></div>
+                <div class="bar-meta"><span id="barTxt">写入 super.img</span><span id="barPct">0%</span></div>
+              </div>
+            </div>
+
+            <div class="sect">
+              <div class="sect-h">日志</div>
+              <div class="card">
+                <div class="log">
+                  <div><i>21:04:12</i><span>载入 Firehose 编程器 <em>ok</em></span></div>
+                  <div><i>21:04:15</i><span>校验 GPT 分区表 <em>ok</em></span></div>
+                  <div><i>21:04:31</i><span>super.img sparse 展开 6 → 9 段</span></div>
+                  <div><i>21:05:02</i><span>写入 system_a <em>ok</em></span></div>
+                  <div><i>21:05:48</i><span>写入 vendor_a <em>ok</em></span></div>
+                  <div><i>21:06:03</i><span>回读校验扇区 <s>进行中</s></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 设备 -->
+        <section class="page" id="pg-device" data-key="device" hidden>
+          <div class="pad">
+            <div class="sect">
+              <div class="sect-h">设备</div>
+              <div class="card">
+                <div class="row"><span class="k">型号</span><span class="v">RMX3834</span></div>
+                <div class="row"><span class="k">芯片平台</span><span class="v">MT6789</span></div>
+                <div class="row"><span class="k">存储类型</span><span class="v">UFS 3.1</span></div>
+                <div class="row"><span class="k">存储厂商</span><span class="v">Samsung</span></div>
+                <div class="row"><span class="k">序列号</span><span class="v">7F3A9C21</span></div>
+              </div>
+            </div>
+            <div class="sect">
+              <div class="sect-h">连接</div>
+              <div class="card">
+                <div class="row"><span class="k">模式</span><span class="v">BROM / Preloader</span></div>
+                <div class="row"><span class="k">端口</span><span class="v">COM7 · 921600</span></div>
+                <div class="row"><span class="k">DA 状态</span><span class="v">已加载</span></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 设置 -->
+        <section class="page" id="pg-settings" data-key="settings" hidden>
+          <div class="pad">
+            <div class="sect">
+              <div class="sect-h">外观</div>
+              <div class="card">
+                <div class="set-row"><div><div class="lb">深色主题</div><div class="ds">深藏青 + 青绿强调色</div></div><div class="sw on"></div></div>
+                <div class="set-row"><div><div class="lb">液态玻璃</div><div class="ds">面板磨砂与内阴影</div></div><div class="sw on"></div></div>
+              </div>
+            </div>
+            <div class="sect">
+              <div class="sect-h">动效</div>
+              <div class="card">
+                <div class="set-row"><div><div class="lb">页面转场</div><div class="ds">Fluid · 26° 摆入</div></div><div class="sw on"></div></div>
+                <div class="set-row"><div><div class="lb">降低动态效果</div><div class="ds">关闭全部过渡动画</div></div><div class="sw"></div></div>
+              </div>
+            </div>
+            <div class="sect">
+              <div class="sect-h">日志</div>
+              <div class="card">
+                <div class="set-row"><div><div class="lb">显示 Debug 档位</div><div class="ds">全局日志级别</div></div><div class="sw on"></div></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- 控制中心 -->
+      <div class="cc" id="cc">
+        <div class="cc-grid">
+          <div class="cc-t hot"><b>刷写</b><span>EDL 就绪</span></div>
+          <div class="cc-t"><b>亮度</b><span>72%</span></div>
+          <div class="cc-t"><b>连接</b><span>COM7</span></div>
+          <div class="cc-t"><b>日志</b><span>实时</span></div>
+        </div>
+        <div class="cc-grip" style="margin-top:14px"></div>
+      </div>
+
+      <!-- 灵动岛展开 -->
+      <div class="island-panel" id="islandPanel">
+        <h4>设备状态</h4>
+        <div class="ip-row"><b>芯片</b><span>MT6789</span></div>
+        <div class="ip-row"><b>存储</b><span>UFS 3.1</span></div>
+        <div class="ip-row"><b>DA</b><span>已加载</span></div>
+        <div class="ip-row"><b>进度</b><span id="ipPct">0%</span></div>
+      </div>
+
+      <!-- 对话框 -->
+      <div class="mask" id="mask">
+        <div class="dialog">
+          <h3>开始刷写？</h3>
+          <p>目标设备 RMX3834 · MT6789<br>将写入 23 个分区，过程中请勿断开连接。</p>
+          <div class="acts">
+            <button id="dlgCancel">取消</button>
+            <button class="pri" id="dlgOk">开始</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="lab-foot">
+    <span><kbd>点击瓦片</kbd> 进入页面</span>
+    <span><kbd>←</kbd> 返回控制台</span>
+    <span><kbd>空格</kbd> 自动轮播</span>
+    <span><kbd>C</kbd> 控制中心</span>
+    <span class="sp" id="footInfo">fluid · 520ms</span>
+  </div>
+</div>
+
+<script>
+(() => {
+'use strict';
+
+/* ============================================================
+   工具
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+const clamp01 = x => x < 0 ? 0 : x > 1 ? 1 : x;
+const easeOutCubic = x => 1 - Math.pow(1 - x, 3);
+const easeInCubic  = x => x * x * x;
+const easeOutQuint = x => 1 - Math.pow(1 - x, 5);
+const easeInOutCubic = x => x < .5 ? 4*x*x*x : 1 - Math.pow(-2*x+2,3)/2;
+const lerp = (a,b,p) => a + (b-a)*p;
+
+/* ============================================================
+   状态
+   ============================================================ */
+const PAGES = ['console','flash','device','settings'];
+const NAMES = { console:'控制台', flash:'刷写', device:'设备信息', settings:'设置' };
+const DUR = { fluid:520, cube:640, zoom:520, depth:560 };
+
+let current = 'console';
+let mode = 'fluid';
+let busy = false;
+let autoTimer = null;
+
+const vp = $('#vp');
+const pageName = $('#pageName');
+const backBtn = $('#back');
+const barFill = $('#barFill');
+const barPct = $('#barPct');
+const barTxt = $('#barTxt');
+const footInfo = $('#footInfo');
+
+const pageEl = key => document.getElementById('pg-' + key);
+
+/* ============================================================
+   页面转场 —— 逐帧驱动
+   ============================================================ */
+function resetStyles(el){
+  el.style.transition = 'none';
+  el.style.transform = '';
+  el.style.opacity = '';
+  el.style.filter = '';
+  el.style.transformOrigin = '';
+  el.style.zIndex = '';
+  el.style.borderRadius = '';
+  el.style.boxShadow = '';
+}
+
+/// 把 p∈[0,1] 的状态画到两页上
+function paint(out, inn, m, forward, p){
+  const s = forward ? 1 : -1;
+
+  if (m === 'fluid'){
+    // 推入：新页整幅从右侧滑入并带一点 rotateY，旧页向左让位并压暗
+    const e = easeOutCubic(p);
+    inn.style.transform =
+      `translateX(${(s * 100 * (1 - e)).toFixed(2)}%) rotateY(${(-s * 14 * (1 - e)).toFixed(2)}deg)`;
+    inn.style.opacity = '1';
+    out.style.transform =
+      `translateX(${(-s * 24 * e).toFixed(2)}%) scale(${(1 - 0.05 * e).toFixed(4)})`;
+    out.style.opacity = String(1 - 0.5 * e);
+    out.style.filter = `blur(${(e * 1.8).toFixed(2)}px)`;
+  }
+
+  else if (m === 'cube'){
+    // 两页各绕自己的外缘向外翻，像两扇门对开。
+    // 45° 时两页投影各占 0.707W，区间 [0, .707W] 与 [.293W, W] 有重叠、
+    // 并集正好铺满视口 —— 全程不露底，又能看见两页的透视边缘。
+    const e = easeInOutCubic(p);
+    out.style.transformOrigin = 'left center';
+    inn.style.transformOrigin = 'right center';
+    out.style.transform = `rotateY(${(-90 * e).toFixed(2)}deg)`;
+    inn.style.transform = `rotateY(${(90 * (1 - e)).toFixed(2)}deg)`;
+    out.style.opacity = '1';
+    inn.style.opacity = '1';
+  }
+
+  else if (m === 'zoom'){
+    const e = easeOutQuint(p);
+    inn.style.transform = `scale(${lerp(0.28, 1, e).toFixed(4)})`;
+    inn.style.opacity = String(clamp01(e * 1.9));
+    inn.style.borderRadius = `${(26 * (1 - e)).toFixed(1)}px`;
+    out.style.transform = `scale(${lerp(1, 1.14, easeOutCubic(p)).toFixed(4)})`;
+    out.style.opacity = String(clamp01(1 - easeOutCubic(p) * 1.15));
+    out.style.filter = `blur(${(easeOutCubic(p) * 7).toFixed(2)}px)`;
+  }
+
+  else if (m === 'depth'){
+    // 旧页朝镜头冲过来并淡出，新页从远处推近 —— 全程都是满幅，不会露底
+    const e = easeOutCubic(p);
+    out.style.transform = `translateZ(${(220 * e).toFixed(1)}px) scale(${(1 + 0.10 * e).toFixed(4)})`;
+    out.style.opacity = String(clamp01(1 - e * 1.35));
+    out.style.filter = `blur(${(e * 9).toFixed(2)}px)`;
+    inn.style.transform = `translateZ(${(-520 * (1 - e)).toFixed(1)}px) scale(${(1.055 - 0.055 * e).toFixed(4)})`;
+    inn.style.opacity = String(clamp01(e * 1.4));
+    inn.style.filter = `blur(${((1 - e) * 6).toFixed(2)}px)`;
+  }
+}
+
+/// 清场：把旧页藏起来、新页归位
+function settle(out, inn, key){
+  if (!busy) return;   // 已被兜底收尾，避免重复
+  if (out){
+    out.hidden = true;
+    resetStyles(out);
+  }
+  resetStyles(inn);
+  inn.hidden = false;
+  inn.style.zIndex = '2';
+  if (out) out.style.zIndex = '';
+  vp.style.perspective = '';
+  current = key;
+  busy = false;
+
+  pageName.classList.add('fade');
+  setTimeout(() => {
+    pageName.textContent = NAMES[key];
+    pageName.classList.remove('fade');
+  }, 120);
+  backBtn.classList.toggle('show', key !== 'console');
+}
+
+function goTo(key, opts = {}){
+  if (busy || key === current || !PAGES.includes(key)) return;
+  busy = true;
+
+  const out = pageEl(current);
+  const inn = pageEl(key);
+  const forward = PAGES.indexOf(key) > PAGES.indexOf(current);
+  const m = opts.mode || mode;
+  const dur = DUR[m] || 520;
+
+  resetStyles(out);
+  resetStyles(inn);
+  vp.style.perspective = m === 'cube' ? '3200px' : '1600px';
+  inn.hidden = false;
+  inn.style.zIndex = '3';
+  out.style.zIndex = '2';
+  if (m === 'fluid') inn.style.boxShadow = '-40px 0 70px -26px rgba(0,0,0,.85)';
+
+  // zoom 的放大原点：从被点的瓦片长出来
+  if (m === 'zoom' && opts.origin){
+    const r = vp.getBoundingClientRect();
+    const ox = ((opts.origin.x - r.left) / r.width * 100).toFixed(2);
+    const oy = ((opts.origin.y - r.top) / r.height * 100).toFixed(2);
+    inn.style.transformOrigin = `${ox}% ${oy}%`;
+    out.style.transformOrigin = `${ox}% ${oy}%`;
+  }
+
+  paint(out, inn, m, forward, 0);
+
+  const guard = setTimeout(() => settle(out, inn, key), dur + 600);
+
+  const t0 = performance.now();
+  function frame(now){
+    const p = clamp01((now - t0) / dur);
+    paint(out, inn, m, forward, p);
+    if (p < 1) requestAnimationFrame(frame);
+    else { clearTimeout(guard); settle(out, inn, key); }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ============================================================
+   控件级动效
+   ============================================================ */
+const cc = $('#cc');
+const islandPanel = $('#islandPanel');
+const mask = $('#mask');
+
+let ccOpen = false;
+let islandOpen = false;
+
+function animateCC(open){
+  if (ccOpen === open) return;
+  ccOpen = open;
+  cc.classList.toggle('open', open);
+  $$('#fxChips .chip')[0].classList.toggle('on', open);
+}
+
+function animateIsland(open){
+  if (islandOpen === open) return;
+  islandOpen = open;
+  islandPanel.classList.toggle('open', open);
+  $$('#fxChips .chip')[1].classList.toggle('on', open);
+}
+
+function animateDialog(open){
+  mask.classList.toggle('open', open);
+  $$('#fxChips .chip')[2].classList.toggle('on', open);
+}
+
+/* ============================================================
+   交互绑定
+   ============================================================ */
+$$('#modeChips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    mode = chip.dataset.mode;
+    $$('#modeChips .chip').forEach(c => c.classList.toggle('on', c === chip));
+    footInfo.textContent = `${mode} · ${DUR[mode]}ms`;
+  });
+});
+
+$$('#fxChips .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const fx = chip.dataset.fx;
+    if (fx === 'cc') animateCC(!ccOpen);
+    if (fx === 'island') animateIsland(!islandOpen);
+    if (fx === 'dialog') animateDialog(!mask.classList.contains('open'));
+  });
+});
+
+$$('.tile').forEach(tile => {
+  tile.addEventListener('click', ev => {
+    const r = tile.getBoundingClientRect();
+    goTo(tile.dataset.go, { origin: { x: r.left + r.width / 2, y: r.top + r.height / 2 } });
+  });
+});
+
+$$('.dock button').forEach((b, i) => {
+  b.addEventListener('click', () => goTo(['flash','device','settings'][i]));
+});
+
+backBtn.addEventListener('click', () => goTo('console'));
+$('#ccBtn').addEventListener('click', () => animateCC(!ccOpen));
+$('#island').addEventListener('click', () => animateIsland(!islandOpen));
+$('#dlgCancel').addEventListener('click', () => animateDialog(false));
+$('#dlgOk').addEventListener('click', () => animateDialog(false));
+
+document.addEventListener('click', ev => {
+  if (islandOpen && !islandPanel.contains(ev.target) && !$('#island').contains(ev.target))
+    animateIsland(false);
+  if (ccOpen && !cc.contains(ev.target) && !$('#ccBtn').contains(ev.target))
+    animateCC(false);
+});
+
+window.addEventListener('keydown', ev => {
+  if (ev.code === 'Space'){
+    ev.preventDefault();
+    autoTimer ? stopAuto() : startAuto();
+  }
+  if (ev.key === 'c' || ev.key === 'C') animateCC(!ccOpen);
+  if (ev.key === 'ArrowLeft') goTo('console');
+  if (ev.key === 'Escape'){ animateDialog(false); animateCC(false); animateIsland(false); }
+});
+
+/* 自动轮播 */
+function startAuto(){
+  if (autoTimer) return;
+  const seq = ['flash','device','settings','console'];
+  let i = 0;
+  autoTimer = setInterval(() => {
+    if (busy) return;
+    goTo(seq[i % seq.length]);
+    i++;
+  }, 2400);
+  footInfo.textContent = '自动轮播中…';
+}
+function stopAuto(){
+  clearInterval(autoTimer);
+  autoTimer = null;
+  footInfo.textContent = `${mode} · ${DUR[mode]}ms`;
+}
+
+/* ============================================================
+   进度演示（刷写页）
+   ============================================================ */
+let prog = 0;
+setInterval(() => {
+  prog = (prog + 1.4) % 101;
+  if (barFill){
+    barFill.style.width = prog.toFixed(0) + '%';
+    barPct.textContent = prog.toFixed(0) + '%';
+    const ip = $('#ipPct'); if (ip) ip.textContent = prog.toFixed(0) + '%';
+    barTxt.textContent = prog < 40 ? '写入 super.img' : prog < 75 ? '写入 system_a' : '回读校验扇区';
+  }
+}, 220);
+
+/* ============================================================
+   调试：?freeze=<mode>:<p> 定格转场中间帧，供截图取证
+   ============================================================ */
+const params = new URLSearchParams(location.search);
+const freeze = params.get('freeze');
+
+const fxParam = params.get('fx');
+if (fxParam){
+  setTimeout(() => {
+    if (fxParam === 'cc') animateCC(true);
+    if (fxParam === 'island') animateIsland(true);
+    if (fxParam === 'dialog') animateDialog(true);
+  }, 250);
+}
+if (freeze){
+  const [fm, fp] = freeze.split(':');
+  const p = parseFloat(fp || '0.5');
+  const target = params.get('to') || 'flash';
+  const out = pageEl('console');
+  const inn = pageEl(target);
+  resetStyles(out); resetStyles(inn);
+  vp.style.perspective = (fm === 'cube') ? '3200px' : '1600px';
+  inn.hidden = false;
+  inn.style.zIndex = '3'; out.style.zIndex = '2';
+  paint(out, inn, fm || 'fluid', true, p);
+  pageName.textContent = NAMES[target];
+  backBtn.classList.add('show');
+  current = target;
+  // 冻结时不要再跑自动逻辑
+  const noop = () => {};
+  window.goTo = noop;
+}
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+{
+  "_说明": "指令面板（/v2/panels）。机器人启动/重载时自动同步；panel.remark 是幂等键——平台已有同 remark 的同场景面板就 PUT 覆盖，没有才 POST 创建（避免每次重启堆一堆重复面板）。scope: c2c=单聊、group=群聊。🔴 type=command 的元素「点一下就把 name 原样填进输入框」，所以 name 必须是**已注册的命令本身**（可以写别名），不能写展示名——写「每日签到」用户点完发出去就是「没有这个命令」；展示用的说明放 desc（最多 30 字符≈15 汉字）。name 最多 14 字符（约 7 汉字）。only_admin=true 的项只有群管理员能点。一个面板最多 20 项，机器人最多 20 个面板。校验规则见 core/menu.py，其中会对照已注册命令名检查。",
+  "panels": [
+    {
+      "scope": "group",
+      "target_type": "all",
+      "panel": {
+        "remark": "KunClient 群聊指令面板",
+        "items": [
+          { "type": "command", "name": "签到", "desc": "每日签到得积分" },
+          { "type": "command", "name": "积分", "desc": "我的积分与排名" },
+          { "type": "command", "name": "积分排行", "desc": "看看谁积分最多" },
+          { "type": "command", "name": "帮助", "desc": "常用命令一览" },
+          { "type": "command", "name": "群成员", "desc": "名册（编号可禁言）", "only_admin": true },
+          { "type": "command", "name": "入群申请", "desc": "待审批的入群申请", "only_admin": true },
+          { "type": "command", "name": "禁言列表", "desc": "群禁言状态与名单", "only_admin": true }
+        ]
+      }
+    },
+    {
+      "scope": "c2c",
+      "target_type": "all",
+      "panel": {
+        "remark": "KunClient 单聊指令面板",
+        "items": [
+          { "type": "command", "name": "签到", "desc": "每日签到得积分" },
+          { "type": "command", "name": "kun我", "desc": "我的 KunClient 账号" },
+          { "type": "command", "name": "帮助", "desc": "常用命令一览" },
+          { "type": "link", "name": "官网", "desc": "KunClient 官网", "link": "https://kunawa.cn" }
+        ]
+      }
+    }
+  ]
+}
