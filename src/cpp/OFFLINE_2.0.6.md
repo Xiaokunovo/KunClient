@@ -9,6 +9,24 @@
 
 ---
 
+> ## 🔴 2026-10-31 补丁：离线包曾经漏了一个 DLL
+>
+> 首批发出去的 `KunClient-2.0.6-offline.7z` / `.zip`（44 文件）**少了 `liblzma-5.dll`**，
+> 用户双击会直接弹「由于找不到 liblzma-5.dll，无法继续执行代码」。
+>
+> 原因：`KunClient.exe` 直接导入 `liblzma-5.dll`（`storage/PayloadParser` 解 payload 的
+> REPLACE_XZ 用 `lzma_stream_buffer_decode`），而离线包是手工从 `build-offline/` 拷的，
+> 那一次拷贝漏了它 —— 开发机上 PATH 有 mingw64，系统直接找到了，所以没测出来。
+>
+> 已修复：包内补齐 `liblzma-5.dll`（45 文件），并新增 `tools/check-package-deps.py`
+> 做构建期闸门（判据是「包内有没有」，不是「本机能不能找到」）。
+>
+> **已下载旧包的用户**：不用重新下整个包，把
+> `https://kunawa.cn/assets/KunClient-2.0.6-offline-hotfix.zip`（86 KB）
+> 解出来的 `liblzma-5.dll` 放到 `KunClient.exe` 旁边即可。
+
+---
+
 ## 一、改造结果
 
 | 项目 | 结果 |

@@ -6,6 +6,33 @@
 >
 > 历史的一次性 debug 脚本已移入仓库根目录 `_trash_20260917/`（本仓库没有 git，删除不可恢复）。
 
+## 分发包依赖校验（发版前必跑）
+
+| 脚本 | 作用 |
+| --- | --- |
+| `check-package-deps.py` | 按 PE 导入表递归求依赖闭包，检查**包内**是否真有每个被依赖的 DLL。支持目录 / `.exe` / `.7z` / `.zip`；缺一个就退出码 1 |
+
+```powershell
+# 发版前把要发的东西都过一遍（目录 + 压缩包 + 静态单文件）
+python tools/check-package-deps.py `
+  src/cpp/dist src/cpp/dist-offline `
+  src/cpp/KunClient-2.0.6-offline.7z src/cpp/KunClient-2.0.6-offline.zip `
+  "KunClient-2.0.6-功能补充.zip" `
+  src/cpp/dist-static/KunClient-2.0.8.exe src/cpp/dist-static/KunClient-2.0.8-upx.exe
+```
+
+为什么必须有它：2026-10-31 用户报「由于找不到 liblzma-5.dll，无法继续执行代码」，
+根因是打包脚本算 DLL 闭包时按**路径**比对 `ldd` 输出（`/mingw64/bin/xxx` 对
+`/e/msys64/mingw64/bin`，永远不匹配），漏拷了 `liblzma-5.dll`。这类缺陷**在开发机上
+永远复现不了**（PATH 里有 mingw64，系统直接找到了），只有用户机器才会炸。
+所以判据必须是「包内有没有这个文件」，不能是「本机能不能找到」。
+
+两个构建脚本已把闸门接进去了：`build-release.sh`（`dist/` 不完整直接 fail）、
+`build-static.sh`（单文件导入表出现任何第三方 DLL 直接 fail）。
+
+> 静态单文件（`dist-static/*.exe`）的判据是另一套：它的承诺是「一个文件就能跑」，
+> 所以只要导入表里出现**任何**第三方 DLL 就算不合格（系统 DLL 不算）。
+
 ## API 自测（登录服务器）
 
 | 脚本 | 作用 |

@@ -5,6 +5,98 @@ KunClient 桌面端（C++/Qt6）的用户可见变更记录。
 
 ---
 
+## 修复：分发包漏 DLL（「找不到 liblzma-5.dll」，2026-10-31）
+
+用户反馈原话：「由于找不到 liblzma-5.dll，无法继续执行代码。重新安装程序可能解决此问题」。
+
+**这不是代码问题，是打包问题。** 程序本体好好的，是发出去的压缩包里少了一个 DLL。
+
+### 根因
+
+`build-release.sh` 里有两段几乎一样的「ldd 求依赖闭包」循环，判定写法**不一致**：
+
+| 位置 | 判定 | 结果 |
+|---|---|---|
+| 主程序闭包 | `ldd "$cur" \| awk '{print $3}' \| grep '\.dll$'` → 按**文件名**去 `$MINGW_BIN` 找 | 正常 |
+| 插件闭包 | `awk -v b="$MINGW_BIN" '$3 ~ b"/"'` → 按**路径**比对 | **恒为空** |
+
+路径比对失效的原因：本机 `ldd` 把 MSYS2 的 DLL 报成 `/mingw64/bin/Qt6Core.dll`
+（MSYS 挂载点），而 `$MINGW_BIN` 是 `/e/msys64/mingw64/bin` —— 两者永远匹配不上。
+主程序那段 2026-10-30 发 2.0.7 时已经踩过一次并改成了文件名比对，插件那段**被漏掉了**。
+
+于是插件专属的依赖从来没被拷进 `dist/`：
+
+- `tls/qcertonlybackend.dll` 要 `Qt6Network.dll`
+- `imageformats/qjpeg.dll` 要 `libjpeg-8.dll`
+
+`liblzma-5.dll` 是**另一条线**：它被 `KunClient.exe` 直接导入（`PayloadParser` 解
+payload 的 REPLACE_XZ 用 `lzma_stream_buffer_decode`）。动态包 `dist/` 里它有，
+因为主程序闭包是对的；但**离线包 `dist-offline/` 是从构建目录手工拷的**，
+那一次拷贝漏了它 —— 而 `dist-offline/` 恰好是 2.0.6 离线版的发布形态。
+
+### 为什么开发机上测不出来
+
+开发机的 `PATH` 里有 `/e/msys64/mingw64/bin`，Windows 加载器直接就在那里找到了
+`liblzma-5.dll`，双击一切正常。只有**没装 MSYS2 的用户机器**才会报缺 DLL。
+`build-release.sh` 第 6 步的「脱环境实测」测的是 `dist/`（有 liblzma），
+离线包是另一条手工链路，从来没进过任何自动化校验。
+
+### 修了什么
+
+1. **补 DLL**：`dist-offline/liblzma-5.dll`、`dist/Qt6Network.dll`、`dist/libjpeg-8.dll`
+   （都从 `/e/msys64/mingw64/bin/` 取，与包内其它 DLL 同源；后两个按包内惯例过 UPX）。
+2. **重打 5 个包**（旧包留在 `_stale-*` 目录里，没删）：
+   - `src/cpp/KunClient-2.0.6-offline.7z` / `.zip`（45 文件，+liblzma）
+   - `KunClient-2.0.6-功能补充.zip`（41 文件，+Qt6Network +libjpeg）
+   - `src/cpp/dist/`、`src/cpp/dist-offline/` 两个目录包
+3. **修 `build-release.sh` 插件闭包**：改用与主程序一致的「按文件名」过滤器，
+   并在插件闭包后补一个「新入队项继续求到底」的循环（`libjpeg-8 → libgcc_s_seh-1` 这类）。
+4. **新增闸门 `tools/check-package-deps.py`**：直接解析 PE 导入表求闭包，
+   判据是「**包内有没有这个文件**」而不是「本机能不能找到」—— 后者在开发机上恒真，
+   正是这次漏检的根源。接在两处：
+   - `build-release.sh` 第 2 步之后（`dist/` 不完整直接 fail）
+   - `build-static.sh` 产物落盘之后（单文件导入表出现任何第三方 DLL 直接 fail）
+5. **为什么闸门是 Python 不是 shell**：第一版用 bash 循环调 `objdump`，
+   每个依赖 fork 三四个进程，一个 45 文件的包要跑 **2~3 分钟**；
+   改成直接读 PE 结构后 **0.4 秒**。接进构建脚本的检查不能让人等。
+
+### 验证
+
+| 项 | 结果 |
+|---|---|
+| `tools/check-package-deps.py` 对 5 个坏包（修复前） | 全部报缺失，退出码 1 |
+| 对修复后 11 个产物（2 目录 + 5 压缩包 + 4 静态 exe） | 全部 `[OK]`，退出码 0 |
+| 干净 PATH 启动（剥掉 mingw64/ucrt64/usr/bin） | `dist/`、`dist-offline/`、三个压缩包解出来的目录 **全部出图**（之前是 127 / 0xC0000135） |
+| 静态单文件（2.0.7 / 2.0.8，含 UPX 版） | 导入表 50 条全为系统 DLL，**本来就是好的**，不受影响 |
+
+### 用户侧怎么办
+
+- **用 2.0.7 / 2.0.8 的**：不受影响，那是静态单文件，不存在缺 DLL。
+- **用 2.0.6 离线包（7z/zip）的**：只补一个文件即可 ——
+  下载 `https://kunawa.cn/assets/KunClient-2.0.6-offline-hotfix.zip`（**86 KB**），
+  解出来的 `liblzma-5.dll` 放到 `KunClient.exe` 旁边，就这一个，补完就能启动。
+  也可以重新下整个修复后的包（见下条）。
+- **用 `功能补充.zip` 的**：补 `Qt6Network.dll` + `libjpeg-8.dll` 两个；
+  不补的话程序能启动，但「检查更新 / TLS」和「jpg 壁纸」会静默失效。
+
+### 线上分发（已处理）
+
+| 项 | 状态 |
+|---|---|
+| 服务器上的 `assets/KunClient-2.0.6-offline.7z` | **已替换为修复版**（29,599,516 B，md5 `755f4141b728d2ece901c27f33306744`），原坏包已在服务器上留档备份 |
+| 新增 `assets/KunClient-2.0.6-offline-hotfix.zip` | 86 KB，只含 `liblzma-5.dll`（md5 `d04115b9166e9df8f3f81966abedd9b9`），给已下载旧包的用户打补丁 |
+| 新增 `assets/KunClient-2.0.6-offline-fixed.7z` | 与修复后的主包同内容，**用于绕开 Cloudflare 边缘缓存**（同 URL 换内容 CF 仍回旧包，`max-age=14400`） |
+| 2.0.7 / 2.0.8 的 exe/7z | 未动，本来就是好的 |
+
+> ⚠️ **Cloudflare 缓存**：`/assets/*` 带 `Cache-Control: public, max-age=14400`（4 小时）。
+> 服务器上文件已经换掉、源站 md5 已核对，但 CF 边缘在 TTL 内仍会回旧包
+> （实测 `cf-cache-status: HIT`，`content-length` 还是旧的 29,513,747）。
+> 要么在 CF 控制台 purge 这个 URL，要么等 ≤4 小时自然过期。
+> 急着要一个「立刻能用」的完整包直链：`KunClient-2.0.6-offline-fixed.7z`
+> 或 `KunClient-2.0.6-offline.7z?v=2`（带 query 直接回源）。
+
+---
+
 ## 2.0.7 — iOS 玩法六件套 + 刷机记录（2026-10-30）
 
 用户口径：「最近苹果新的系统加了好多好玩的，你加进工具里」。六项全部是**纯本地 UI 能力**，

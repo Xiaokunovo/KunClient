@@ -352,6 +352,27 @@ if [ "$DO_SFX" = "1" ]; then
     log "    ⚠️ 官方 7z.sfx 不读 SFX 配置 ⇒ 只能「双击解出自解压包」，不会自动启动"
 fi
 
+log "[3.5/5] 单文件依赖闸门（导入表必须无第三方 DLL）"
+# 🔴 静态包唯一的承诺是「一个文件就能跑」。一旦某次改动把某个依赖从静态 .a 退回
+#    导入库（CMakeLists 的 KC_FORCE_STATIC_DEPS 被关掉、或新加的库没有 .a），
+#    产物照样能构建成功，但用户在干净机器上会看到「找不到 xxx.dll」。
+#    所以这里不看体积、不看能否在本机启动（本机 PATH 里有 mingw64，恒真），
+#    只读 PE 导入表。
+DEP_CHECK="$SRC_DIR/../../tools/check-package-deps.py"
+PYTHON_BIN=""
+for _cand in "$MSYS_ROOT/mingw64/bin/python.exe" "$MSYS_ROOT/usr/bin/python3.exe" python python3; do
+    if command -v "$_cand" >/dev/null 2>&1; then PYTHON_BIN="$_cand"; break; fi
+done
+if [ -f "$DEP_CHECK" ] && [ -n "$PYTHON_BIN" ]; then
+    for _f in "$EXE_VER" "$EXE_UPX"; do
+        [ -f "$_f" ] || continue
+        "$PYTHON_BIN" "$DEP_CHECK" "$_f" \
+            || fail "$(basename "$_f") 不是真单文件（导入表里有第三方 DLL）—— 不要分发"
+    done
+else
+    warn "找不到 tools/check-package-deps.py 或 python，跳过单文件依赖闸门"
+fi
+
 log "[4/5] 联网自检（--netcheck）"
 NETCHECK_RC=0
 ( cd "$DIST_DIR" && env -u KC_SKIP_LEGAL ./"$PKG_BASE.exe" --netcheck 2>&1 | sed 's/^/    /' ) || NETCHECK_RC=$?

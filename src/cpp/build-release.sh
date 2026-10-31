@@ -168,10 +168,16 @@ for ossl in libssl-3-x64.dll libcrypto-3-x64.dll; do
     [ -f "$MINGW_BIN/$ossl" ] && cp -f "$MINGW_BIN/$ossl" "$DIST_DIR/$ossl"
 done
 
-# 插件自身也带依赖（如 Qt6Gui），再求一次闭包补齐
+# 插件自身也带依赖（如 Qt6Gui / Qt6Network / libjpeg-8），再求一次闭包补齐
+# 🔴 这里**必须**和主程序那段用同一种过滤器（按文件名，不比对路径）。
+#    2026-10-31 实测：这段一直留着旧的 `$3 ~ b"/"` 路径比对，于是插件闭包恒为空 ——
+#    tls/qcertonlybackend.dll 要的 Qt6Network.dll、imageformats/qjpeg.dll 要的
+#    libjpeg-8.dll 从来没被拷进 dist/。主程序不直接导入它们，所以开发机上照样能跑；
+#    用户机器上打开「jpg 壁纸」或 TLS 初始化时才静默失败。
 for p in "$DIST_DIR"/platforms/*.dll "$DIST_DIR"/styles/*.dll "$DIST_DIR"/tls/*.dll "$DIST_DIR"/imageformats/*.dll; do
     [ -f "$p" ] || continue
     while read -r dll; do
+        [ -z "$dll" ] && continue
         base=$(basename "$dll")
         [ -n "${seen[$base]:-}" ] && continue
         seen[$base]=1
@@ -179,8 +185,42 @@ for p in "$DIST_DIR"/platforms/*.dll "$DIST_DIR"/styles/*.dll "$DIST_DIR"/tls/*.
             cp -f "$MINGW_BIN/$base" "$DIST_DIR/$base"
             queue+=("$DIST_DIR/$base")
         fi
-    done < <(ldd "$p" 2>/dev/null | awk -v b="$MINGW_BIN" '$3 ~ b"/" {print $3}')
+    done < <(ldd "$p" 2>/dev/null | awk '{print $3}' | grep -E '\.dll$')
 done
+
+# 插件闭包拷进来的 DLL 自己还有依赖（libjpeg-8 → libgcc_s_seh-1 等），继续求到底。
+# 主程序那段 while 已经退出，这里单独跑一遍「只处理新入队项」的循环。
+while [ ${#queue[@]} -gt 0 ]; do
+    cur="${queue[0]}"; queue=("${queue[@]:1}")
+    while read -r dll; do
+        [ -z "$dll" ] && continue
+        base=$(basename "$dll")
+        [ -n "${seen[$base]:-}" ] && continue
+        seen[$base]=1
+        [ -f "$DIST_DIR/$base" ] && continue
+        if [ -f "$MINGW_BIN/$base" ]; then
+            cp -f "$MINGW_BIN/$base" "$DIST_DIR/$base"
+            queue+=("$DIST_DIR/$base")
+        fi
+    done < <(ldd "$cur" 2>/dev/null | awk '{print $3}' | grep -E '\.dll$')
+done
+
+# ── 闸门：dist/ 依赖闭包必须完整，否则不许往下走 ──────────────────────────────
+# 这一步在开发机上**永远会过**（PATH 里有 mingw64），所以它必须直接读「包内有没有」，
+# 而不是问系统。用户报的「找不到 liblzma-5.dll」就是这类漏拷。
+# 用 Python 版而不是 shell 版：shell 版每个依赖 fork 三四个进程，一个 45 文件的包
+# 要跑 2~3 分钟，接进构建等于每次多等几分钟；Python 版直接解析 PE 结构，~0.4 秒。
+DEP_CHECK="$SRC_DIR/../../tools/check-package-deps.py"
+PYTHON_BIN=""
+for cand in "$MSYS_ROOT/mingw64/bin/python.exe" "$MSYS_ROOT/usr/bin/python3.exe" python python3; do
+    if command -v "$cand" >/dev/null 2>&1; then PYTHON_BIN="$cand"; break; fi
+done
+if [ -f "$DEP_CHECK" ] && [ -n "$PYTHON_BIN" ]; then
+    "$PYTHON_BIN" "$DEP_CHECK" "$DIST_DIR" \
+        || fail "dist/ 依赖闭包不完整（上面列了缺哪个）—— 装到用户机器上会直接起不来"
+else
+    log "⚠️ 找不到 tools/check-package-deps.py 或 python，跳过依赖闭包闸门"
+fi
 
 # 构建目录里的那份 exe 也放一份 tls/OpenSSL：开发态直接双击 build-release/KunClient.exe
 # 时同样按 <appdir>/tls 找后端，缺了就是「无法连接服务器」（与 dist 同因）。
