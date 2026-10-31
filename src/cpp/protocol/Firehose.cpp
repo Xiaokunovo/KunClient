@@ -16,6 +16,7 @@
 #include <QXmlStreamReader>
 #include <QtEndian>
 
+#include <cstring>
 #include <limits>
 #include <utility>
 
@@ -41,6 +42,16 @@ bool isAllZero(const QByteArray& data)
         if (byte != 0) return false;
     }
     return true;
+}
+
+/// RAW 传输吞吐（MiB/s）。刷写速率是这台工具最常被问的指标，没有实测数字
+/// 就只能靠感觉调参；这里只做除法，不引入任何计时开销。
+QString throughputText(quint64 bytes, qint64 elapsedMs)
+{
+    if (bytes == 0) return QStringLiteral("0 MiB/s");
+    const double seconds = qMax<qint64>(elapsedMs, 1) / 1000.0;
+    const double mib = static_cast<double>(bytes) / (1024.0 * 1024.0);
+    return QStringLiteral("%1 MiB/s").arg(mib / seconds, 0, 'f', 1);
 }
 
 /// 设备在 configure NAK 的日志里报实际上限（属性名大小写随 programmer 而异）：
@@ -552,9 +563,11 @@ bool FirehoseClient::checkAck(const FirehoseResponse& response, const QString& o
 bool FirehoseClient::configure(StorageType storage, QString* error)
 {
     const QString memory = storageName(storage);
-    // 最多两次：首次按主机上限（1MB）发；若设备在 NAK 日志里报实际上限，
+    // 最多两次：首次按主机上限（8MB）发；若设备在 NAK 日志里报实际上限，
     // 降档到该值再试一次。属性名大小写随 programmer 而异（参考 edl9008
     // firehose.cpp 的 configure 重试逻辑）。
+    // 先大后小是刻意的：设备只会给 min(申请值, 支持值)，申请小了就再也拿不到
+    // 大分片，而且降档后不会回升 —— 这条顺序直接决定整场刷写的分片大小。
     for (int attempt = 0; attempt < 2; ++attempt) {
         const QString command = xmlEnvelope(QStringLiteral(
             "<configure MemoryName=\"%1\" Verbose=\"0\" AlwaysValidate=\"0\" "
@@ -571,12 +584,15 @@ bool FirehoseClient::configure(StorageType storage, QString* error)
             if (m_log) m_log(QStringLiteral("Firehose 已配置，Payload %1 KiB").arg(m_maximumPayload / 1024));
             return true;
         }
-        const quint64 supported = parseSupportedPayload(response.messages);
-        if (attempt == 0 && supported > 0 && supported < m_maximumPayload) {
-            m_maximumPayload = supported;
+        if (attempt == 0) {
+            const quint64 supported = parseSupportedPayload(response.messages);
+            // 有明确上限就按它降档；没报上限却拒了 8 MB，退回长期验证过的
+            // 1 MB 再试一次 —— 不能让「想快」把原本能刷的设备变成刷不了。
+            m_maximumPayload = (supported > 0 && supported < m_maximumPayload)
+                ? supported : (1024 * 1024);
             if (m_log) {
-                m_log(QStringLiteral("设备要求更小的 Payload，降档到 %1 KiB 重试")
-                          .arg(supported / 1024));
+                m_log(QStringLiteral("设备拒绝当前 Payload，降档到 %1 KiB 重试")
+                          .arg(m_maximumPayload / 1024));
             }
             continue;
         }
@@ -717,12 +733,13 @@ bool FirehoseClient::initializeOplusVip(const QString& digestPath,
         response = {};
         if (!transact(command, &response, 20000, error)) return false;
         if (response.ack && !response.nak) break;
-        const quint64 supported = parseSupportedPayload(response.messages);
-        if (attempt == 0 && supported > 0 && supported < m_maximumPayload) {
-            m_maximumPayload = supported;
+        if (attempt == 0) {
+            const quint64 supported = parseSupportedPayload(response.messages);
+            m_maximumPayload = (supported > 0 && supported < m_maximumPayload)
+                ? supported : (1024 * 1024);
             if (m_log) {
                 m_log(QStringLiteral("VIP Configure 被拒，Payload 降档到 %1 KiB 重试")
-                          .arg(supported / 1024));
+                          .arg(m_maximumPayload / 1024));
             }
             continue;
         }
@@ -750,8 +767,11 @@ void FirehoseClient::resumeOplusVip(const QString& digestPath)
 bool FirehoseClient::ping(QString* error, int timeoutMs)
 {
     FirehoseResponse response;
+    // 下限从 250ms 放宽到 50ms：连接期用短超时快速试探 programmer 是否已经
+    // 起来（见 EdlWorker 的退避重试）。250ms 的下限会把试探窗口整体抬高，
+    // 退避就失去意义了。50ms 仍足够覆盖一次 USB 往返。
     if (!transact(xmlEnvelope(QStringLiteral("<nop value=\"ping\" />")), &response,
-                  qMax(250, timeoutMs), error)) return false;
+                  qMax(50, timeoutMs), error)) return false;
     return checkAck(response, QStringLiteral("NOP"), error);
 }
 
@@ -852,6 +872,8 @@ bool FirehoseClient::readToDevice(QIODevice& output, quint64 startSector, quint6
     }
 
     quint64 completed = 0;
+    QElapsedTimer throughputClock;
+    throughputClock.start();
     while (completed < totalBytes) {
         if (m_cancelled.load(std::memory_order_relaxed)) {
             if (error) *error = QStringLiteral("操作已停止");
@@ -870,6 +892,11 @@ bool FirehoseClient::readToDevice(QIODevice& output, quint64 startSector, quint6
         }
         completed += static_cast<quint64>(block.size());
         if (m_progress) m_progress(completed, totalBytes);
+    }
+    if (m_log) {
+        m_log(QStringLiteral("RAW 读取完成：%1 字节，%2")
+                  .arg(totalBytes)
+                  .arg(throughputText(totalBytes, throughputClock.elapsed())));
     }
 
     if (!receiveResponse(&response, 15000, error)) return false;
@@ -996,6 +1023,9 @@ bool FirehoseClient::program(QIODevice& input, quint64 inputSize, quint64 startS
     // 进度事件降一个量级，视觉平滑度不变（10 次/秒）。
     QElapsedTimer progressClock;
     progressClock.start();
+    QElapsedTimer throughputClock;
+    throughputClock.start();
+    QByteArray block;
     while (completed < transferBytes) {
         if (m_cancelled.load(std::memory_order_relaxed)) {
             if (error) *error = QStringLiteral("操作已停止");
@@ -1005,18 +1035,38 @@ bool FirehoseClient::program(QIODevice& input, quint64 inputSize, quint64 startS
         const quint64 sourceRemaining = completed < inputSize ? inputSize - completed : 0;
         const qsizetype sourceRequest = static_cast<qsizetype>(
             qMin<quint64>(static_cast<quint64>(request), sourceRemaining));
-        QByteArray block = sourceRequest > 0 ? input.read(sourceRequest) : QByteArray{};
-        if (block.size() != sourceRequest && completed < inputSize) {
-            if (error) *error = QStringLiteral("读取镜像失败：%1").arg(input.errorString());
-            return false;
+        // 复用同一个缓冲：每片都新建一个 8 MB QByteArray 会让分配器在高频
+        // 申请/释放间反复向系统要页，写入速率越高这部分越明显。
+        block.resize(request);
+        if (sourceRequest > 0) {
+            const qint64 got = input.read(block.data(), sourceRequest);
+            if (got != sourceRequest && completed < inputSize) {
+                if (error) *error = QStringLiteral("读取镜像失败：%1").arg(input.errorString());
+                return false;
+            }
         }
-        if (block.size() < request) block.append(request - block.size(), '\0');
+        // 镜像尾片不足 request 时补零：resize 复用旧容量不会清零，上一片的残留
+        // 数据会被当成镜像尾写进设备，必须显式覆盖。
+        if (sourceRequest < request) {
+            std::memset(block.data() + sourceRequest, 0,
+                        static_cast<size_t>(request - sourceRequest));
+        }
         if (!m_transport.writeAll(block, 15000, error)) return false;
-        completed += static_cast<quint64>(block.size());
+        completed += static_cast<quint64>(request);
         if (m_progress && (completed >= transferBytes || progressClock.hasExpired(100))) {
             m_progress(qMin(completed, inputSize), inputSize);
             progressClock.start();
         }
+    }
+
+    if (m_log) {
+        // 分片大小和事务次数一起打出来：速率不理想时，先看这两个数就能判断
+        // 是协商没拿到大 payload，还是拿到了但链路上不去。
+        m_log(QStringLiteral("RAW 写入完成：%1 字节，%2，分片 %3 KiB × %4 次")
+                  .arg(transferBytes)
+                  .arg(throughputText(transferBytes, throughputClock.elapsed()))
+                  .arg(m_maximumPayload / 1024)
+                  .arg((transferBytes + m_maximumPayload - 1) / m_maximumPayload));
     }
 
     if (!receiveResponse(&response, 15000, error)) return false;

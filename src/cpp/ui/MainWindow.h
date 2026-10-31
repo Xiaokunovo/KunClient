@@ -28,10 +28,12 @@ class XiaomiEdlPage;
 }
 
 namespace kc::devices { struct StorageBrandProbeOutcome; }
+namespace kc::diag { struct FlashRecord; }
 
 namespace swt::edl {
 
 class EdlWorker;
+struct RawProgramPlan;   // 刷机计划预演用（2026-10-31）
 
 class MainWindow final : public QMainWindow {
     Q_OBJECT
@@ -72,6 +74,12 @@ public:
     /// 快捷条上的独立按钮 —— 它是一条完整的入口流程，藏在重启菜单里既不好找，
     /// 也和「重启」这个语义不搭。实现仍复用 openFdlFlow()（弹窗 + 自动开跑）。
     void startFdlFlow() { openFdlFlow(); }
+
+    /// 打开「刷机记录」窗（查看 / 导出 / 清空）。纯本地，不依赖连接。
+    /// 放在 public 段：外壳（MainShell 的辅助触控菜单 / 灵动岛）要直接调它 ——
+    /// Qt6 的 QMetaObject::invokeMethod 对「无参 + 无返回值」的字符串反射调用
+    /// 已经没有合适重载了（会报 no matching function），只能走普通成员函数。
+    void showFlashHistory();
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -139,6 +147,35 @@ private slots:
     /// 2026-10-21 从独立页 StorageBrandPage 搬进来，日志与结果都进 EDL 日志。
     void probeStorageBrand();
     void finishStorageBrandProbe(const kc::devices::StorageBrandProbeOutcome& out);
+    /// 把当前分区表导出成 CSV（csv=true）或等宽 TXT。右键菜单与「高级功能 ▾」共用。
+    void exportPartitionTable(bool csv);
+    /// 记一条刷机记录（在 operationFinished 里调用；kind 为空则不记）。
+    /// 只有「用户真正发起过的操作」才记 —— 连接/断开/GPT 读取这类不算刷机。
+    void recordFlashOutcome(bool success, const QString& message);
+    /// 发起一次可记录的操作：打现场快照（类型 / 来源包 / 分区摘要 / 起始时刻）。
+    /// 三个入参都可以为空串（例如「读取存储信息」没有分区概念）。
+    void beginFlashOperation(const QString& kind, const QString& package,
+                             const QString& partitions);
+    /// 分区摘要：「boot, system, vendor 等 3 个」/「69 个分区」。
+    /// 刷机前自动备份（2026-10-31）：把 GPT + 关键分区读一份到本地。
+    /// 返回 false = 备份失败，调用方必须**中止**后续写入（不能带着虚假的安全感刷）。
+    /// 设置里关掉时直接返回 true（用户自担风险）。
+    bool ensurePreFlashBackup();
+    /// 一键重跑上次刷机（2026-10-31）：按最近一条可重放记录重新执行。
+    /// 会先校验设备身份与来源包，不一致就拒绝（绝不静默换设备刷）。
+    void replayLastFlash();
+    /// 固件包预检拦截（2026-10-31）：发现 Error 就**中止**刷机并说明原因。
+    /// 返回 false = 不要继续刷。
+    bool ensureFirmwarePrecheckPasses(const QStringList& xmlPaths);
+    /// 刷机计划预演（2026-10-31）：算出会写哪些扇区、有无重叠，让用户确认。
+    /// 干净的计划直接放过（不打扰）；有重叠/警告/保护分区才弹确认。
+    bool confirmDryRun(const swt::edl::RawProgramPlan& plan);
+    /// 分区表对比（2026-10-31）：把当前表与基线快照比，列出增/删/改。
+    /// 没有基线时先把当前表存为基线。
+    void diffPartitionTables();
+    /// 导出设备报告（2026-10-31）：TXT / JSON 两种格式。
+    void exportDeviceReport();
+    static QString summarizePartitions(const QVector<PartitionInfo>& partitions);
     void appendLog(const QString& message);
     void updateState(swt::edl::SessionState state, const QString& detail);
     void setBusy(bool busy);
@@ -188,8 +225,25 @@ private:
     bool m_readGptAfterConnect = false;
     bool m_readVersionAfterGpt = false;
     QVector<PartitionInfo> m_partitions;
+    /// 分区表对比的基线快照（2026-10-31）。空 = 还没拍过快照。
+    QVector<PartitionInfo> m_gptBaseline;
     QStringList m_selectedXmlPaths;
     QStringList m_partitionImagePaths;
+
+    // ── 刷机记录（kc::diag::FlashHistory）的现场信息 ─────────────────────
+    //  为什么在 UI 侧攒而不是 worker 侧：worker 只知道「写了几个分区」，不知道
+    //  用户是从哪个 XML / 哪个镜像点进来的、设备是什么型号 —— 那些在点按钮那一刻
+    //  才齐全。所以每次发起操作时打一份快照，operationFinished 里连同成败一起落盘。
+    /// 本次操作的开始时间（QElapsedTimer 不跨任务复用，这里存绝对毫秒）。
+    qint64 m_operationStartedMs = 0;
+    /// 操作类型（写入 / 擦除 / 读取 / XML 刷机 …），空 = 不是可记录的操作。
+    QString m_operationKind;
+    /// 来源包摘要（XML 文件名 / 镜像名 / 输出目录）。
+    QString m_operationPackage;
+    /// 分区摘要（"boot, system 等 3 个" / "69 个分区"）。
+    QString m_operationPartitions;
+    /// 设备摘要（"COM7 · 小米 23127PN0CC · 0x1234abcd"），连接时刷新。
+    QString m_deviceSummary;
 
     QComboBox* m_portCombo = nullptr;
     QComboBox* m_storageCombo = nullptr;

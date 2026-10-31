@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.24)
 #  工具链：MSYS2 MinGW64 GCC 16.x + Qt6 (系统级安装于 mingw64/)
 # ─────────────────────────────────────────────────────────────────────────────
 
-project(KunClient VERSION 2.0.6 LANGUAGES CXX)
+project(KunClient VERSION 2.0.8 LANGUAGES CXX)
 
 # ── KC_FORCE_STATIC_DEPS：单文件构建开关 ─────────────────────────────────────
 #  让 find_library 优先选静态 .a（否则 MinGW 默认先命中 .dll.a 导入库，
@@ -110,6 +110,8 @@ set(KC_CORE_SOURCES
     kc/config/AppStatePaths.h       kc/config/AppStatePaths.cpp
     kc/config/ClientConfig.h        kc/config/ClientConfig.cpp
     kc/config/AppSettings.h         kc/config/AppSettings.cpp
+    # 主题包（2026-10-31）：整套外观的序列化 + 内置预设 + 导入导出
+    kc/config/ThemePack.h           kc/config/ThemePack.cpp
     # ── 停更离线版（2.0.6）：网络层 / 账号层 / 环境上报 / 自动更新 / 云端引导
     #    全部移除（作者退圈、服务器关停）。以下保留的是纯本地能力：
     #    Sha256（CNG 摘要）/ Digest（固件校验）/ FirmwareChecksum（校验文件口径）/
@@ -121,11 +123,42 @@ set(KC_CORE_SOURCES
     kc/security/Digest.h            kc/security/Digest.cpp
     # 校验文件（.md5 / .sha256）的格式读写口径
     kc/tools/FirmwareChecksum.h     kc/tools/FirmwareChecksum.cpp
+    # 固件包完整性预检（2026-10-31）：选包即校，纯逻辑
+    kc/tools/FirmwarePrecheck.h     kc/tools/FirmwarePrecheck.cpp
+    # B 组（2026-10-31）：恢复现场 / 批量队列 / 分区表对比
+    kc/tools/FlashReplay.h          kc/tools/FlashReplay.cpp
+    kc/tools/FlashQueue.h           kc/tools/FlashQueue.cpp
+    kc/tools/GptDiff.h              kc/tools/GptDiff.cpp
+    # 刷机辅助（2026-10-31）：镜像识别 / 设备报告 / 刷机前检查
+    kc/tools/ImageProbe.h           kc/tools/ImageProbe.cpp
+    kc/tools/DeviceReport.h         kc/tools/DeviceReport.cpp
+    kc/tools/PreflightChecks.h      kc/tools/PreflightChecks.cpp
+    # 刷机计划预演（2026-10-31）：不碰设备，先算会写哪些扇区、有无重叠
+    kc/tools/FlashDryRun.h          kc/tools/FlashDryRun.cpp
+    # ── 网络层 / 自动更新（2026-10-31 恢复）──────────────────────────────
+    # v2 接口客户端：握手 + HMAC 签名 + 票据下载
+    kc/net/ApiClient.h              kc/net/ApiClient.cpp
+    # 更新包校验：SHA-256 完整性 + ECDSA P-256 真实性（修 SECURITY.md 的严重问题）
+    kc/update/UpdateVerifier.h      kc/update/UpdateVerifier.cpp
+    # 自动更新服务（2026-10-31）：检查 → 下载 → 校验 → 外部脚本替换
+    kc/update/UpdateService.h       kc/update/UpdateService.cpp
     # FDL 签名数据的解析口径（十六进制 / Base64）：纯本地，FdlAuthDialog 与
     # XiaomiEdlPage 共用。服务器关停不影响它 —— 签名是用户手工粘贴的。
     kc/auth/SignCodec.h             kc/auth/SignCodec.cpp
     kc/diag/SessionLog.h            kc/diag/SessionLog.cpp
     kc/diag/LogCollector.h          kc/diag/LogCollector.cpp
+    # 刷机记录（2026-10-29）：每次写入/擦除/回读的成败落盘 + CSV 导出
+    kc/diag/FlashHistory.h          kc/diag/FlashHistory.cpp
+    # 刷机前自动备份（GPT + 关键分区，2026-10-31）：纯逻辑，不碰设备/UI
+    kc/diag/PreFlashBackup.h        kc/diag/PreFlashBackup.cpp
+    # 一键诊断包：最近日志 + system-info.txt → zip（依赖下面的 ZipWriter）
+    kc/diag/DiagnosticBundle.h      kc/diag/DiagnosticBundle.cpp
+    # 极简 ZIP（method 0 = stored）：诊断包用，不引 zlib/QuaZip
+    kc/tools/ZipWriter.h            kc/tools/ZipWriter.cpp
+    # 分区表导出的 CSV / 等宽文本口径（Excel BOM、RFC4180、CJK 对齐）
+    kc/tools/TextTable.h            kc/tools/TextTable.cpp
+    # 快捷指令的数据模型 / 文本序列化 / 执行编排（纯逻辑，只依赖 QtCore）
+    kc/tools/ShortcutModel.h        kc/tools/ShortcutModel.cpp
     kc/tools/PlatformToolsManager.h kc/tools/PlatformToolsManager.cpp
     # 「引导未上报分区大小」补偿链：换二进制 / 加 --force 逐个重试
     kc/tools/FastbootSizeFallback.h kc/tools/FastbootSizeFallback.cpp
@@ -163,9 +196,15 @@ set(UI_SOURCES
     ui/widgets/DynamicIsland.h    ui/widgets/DynamicIsland.cpp
     ui/widgets/LiquidGlass.h      ui/widgets/LiquidGlass.cpp
     ui/widgets/GlassSurface.h     ui/widgets/GlassSurface.cpp
+    # 主屏小组件条（设备 / 最近刷机 / 时钟三块玻璃卡，2026-10-29）
+    ui/widgets/ConsoleWidgets.h   ui/widgets/ConsoleWidgets.cpp
+    # 重绘帧率探针（--fps-probe，2026-10-30「动画卡顿」定位用）
+    ui/widgets/FpsProbe.h         ui/widgets/FpsProbe.cpp
+    # iOS 玩法（2026-10-29）：辅助触控悬浮球 / 待机模式（通知中心已于 2026-10-31 移除）
+    ui/widgets/AssistiveTouch.h   ui/widgets/AssistiveTouch.cpp
+    ui/widgets/StandByOverlay.h   ui/widgets/StandByOverlay.cpp
     ui/widgets/GlassPanel.h       ui/widgets/GlassPanel.cpp
     ui/widgets/GlassMenu.h        ui/widgets/GlassMenu.cpp
-    ui/widgets/Toast.h            ui/widgets/Toast.cpp
     ui/widgets/BottomSheet.h      ui/widgets/BottomSheet.cpp
     ui/widgets/IosSwitch.h        ui/widgets/IosSwitch.cpp
     ui/widgets/SegmentedControl.h ui/widgets/SegmentedControl.cpp
@@ -196,6 +235,10 @@ set(UI_SOURCES
     ui/pages/XiaomiFastbootPage.h   ui/pages/XiaomiFastbootPage.cpp
     ui/pages/VisualFlashPage.h      ui/pages/VisualFlashPage.cpp
     ui/pages/MtkFlashPage.h         ui/pages/MtkFlashPage.cpp
+    # 快捷指令页（2026-10-29，iOS「快捷指令」极简版；模型在 kc/tools/ShortcutModel）
+    ui/pages/ShortcutsPage.h        ui/pages/ShortcutsPage.cpp
+    # 批量刷机队列页（2026-10-31）：排队 + 逐个提示换设备
+    ui/pages/BatchFlashPage.h       ui/pages/BatchFlashPage.cpp
     # 视频动态背景解码器：直接走 Windows Media Foundation，不依赖 Qt6::Multimedia
     # （mingw64 没装该模块；ucrt64 静态 Qt 无 FFmpeg 后端，走 Qt 会让单文件包丢掉 mp4）。
     kc/media/VideoBackground.h      kc/media/VideoBackground.cpp
@@ -208,6 +251,8 @@ set(DIALOG_SOURCES
     ui/dialogs/GlassDialog.h         ui/dialogs/GlassDialog.cpp
     ui/dialogs/ThemedMessageBox.h    ui/dialogs/ThemedMessageBox.cpp
     ui/dialogs/EraseConfirmDialog.h  ui/dialogs/EraseConfirmDialog.cpp
+    # 刷机记录查看 / 导出窗（数据源 kc/diag/FlashHistory）
+    ui/dialogs/FlashHistoryDialog.h  ui/dialogs/FlashHistoryDialog.cpp
     # FDL 授权窗（blob 只读 + sig 手工粘贴）：纯本地，小米 FDL 流程必需，保留
     ui/dialogs/FdlAuthDialog.h       ui/dialogs/FdlAuthDialog.cpp
     # ── 停更离线版（2.0.6）：FDL 授权 / 登录 / 更新 / 启动预载 / 云端引导库 /
@@ -600,6 +645,214 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME diag-tests COMMAND kc-diag-tests)
 
+    # 刷机记录单测（2026-10-29）：JSONL 往返 / 坏行容忍 / CSV 导出 / 500 条上限 / 清空。
+    # 单独一个 target：LogCollectorTest.cpp 自带 main()，不能并进 kc-diag-tests。
+    add_executable(kc-flashhistory-tests
+        tests/FlashHistoryTest.cpp
+        kc/diag/FlashHistory.cpp
+        kc/config/AppStatePaths.cpp
+    )
+    target_include_directories(kc-flashhistory-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-flashhistory-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-flashhistory-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-flashhistory-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME flashhistory-tests COMMAND kc-flashhistory-tests)
+
+    # 刷机前备份单测（2026-10-31）：白名单口径 / 大小上限 / 目录名清洗 / manifest 往返 / 清理策略
+    add_executable(kc-preflash-backup-tests
+        tests/PreFlashBackupTest.cpp
+        kc/diag/PreFlashBackup.cpp
+        kc/config/AppStatePaths.cpp
+        kc/security/Sha256.cpp
+    )
+    target_include_directories(kc-preflash-backup-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-preflash-backup-tests PRIVATE Qt6::Core)
+    if(WIN32)
+        target_link_libraries(kc-preflash-backup-tests PRIVATE bcrypt)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-preflash-backup-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-preflash-backup-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME preflash-backup-tests COMMAND kc-preflash-backup-tests)
+
+    # 主题包单测（2026-10-31）：JSON 往返 / 非法值拒绝 / 向前兼容 / 内置预设合法性
+    add_executable(kc-theme-pack-tests
+        tests/ThemePackTest.cpp
+        kc/config/ThemePack.cpp
+        kc/config/AppSettings.cpp
+        kc/config/AppStatePaths.cpp
+    )
+    target_include_directories(kc-theme-pack-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-theme-pack-tests PRIVATE Qt6::Core)
+    if(WIN32)
+        target_link_libraries(kc-theme-pack-tests PRIVATE crypt32 bcrypt advapi32)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-theme-pack-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-theme-pack-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME theme-pack-tests COMMAND kc-theme-pack-tests)
+
+    # 刷机辅助三模块单测（2026-10-31）
+    add_executable(kc-assist-tools-tests
+        tests/AssistToolsTest.cpp
+        kc/tools/ImageProbe.cpp
+        kc/tools/DeviceReport.cpp
+        kc/tools/PreflightChecks.cpp
+        kc/tools/TextTable.cpp
+    )
+    target_include_directories(kc-assist-tools-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-assist-tools-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-assist-tools-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-assist-tools-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME assist-tools-tests COMMAND kc-assist-tools-tests)
+
+    # 刷机计划预演单测（2026-10-31）：区间计算 / 重叠检测 / 保护分区 / 字节统计
+    add_executable(kc-flash-dryrun-tests
+        tests/FlashDryRunTest.cpp
+        kc/tools/FlashDryRun.cpp
+        storage/RawProgramParser.cpp
+        storage/DynamicSuper.cpp
+        storage/SparseImage.cpp
+        storage/LunCapacity.cpp
+        kc/tools/TextTable.cpp
+        kc/security/Sha256.cpp
+    )
+    target_include_directories(kc-flash-dryrun-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-flash-dryrun-tests PRIVATE Qt6::Core Qt6::Xml)
+    if(WIN32)
+        target_link_libraries(kc-flash-dryrun-tests PRIVATE bcrypt)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-flash-dryrun-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-flash-dryrun-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME flash-dryrun-tests COMMAND kc-flash-dryrun-tests)
+
+    # ZIP 打包单测（诊断包的底层）：CRC32 测试向量 / 手工解析回中央目录 / 确定性。
+    add_executable(kc-zip-tests
+        tests/ZipWriterTest.cpp
+        kc/tools/ZipWriter.cpp
+    )
+    target_include_directories(kc-zip-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-zip-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-zip-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-zip-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME zip-tests COMMAND kc-zip-tests)
+
+    # 表格导出单测（分区表 CSV / 等宽 TXT）：RFC4180 转义 / UTF-8 BOM / CJK 宽度。
+    add_executable(kc-texttable-tests
+        tests/TextTableTest.cpp
+        kc/tools/TextTable.cpp
+    )
+    target_include_directories(kc-texttable-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-texttable-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-texttable-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-texttable-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME texttable-tests COMMAND kc-texttable-tests)
+
+    # 快捷指令单测（2026-10-29 新功能）：动作表口径 / 文本序列化往返（含分隔符与 % 转义）/
+    # 校验 / 执行编排的「失败即中止」。这一层不碰设备，只依赖 QtCore。
+    add_executable(kc-shortcut-tests
+        tests/ShortcutModelTest.cpp
+        kc/tools/ShortcutModel.cpp
+    )
+    target_include_directories(kc-shortcut-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-shortcut-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-shortcut-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-shortcut-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME shortcut-tests COMMAND kc-shortcut-tests)
+
+    # iOS 玩法六件套的结构回归（2026-10-30）：设置页的开关必须**当场**生效。
+    # 三项最初是「构造时读一次 AppSettings」，设置页却写着「改完立刻生效」——
+    # 人眼很难发现（重启后一切正常），只有断言拦得住。
+    add_executable(kc-ios-features-tests
+        tests/IosFeaturesTest.cpp
+        ${EDL_FULL_SOURCES}
+        ${KC_CORE_SOURCES}
+        ${UI_SOURCES}
+        ${DIALOG_SOURCES}
+        ${RESOURCE_FILES}
+    )
+    target_include_directories(kc-ios-features-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-ios-features-tests PRIVATE
+        Qt6::Core Qt6::Widgets Qt6::SerialPort Qt6::Xml Qt6::Network ${KC_COMPRESSION_LIBS})
+    if(WIN32)
+        target_link_libraries(kc-ios-features-tests PRIVATE crypt32 bcrypt advapi32 iphlpapi wbemuuid ole32 oleaut32 setupapi cfgmgr32 mfplat mfreadwrite mfuuid)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-ios-features-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-ios-features-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME ios-features-tests COMMAND kc-ios-features-tests)
+
+    # 主题对比度 / 卡顿回归（2026-10-30）：「动画卡顿」与「浅色主题看不清」
+    # 都不会报错，只能把度量口径钉成断言。
+    add_executable(kc-theme-contrast-tests
+        tests/ThemeContrastTest.cpp
+        ui/theme/ThemeManager.cpp
+        ui/theme/GlassSettings.cpp
+        ui/theme/Motion.cpp
+        ui/widgets/MarqueeLabel.cpp
+        kc/config/AppSettings.cpp
+        kc/config/AppStatePaths.cpp
+        ${RESOURCE_FILES}
+    )
+    target_include_directories(kc-theme-contrast-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-theme-contrast-tests PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui)
+    if(WIN32)
+        target_link_libraries(kc-theme-contrast-tests PRIVATE crypt32 bcrypt advapi32)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-theme-contrast-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-theme-contrast-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME theme-contrast-tests COMMAND kc-theme-contrast-tests)
+
+    # 刷机记录 / 分区表导出 / 日志导出的 UI 结构回归（2026-10-29 新功能）：
+    # 高级功能下拉的三个新条目、可用性口径、右键菜单策略、记录链路不误记过程动作。
+    add_executable(kc-flash-history-ui-tests
+        tests/FlashHistoryUiTest.cpp
+        ${EDL_FULL_SOURCES}
+        ${KC_CORE_SOURCES}
+        ${UI_SOURCES}
+        ${DIALOG_SOURCES}
+        ${RESOURCE_FILES}
+    )
+    target_include_directories(kc-flash-history-ui-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-flash-history-ui-tests PRIVATE
+        Qt6::Core Qt6::Widgets Qt6::SerialPort Qt6::Xml Qt6::Network ${KC_COMPRESSION_LIBS})
+    if(WIN32)
+        target_link_libraries(kc-flash-history-ui-tests PRIVATE crypt32 bcrypt advapi32 iphlpapi wbemuuid ole32 oleaut32 setupapi cfgmgr32 mfplat mfreadwrite mfuuid)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-flash-history-ui-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-flash-history-ui-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME flash-history-ui-tests COMMAND kc-flash-history-ui-tests)
+
     # UI 测试（含完整应用）
     add_executable(kc-ui-tests
         tests/MainWindowLogTest.cpp
@@ -663,5 +916,90 @@ if(BUILD_TESTING)
     endif()
     add_test(NAME checksum-tests COMMAND kc-checksum-tests)
 
+    # 更新包校验单测（2026-10-31）：SHA-256 完整性 + ECDSA 真实性。
+    # 安全关键代码 —— 重点覆盖「拒绝路径」（fail-closed），放行不该放行的包才是事故。
+    add_executable(kc-update-verifier-tests
+        tests/UpdateVerifierTest.cpp
+        kc/update/UpdateVerifier.cpp
+        kc/security/Sha256.cpp
+    )
+    target_include_directories(kc-update-verifier-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-update-verifier-tests PRIVATE Qt6::Core)
+    if(WIN32)
+        target_link_libraries(kc-update-verifier-tests PRIVATE bcrypt)
+    endif()
+    if(MSVC)
+        target_compile_options(kc-update-verifier-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-update-verifier-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME update-verifier-tests COMMAND kc-update-verifier-tests)
+
     # ── 停更离线版（2.0.6）：环境检测 / 上报协议测试（kc-env-tests）已随功能移除 ──
+
+    # ── B 组逻辑层（2026-10-31）：恢复现场 / 批量队列 / 分区表对比 ────────────
+    # 三个模块都只依赖 QtCore、不碰 UI 与设备，各自单列一个 target
+    # （每个测试文件自带 main()，不能合并）。
+
+    # 一键「恢复上次现场」：操作白名单 / 设备一致性 / 包存在性 / 分区摘要解析。
+    # 需要 FlashHistory.h 的 FlashRecord 定义，但不链 FlashHistory.cpp
+    # （只用结构体，不碰落盘）。
+    add_executable(kc-flash-replay-tests
+        tests/FlashReplayTest.cpp
+        kc/tools/FlashReplay.cpp
+    )
+    target_include_directories(kc-flash-replay-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-flash-replay-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-flash-replay-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-flash-replay-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME flash-replay-tests COMMAND kc-flash-replay-tests)
+
+    # 批量刷机队列：状态迁移合法性 / 失败不阻塞后续 / 入队去重 / 汇总口径。
+    add_executable(kc-flash-queue-tests
+        tests/FlashQueueTest.cpp
+        kc/tools/FlashQueue.cpp
+    )
+    target_include_directories(kc-flash-queue-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-flash-queue-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-flash-queue-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-flash-queue-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME flash-queue-tests COMMAND kc-flash-queue-tests)
+
+    # 分区表对比：增 / 删 / 改三张清单，改动要能区分起始扇区 / 大小 / LUN。
+    # 复用 core/Types.h 的 PartitionInfo（与 GptParser 同一套结构，不另造一份）。
+    add_executable(kc-gpt-diff-tests
+        tests/GptDiffTest.cpp
+        kc/tools/GptDiff.cpp
+    )
+    target_include_directories(kc-gpt-diff-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-gpt-diff-tests PRIVATE Qt6::Core)
+    if(MSVC)
+        target_compile_options(kc-gpt-diff-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-gpt-diff-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME gpt-diff-tests COMMAND kc-gpt-diff-tests)
+
+    # 固件包完整性预检（A2，选包即校）：空文件 / 截断 / 缺校验文件 / 校验通过 /
+    # 校验不匹配 / XML 声明 size 对不上。纯逻辑，只依赖 QtCore + CNG 摘要。
+    add_executable(kc-firmware-precheck-tests
+        tests/FirmwarePrecheckTest.cpp
+        kc/tools/FirmwarePrecheck.cpp
+        kc/tools/FirmwareChecksum.cpp
+        kc/security/Digest.cpp
+    )
+    target_include_directories(kc-firmware-precheck-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+    target_link_libraries(kc-firmware-precheck-tests PRIVATE Qt6::Core bcrypt)
+    if(MSVC)
+        target_compile_options(kc-firmware-precheck-tests PRIVATE /W4 /permissive- /utf-8)
+    else()
+        target_compile_options(kc-firmware-precheck-tests PRIVATE -Wall -Wextra -Wpedantic)
+    endif()
+    add_test(NAME firmware-precheck-tests COMMAND kc-firmware-precheck-tests)
 endif()

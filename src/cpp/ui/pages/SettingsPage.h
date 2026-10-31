@@ -34,6 +34,10 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSlider;
+
+namespace kc::config {
+struct ThemePack;
+}
 class QSpinBox;
 class QTimer;
 class QVBoxLayout;
@@ -63,6 +67,12 @@ private:
     void applyLive();          // 控件 → AppSettings（内存）+ 刷样式：拖动即时预览，不落盘
     /// 灵动岛七项 → AppSettings + 让外壳重读（岛是外壳的子控件，设置页改不动它）。
     void applyIslandLive();
+    /// 套用一个主题包（2026-10-31）：写内存 + 回填控件 + 立即预览。
+    /// 落盘仍走底部「保存设置」（与其它外观项一致）。
+    void applyThemePack(const kc::config::ThemePack& pack);
+    /// iOS 玩法六项 → AppSettings + 让外壳重读（悬浮球 / 小组件 / 待机都是外壳的
+    /// 子控件，设置页同样改不动它们 —— 走窗口上的 Q_INVOKABLE applyIosFeatures）。
+    void applyIosLive();
     /// 液态玻璃五项 → AppSettings（内存）+ 刷新预览面板。**不重放样式表**：
     /// 玻璃参数只影响自绘面板，重放 QSS 是纯浪费（一次 repolish 整棵树）。
     void applyGlassLive();
@@ -146,6 +156,15 @@ private:
     QComboBox* m_engineBaud = nullptr;
     QSpinBox* m_engineThreads = nullptr;
     QCheckBox* m_engineCompat = nullptr;
+    QCheckBox* m_preFlashBackup = nullptr;   // 刷机前自动备份（2026-10-31）
+
+    // iOS 玩法六项（2026-10-29）
+    IosSwitch* m_assistiveTouch = nullptr;
+    QSpinBox* m_standbyIdle = nullptr;
+    IosSwitch* m_focusFlashMode = nullptr;
+    IosSwitch* m_consoleWidgets = nullptr;
+    IosSwitch* m_shortcutsPage = nullptr;
+
     /// 拉取已经结束（成功或失败）。区分「正在拉」与「拉过但没拿到」，
     /// 否则离线时那句「正在获取模块信息…」会永远挂在那儿。
     bool m_modulesDone = false;

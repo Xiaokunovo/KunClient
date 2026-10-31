@@ -454,31 +454,44 @@ void DeviceHomePage::refreshAsync()
     QPointer<DeviceHomePage> self(this);
     class DetectTask : public QRunnable {
     public:
-        DetectTask(DeviceHomePage* page, QPointer<DeviceHomePage> guard)
-            : m_page(page), m_guard(guard) {}
+        // 🔴 只持有 QPointer，**不存裸指针** —— 存了就会有人忍不住在判空前
+        //    先用它（这正是 2026-10-30 那次崩溃的成因）。
+        explicit DetectTask(QPointer<DeviceHomePage> guard) : m_guard(guard) {}
         void run() override
         {
-            m_page->detect();
+            // 🔴 2026-10-30 崩溃修复（DeviceHomePage 约 12% 概率 exit=139）：
+            //
+            //    原代码是 `m_page->detect();` 打头，**然后**才 `m_guard.data()`
+            //    判空 —— 顺序反了。任务在全局线程池里排队，页面完全可能在
+            //    轮到这个任务之前就被销毁（切页 / 关窗 / 探针退出），
+            //    此时裸指针已是野指针，detect() 一进去就段错误。
+            //    守卫必须**先**查，查不到直接返回。
             DeviceHomePage* page = m_guard.data();
             if (!page) return;
+
+            page->detect();
+
+            // 排队回 UI 线程时同样要带守卫：从「排队」到「执行」之间还有窗口期，
+            // 裸指针 lambda 在这段里会悬空。捕获 QPointer，真正执行时再取一次。
             QMetaObject::invokeMethod(
                 page,
-                [page] {
-                    page->m_detectRunning = false;
-                    if (page->m_refreshButton) page->m_refreshButton->setEnabled(true);
-                    if (page->m_detectPending) {
-                        page->m_detectPending = false;
-                        page->refreshAsync();
+                [guard = m_guard] {
+                    DeviceHomePage* p = guard.data();
+                    if (!p) return;
+                    p->m_detectRunning = false;
+                    if (p->m_refreshButton) p->m_refreshButton->setEnabled(true);
+                    if (p->m_detectPending) {
+                        p->m_detectPending = false;
+                        p->refreshAsync();
                     }
                 },
                 Qt::QueuedConnection);
         }
 
     private:
-        DeviceHomePage* m_page;
         QPointer<DeviceHomePage> m_guard;
     };
-    QThreadPool::globalInstance()->start(new DetectTask(this, self));
+    QThreadPool::globalInstance()->start(new DetectTask(self));
 }
 
 void DeviceHomePage::detect()

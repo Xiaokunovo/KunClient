@@ -4,6 +4,7 @@
 
 #include <QApplication>
 #include <QFile>
+#include <QPalette>
 
 #include <algorithm>
 
@@ -140,20 +141,31 @@ const TokenEntry kLightTokens[] = {
     {ColorToken::InputBorder,     "Theme.InputBorder",     0xFFCFDDEE},
     {ColorToken::InputHover,      "Theme.InputHover",      0xFFA9C7E6},
     {ColorToken::InputFocus,      "Theme.InputFocus",      0xFF0A84FF},
-    {ColorToken::Success,         "Theme.Success",         0xFF34A06A},
+    // 🔴 2026-10-30 对比度修复：四档状态色压在各自的浅底上时全部低于
+    //    WCAG AA 的 4.5:1（自动化对比度审计扫出来的）：
+    //      Success #34A06A on #EBF7F0 = 2.99:1
+    //      Warning #C07A16 on #FDF5E8 = 3.50:1
+    //      Danger  #D0503F on #FCEFED = 4.36:1
+    //      Info    #0A84FF on #E9F2FF = 3.77:1
+    //    这四组是「状态提示条」的前景/背景（NotificationBar / 状态标签都用它），
+    //    而状态提示恰恰是**最需要一眼看清**的东西。加深前景后：
+    //      Success #1E7A4C = 4.84:1 / Warning #8F5C06 = 5.21:1
+    //      Danger  #C22218 = 5.34:1 / Info    #1F63A8 = 5.61:1
+    //    背景色不动 —— 浅底本身没问题，是前景太亮。
+    {ColorToken::Success,         "Theme.Success",         0xFF1E7A4C},
     {ColorToken::SuccessBg,       "Theme.SuccessBg",       0xFFEBF7F0},
-    {ColorToken::Warning,         "Theme.Warning",         0xFFC07A16},
+    {ColorToken::Warning,         "Theme.Warning",         0xFF8F5C06},
     {ColorToken::WarningBg,       "Theme.WarningBg",       0xFFFDF5E8},
-    {ColorToken::WarningText,     "Theme.WarningText",     0xFFC07A16},
-    {ColorToken::Danger,          "Theme.Danger",          0xFFD0503F},
+    {ColorToken::WarningText,     "Theme.WarningText",     0xFF8F5C06},
+    {ColorToken::Danger,          "Theme.Danger",          0xFFC22218},
     {ColorToken::DangerBg,        "Theme.DangerBg",        0xFFFCEFED},
-    {ColorToken::Ok,              "Theme.OkGreen",         0xFF34A06A},
+    {ColorToken::Ok,              "Theme.OkGreen",         0xFF1E7A4C},
     {ColorToken::OkBg,            "Theme.OkGreenBg",       0xFFEBF7F0},
-    {ColorToken::Info,            "Theme.Info",            0xFF0A84FF},
+    {ColorToken::Info,            "Theme.Info",            0xFF1F63A8},
     {ColorToken::InfoBg,          "Theme.InfoBg",          0xFFE9F2FF},
     {ColorToken::LogInfo,         "Theme.LogInfo",         0xFF0A6BD6},
-    {ColorToken::LogSuccess,      "Theme.LogSuccess",      0xFF34A06A},
-    {ColorToken::LogWarning,      "Theme.LogWarning",      0xFFC07A16},
+    {ColorToken::LogSuccess,      "Theme.LogSuccess",      0xFF1E7A4C},
+    {ColorToken::LogWarning,      "Theme.LogWarning",      0xFF8F5C06},
     {ColorToken::LogError,        "Theme.LogError",        0xFFD0503F},
     {ColorToken::ProgTrack,       "Theme.ProgTrack",       0xFFEDF3FA},
     {ColorToken::ProgressText,    "Theme.ProgressText",    0xFFFFFFFF},
@@ -302,6 +314,30 @@ void ThemeManager::apply(QApplication& app) {
         // 但分开写便于各自维护（强调色是 2026-10-24 新增的一层）。
         app.setStyleSheet(expandAccent(expandGlassAlpha(QString::fromUtf8(f.readAll()))));
     }
+
+    // 🔴 2026-10-30：把主题色同步进 QPalette。
+    //
+    // 为什么必须做：项目里有几处**自绘图标**（顶栏最小化 / 最大化 / 关闭按钮等）
+    // 靠 `palette().color(QPalette::ButtonText)` 取色，注释写的是「该色由 QSS 的
+    // color: 驱动」。实测**并不成立**：
+    //   QSS 里 #windowButton 写的是 #5F6B7A（4.78:1，达标），
+    //   但 palette() 拿到的是 #8D96A3（2.64:1，低于非文本 3:1 门槛）——
+    //   QSS 的 color 只影响 style 绘制，不保证回写调色板。
+    // 浅色主题下窗口按钮因此偏淡（对比度审计扫出来的）。
+    // 这里按主题显式写一次，自绘控件就有确定的值可读。
+    QPalette pal = app.palette();
+    pal.setColor(QPalette::ButtonText, m_dark ? QColor(0xA6, 0xB2, 0xC0)
+                                              : QColor(0x5F, 0x6B, 0x7A));
+    pal.setColor(QPalette::WindowText, m_dark ? QColor(0xE9, 0xED, 0xF3)
+                                              : QColor(0x1C, 0x1C, 0x1E));
+    // 🔴 输入框的 placeholder 也要提亮。
+    //    Qt 默认的 PlaceholderText 是半透明灰（浅色下实测 #8C8C8E / 3.30:1）。
+    //    本项目的 placeholder 不全是「可选提示」——FastbootFlash 里
+    //    「选择线刷包 / 固件目录，自动匹配 boot.img 等分区镜像」是**操作指引**，
+    //    淡到看不清等于没写。提到 4.8:1 左右，仍是提示层级但读得清。
+    pal.setColor(QPalette::PlaceholderText, m_dark ? QColor(0x8E, 0x9A, 0xA8)
+                                                   : QColor(0x5F, 0x6B, 0x7A));
+    app.setPalette(pal);
     // 加载失败时保留既有样式，绝不抛。
 }
 

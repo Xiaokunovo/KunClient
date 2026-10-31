@@ -20,7 +20,14 @@
 #include "ui/dialogs/EraseConfirmDialog.h"
 #include "ui/dialogs/WelcomeDialog.h"   // 探针：--welcome / 首次启动引导
 #include "ui/theme/ThemeManager.h"
+#include "kc/config/ThemePack.h"
 #include "ui/dialogs/GlassDialog.h"   // 探针：--glassdialog 玻璃弹窗取证
+#include "ui/dialogs/FlashHistoryDialog.h"   // 探针：--flash-history 刷机记录窗取证
+#include "kc/diag/FlashHistory.h"     // 探针：--flash-history 灌演示记录
+#include "ui/widgets/AssistiveTouch.h"        // 探针：--assistive-touch 悬浮球菜单
+#include "ui/widgets/GlassMenu.h"             // 探针：--assistive-touch 抓菜单自身
+#include "ui/widgets/FpsProbe.h"              // 探针：--fps-probe 重绘帧率
+#include "kc/config/AppSettings.h"            // 探针：--assistive-touch 临时打开悬浮球
 #include "ui/widgets/AppIcons.h"      // 探针：--glassmenu 菜单行图标
 #include "ui/widgets/BottomSheet.h"   // 探针：--sheet 底部抽屉取证
 #include "ui/widgets/DynamicIsland.h" // 探针：--island 展开灵动岛（页面切换器）后抓图
@@ -35,7 +42,6 @@
 #include "ui/widgets/IosBadge.h"          // 探针：--ios-gallery 角标
 #include "ui/widgets/IosSwipeRow.h"       // 探针：--ios-gallery 侧滑删除行
 #include "ui/widgets/SegmentedControl.h"  // 探针：--ios-controls 分段选择器取证
-#include "ui/widgets/Toast.h"         // 探针：--toast 玻璃横幅取证
 
 #include <QAction>
 #include <QApplication>
@@ -54,6 +60,7 @@
 #include <QFont>
 #include <QIcon>
 #include <QMenu>
+#include <QMouseEvent>   // 探针：--assistive-touch 给悬浮球发真实的按下/抬起
 #include <QLineEdit>   // 探针：--island-search 往灵动岛搜索框里塞字
 #include <QMessageBox>
 #include <QPushButton>
@@ -645,6 +652,38 @@ int main(int argc, char* argv[])
         }
     }
 
+    // 可选：--theme-pack <名字> 应用一个内置主题包后抓主屏（2026-10-31 取证）。
+    //
+    // 为什么要探针：主题包是「一整套外观」，改的是十几个字段。
+    // 光看设置页截图只能证明「下拉框里有这一项」，证明不了「选它真的变了外观」。
+    // 这里在启动后套用，然后自己抓图并退出 —— 与 --focus-mode 同一种探针形式
+    // （🔴 必须自己抓图 + quit，否则程序会一直跑到通用截图超时）。
+    if (app.arguments().contains(QStringLiteral("--theme-pack"))) {
+        QTimer::singleShot(900, &window, [&window, &app, shotPath] {
+            const int i = app.arguments().indexOf(QStringLiteral("--theme-pack"));
+            const QString name = (i >= 0 && i + 1 < app.arguments().size())
+                                     ? app.arguments().at(i + 1) : QString();
+            kc::config::ThemePack pack;
+            if (kc::config::findBuiltinThemePack(name, &pack)) {
+                kc::config::applyThemePackToSettings(pack);
+                kc::ui::ThemeManager& tm = kc::ui::ThemeManager::instance();
+                if (tm.isDark() != pack.dark) tm.setDark(pack.dark);
+                if (!pack.accentColor.trimmed().isEmpty())
+                    tm.setAccent(QColor(pack.accentColor));
+                tm.apply(app);
+                // 让外壳重读一遍外观相关设置（灵动岛 / 主屏小组件）。
+                QMetaObject::invokeMethod(&window, "applyIosFeatures", Qt::DirectConnection);
+                QMetaObject::invokeMethod(&window, "applyIslandSettings", Qt::DirectConnection);
+            }
+            // 样式表重放 + 控件重建需要一点时间才落定。
+            QTimer::singleShot(900, &window, [&window, shotPath] {
+                window.grab().save(shotPath);
+                QApplication::quit();
+            });
+            QTimer::singleShot(4000, &window, [] { std::exit(0); });
+        });
+    }
+
     // 可选：--scroll <px|bottom> 把**当前页**的滚动区滚到指定位置（探针 / 调试用）。
     // 设置页内容比窗口高一大截，底部的卡片（安全与隐私 / 法务）不滚动永远拍不到，
     // 只能靠人眼打开程序手动滚 —— 等于这部分改动没有截图证据。
@@ -811,22 +850,6 @@ int main(int argc, char* argv[])
         });
     }
 
-    // 可选：--toast 弹一条玻璃横幅并抓横幅自身。
-    if (app.arguments().contains(QStringLiteral("--toast"))) {
-        QTimer::singleShot(700, &window, [&window, shotPath] {
-            kc::ui::Toast::show(QStringLiteral("设置已保存"), kc::ui::Toast::Kind::Success, 20000);
-            QTimer::singleShot(520, &window, [shotPath] {
-                for (QWidget* w : QApplication::topLevelWidgets()) {
-                    if (auto* t = qobject_cast<kc::ui::Toast*>(w)) {
-                        t->grab().save(shotPath);
-                        break;
-                    }
-                }
-                QApplication::quit();
-            });
-        });
-    }
-
     // 可选：--sheet 弹出底部玻璃抽屉并抓抽屉自身。
     if (app.arguments().contains(QStringLiteral("--sheet"))) {
         QTimer::singleShot(700, &window, [&window, shotPath] {
@@ -843,6 +866,124 @@ int main(int argc, char* argv[])
                 }
                 QApplication::quit();
             });
+        });
+    }
+
+    // 可选：--flash-history 打开「刷机记录」窗并抓图（2026-10-29 新功能取证）。
+    // 无头环境没有真实刷机记录，所以先灌两条演示数据再打开 —— 探针要证明的是
+    // 「表格 / 统计行 / 四个按钮都排得下」，不是「历史里有什么」。
+    // 🔴 演示数据必须落在**临时目录**：直接 append 会写进用户的真实
+    //    %LOCALAPPDATA%\KunClientState\flash-history.jsonl，跑一次探针就给
+    //    用户塞两条假记录（第一次实现就踩了，这里用 setDirForTest 隔离）。
+    if (app.arguments().contains(QStringLiteral("--flash-history"))) {
+        const QString probeDir = QDir(QDir::tempPath())
+            .filePath(QStringLiteral("KunClient-probe-flash-history"));
+        QDir().mkpath(probeDir);
+        kc::diag::FlashHistory::instance().setDirForTest(probeDir);
+        kc::diag::FlashHistory::instance().clear();
+
+        QTimer::singleShot(700, &window, [&window, shotPath] {
+            const auto seed = [](const QString& operation, const QString& device,
+                                 const QString& package, const QString& partitions,
+                                 bool success, const QString& message, qint64 ms,
+                                 int minutesAgo) {
+                kc::diag::FlashRecord record;
+                record.time = QDateTime::currentDateTime().addSecs(-60 * minutesAgo);
+                record.operation = operation;
+                record.device = device;
+                record.package = package;
+                record.partitions = partitions;
+                record.success = success;
+                record.message = message;
+                record.durationMs = ms;
+                kc::diag::FlashHistory::instance().append(record);
+            };
+            seed(QStringLiteral("写入"), QStringLiteral("COM7 · 小米 23127PN0CC · 0x1234abcd"),
+                 QStringLiteral("rawprogram0.xml"),
+                 QStringLiteral("boot, system, vendor 等 3 个"), true,
+                 QStringLiteral("批量写入完成：3 个分区"), 41230, 12);
+            seed(QStringLiteral("擦除"), QStringLiteral("COM7 · 小米 23127PN0CC · 0x1234abcd"),
+                 QStringLiteral("1.20 GiB"), QStringLiteral("userdata, metadata"), false,
+                 QStringLiteral("批量擦除完成：1 个分区，1 个失败"), 8300, 26);
+
+            auto* dlg = new kc::ui::FlashHistoryDialog(&window);
+            dlg->setAttribute(Qt::WA_DeleteOnClose, true);
+            dlg->show();
+            QTimer::singleShot(620, dlg, [dlg, shotPath] {
+                dlg->grab().save(shotPath);
+                dlg->hide();
+                QApplication::quit();
+            });
+            QTimer::singleShot(3500, &window, [] { std::exit(0); });
+        });
+    }
+
+    // 可选：--standby 直接进待机模式并抓整窗（2026-10-29 iOS 玩法取证）。
+    if (app.arguments().contains(QStringLiteral("--standby"))) {
+        QTimer::singleShot(900, &window, [&window, shotPath] {
+            QMetaObject::invokeMethod(&window, "enterStandby", Qt::DirectConnection);
+            QTimer::singleShot(700, &window, [&window, shotPath] {
+                window.grab().save(shotPath);
+                QApplication::quit();
+            });
+            QTimer::singleShot(3500, &window, [] { std::exit(0); });
+        });
+    }
+
+    // 可选：--assistive-touch 打开悬浮球并把它的菜单弹出来抓图。
+    // 菜单是 GlassMenu（execAt 阻塞），所以抓图定时器必须先挂好。
+    if (app.arguments().contains(QStringLiteral("--assistive-touch"))) {
+        QTimer::singleShot(1000, &window, [&window, shotPath] {
+            // 设置里默认关着，探针自己打开（只改内存，不 save()）。
+            kc::AppSettings& settings = kc::AppSettings::current();
+            settings.assistiveTouch = true;
+            QMetaObject::invokeMethod(&window, "applyIosFeatures", Qt::DirectConnection);
+            QTimer::singleShot(400, &window, [&window, shotPath] {
+                auto* ball = window.findChild<kc::ui::AssistiveTouch*>(
+                    QStringLiteral("assistiveTouch"));
+                if (!ball) {
+                    QApplication::quit();
+                    return;
+                }
+                QTimer::singleShot(520, &window, [shotPath] {
+                    for (QWidget* w : QApplication::allWidgets()) {
+                        if (auto* menu = qobject_cast<kc::ui::GlassMenu*>(w)) {
+                            menu->grab().save(shotPath);
+                            menu->dismiss(false);
+                            break;
+                        }
+                    }
+                    QTimer::singleShot(150, [] { QApplication::quit(); });
+                });
+                // 点一下悬浮球 = 弹菜单（走真实的 mouseRelease 路径）。
+                QPoint center = ball->rect().center();
+                QMouseEvent press(QEvent::MouseButtonPress, center,
+                                  ball->mapToGlobal(center), Qt::LeftButton, Qt::LeftButton,
+                                  Qt::NoModifier);
+                QMouseEvent release(QEvent::MouseButtonRelease, center,
+                                    ball->mapToGlobal(center), Qt::LeftButton, Qt::NoButton,
+                                    Qt::NoModifier);
+                QApplication::sendEvent(ball, &press);
+                QApplication::sendEvent(ball, &release);
+            });
+            QTimer::singleShot(4000, &window, [] { std::exit(0); });
+        });
+    }
+
+    // 可选：--focus-mode 进专注模式（刷机模式）后抓主屏 —— 取证「页面被收窄」。
+    // 这是六件套里唯一没法靠静态截图自证的一项（其余五项都是「多了一个可见的东西」，
+    // 而它是「少了一堆东西」），所以单独给一个探针。
+    if (app.arguments().contains(QStringLiteral("--focus-mode"))) {
+        QTimer::singleShot(900, &window, [&window, shotPath] {
+            QMetaObject::invokeMethod(&window, "setFocusFlashMode", Qt::DirectConnection,
+                                      Q_ARG(bool, true));
+            QMetaObject::invokeMethod(&window, "showConsole", Qt::DirectConnection);
+            // 转场 400ms + 主屏图标网格重排，留 800ms。
+            QTimer::singleShot(800, &window, [&window, shotPath] {
+                window.grab().save(shotPath);
+                QApplication::quit();
+            });
+            QTimer::singleShot(3500, &window, [] { std::exit(0); });
         });
     }
 
@@ -871,6 +1012,48 @@ int main(int argc, char* argv[])
             });
             // 🔴 兜底：模态弹窗里 quit() 可能落不到主事件循环（探针曾卡死 6 分钟）。
             QTimer::singleShot(3500, &window, [] { std::exit(0); });
+        });
+    }
+
+    // 可选：--edl-partition-menu 在分区表上弹右键菜单并抓菜单自身
+    // （2026-10-29 新功能：复制分区名 / 复制整行 / 导出 CSV / 导出 TXT）。
+    // 直接发 `customContextMenuRequested` 信号（坐标用 viewport 坐标）—— 这就是
+    // 右键链路真正用的那个信号，handler 里 rowAt() 与菜单构造都会跑到。
+    // 🔴 两个坑：
+    //   ① execAt 内部是嵌套事件循环，抓图定时器必须**先**挂好；
+    //   ② 菜单是 `GlassMenu menu(this)` 这种**带父窗口**的栈对象：它 show() 成一个
+    //      浮层，但 `isWindow()` 为 false，`topLevelWidgets()` 里根本找不到它 ——
+    //      必须遍历 allWidgets()。
+    if (app.arguments().contains(QStringLiteral("--edl-partition-menu"))) {
+        QTimer::singleShot(1400, &window, [&window, shotPath] {
+            auto* edl = window.findChild<kc::ui::EdlFlashPage*>();
+            auto* mw = edl ? edl->edlWindow() : nullptr;
+            auto* table = mw ? mw->findChild<QTableWidget*>(QStringLiteral("partitionTable"))
+                             : nullptr;
+            if (!table || table->rowCount() == 0) {
+                std::fprintf(stderr, "[probe] partition table not ready\n");
+                QApplication::quit();
+                return;
+            }
+            const QRect cell = table->visualItemRect(table->item(0, 1));
+            const QPoint viewportPos = cell.isValid() && !cell.isEmpty()
+                ? cell.center()
+                : QPoint(80, table->rowViewportPosition(0) + 8);
+
+            QTimer::singleShot(520, &window, [shotPath] {
+                bool saved = false;
+                for (QWidget* w : QApplication::allWidgets()) {
+                    if (auto* menu = qobject_cast<kc::ui::GlassMenu*>(w)) {
+                        saved = menu->grab().save(shotPath);
+                        menu->dismiss(false);
+                        break;
+                    }
+                }
+                std::fprintf(stderr, "[probe] partition menu saved=%d\n", saved ? 1 : 0);
+                QTimer::singleShot(150, [] { QApplication::quit(); });
+            });
+            QMetaObject::invokeMethod(table, "customContextMenuRequested", Qt::DirectConnection,
+                                      Q_ARG(QPoint, viewportPos));
         });
     }
 
@@ -1007,10 +1190,15 @@ int main(int argc, char* argv[])
         !app.arguments().contains(QStringLiteral("--edl-reboot-menu")) &&
         !app.arguments().contains(QStringLiteral("--edl-advanced-dialog")) &&
         !app.arguments().contains(QStringLiteral("--glassmenu")) &&
-        !app.arguments().contains(QStringLiteral("--toast")) &&
         !app.arguments().contains(QStringLiteral("--sheet")) &&
         !app.arguments().contains(QStringLiteral("--actionsheet")) &&
         !app.arguments().contains(QStringLiteral("--glassdialog")) &&
+        !app.arguments().contains(QStringLiteral("--flash-history")) &&
+        !app.arguments().contains(QStringLiteral("--edl-partition-menu")) &&
+        !app.arguments().contains(QStringLiteral("--standby")) &&
+        !app.arguments().contains(QStringLiteral("--assistive-touch")) &&
+        !app.arguments().contains(QStringLiteral("--focus-mode")) &&
+        !app.arguments().contains(QStringLiteral("--theme-pack")) &&
         !app.arguments().contains(QStringLiteral("--cloud-panel-popup"))) {
         int grabDelay = 500 + navGap * qMax(0, navKeys.size() - 1) + 300;
         // KC_SHOT_DELAY：给「依赖异步资源就绪」的探针留额外余量。
@@ -1044,6 +1232,26 @@ int main(int argc, char* argv[])
             window.grab().save(shotPath);
             QApplication::quit();
         });
+    }
+
+    // 可选：--fps-probe <ms> 量「主屏常驻」时的重绘帧率与每帧耗时。
+    //
+    // 为什么要这个探针：用户报「动画会有卡顿」，而「卡顿」是主观描述 ——
+    // 可能是转场掉帧、可能是常驻状态某个定时器在狂刷、也可能是单帧超预算。
+    // 转场已经有 KC_TRANSITION_STATS 了，但**常驻**状态没有度量手段，
+    // 只能靠猜。这里挂一个全局事件过滤器数 UpdateRequest / Paint，
+    // 再取每帧实际绘制耗时，用数据定位到底是「帧太多」还是「帧太慢」。
+    if (app.arguments().contains(QStringLiteral("--fps-probe"))) {
+        const int probeMs = [&app] {
+            bool ok = false;
+            const int i = app.arguments().indexOf(QStringLiteral("--fps-probe"));
+            if (i >= 0 && i + 1 < app.arguments().size())
+                return qBound(500, app.arguments().at(i + 1).toInt(&ok), 30000);
+            return 3000;
+        }();
+        auto* probe = new kc::ui::FpsProbe(&window);
+        QTimer::singleShot(1200, probe, [probe, probeMs] { probe->start(probeMs); });
+        QTimer::singleShot(1200 + probeMs + 200, &app, [] { QApplication::quit(); });
     }
     return app.exec();
 }

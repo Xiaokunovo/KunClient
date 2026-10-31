@@ -633,10 +633,9 @@ void EdlWorker::connectDevice(const QString& portName, const QString& programmer
     emit overallProgressChanged(1, 3);
 
     setState(SessionState::WaitingForFirehose);
-    // VIP programmers start a short watchdog as soon as Sahara DONE completes.
-    // Enter the Firehose receive/send path immediately instead of spending the
-    // first watchdog window in a fixed hand-off delay.
-    QThread::msleep(vipPackage.enabled ? 20 : 700);
+    // 交接不再靠固定睡眠：programmer 从 Sahara DONE 到能应答 <nop> 的时间随固件
+    // 差异很大，睡 700ms 对快固件是纯浪费，对慢固件又不够。改成下方按短超时
+    // 递进试探，由设备实际响应决定何时继续。
     m_firehose = std::make_unique<FirehoseClient>(*m_transport, m_cancelled, log, progress);
 
     if (vipPackage.enabled) {
@@ -647,7 +646,20 @@ void EdlWorker::connectDevice(const QString& portName, const QString& programmer
             return;
         }
     } else {
-        if (!m_firehose->ping(&error)) {
+        // programmer 从 Sahara DONE 到能应答 <nop> 有一段不确定的启动时间。
+        // 用短超时快速试探 + 逐次退避，快固件通常第一次就过，慢固件也不会
+        // 因为「只等了一次」就判失败。总预算 ≈ 原来的 700ms 固定睡眠。
+        static constexpr int kPingTimeouts[] = {120, 180, 300, 600, 1200};
+        bool pinged = false;
+        for (const int timeout : kPingTimeouts) {
+            if (m_cancelled.load(std::memory_order_relaxed)) break;
+            error.clear();
+            if (m_firehose->ping(&error, timeout)) {
+                pinged = true;
+                break;
+            }
+        }
+        if (!pinged) {
             fail(QStringLiteral("Firehose 启动检查失败：%1").arg(error));
             return;
         }

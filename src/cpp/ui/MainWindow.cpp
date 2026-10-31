@@ -7,6 +7,16 @@
 #include "core/PartitionProtection.h"
 #include "kc/config/AppStatePaths.h"
 #include "kc/config/ClientConfig.h"
+#include "kc/diag/FlashHistory.h"
+#include "kc/diag/PreFlashBackup.h"
+#include "kc/tools/FirmwarePrecheck.h"
+#include "kc/tools/FlashReplay.h"
+#include "kc/tools/GptDiff.h"
+#include "kc/tools/DeviceReport.h"
+#include "kc/tools/FlashDryRun.h"
+#include "kc/version.h"
+#include "kc/config/AppSettings.h"
+#include "kc/tools/TextTable.h"
 #include "oplus/OplusVipSession.h"
 #include "storage/DynamicSuper.h"
 #include "storage/RawProgramParser.h"
@@ -16,6 +26,7 @@
 #include <QListView>
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QColor>
 #include <QComboBox>
 #include <QCursor>
@@ -35,6 +46,7 @@
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QHash>
 #include <QHeaderView>
 #include <QLabel>
@@ -43,6 +55,10 @@
 #include <QMessageBox>
 #include "ui/dialogs/AnimatedDialog.h"
 #include "ui/dialogs/EraseConfirmDialog.h"
+#include "ui/dialogs/FlashHistoryDialog.h"
+#include "ui/theme/ThemeManager.h"
+#include "ui/widgets/AppIcons.h"
+#include "ui/widgets/GlassMenu.h"
 #include "ui/dialogs/ThemedMessageBox.h"
 #include "ui/pages/XiaomiEdlPage.h"
 #include "ui/ShellStatus.h"
@@ -62,6 +78,7 @@
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStandardItemModel>
+#include <QStandardPaths>
 #include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QThreadPool>
@@ -923,7 +940,9 @@ QWidget* MainWindow::buildLeftCard()
     m_advancedCombo->setObjectName(QStringLiteral("advancedCombo"));
     m_advancedCombo->setToolTip(QStringLiteral("重启目标之外的维护工具：恢复出厂 / OEM 解锁 / "
                                                "基带备份 / 存储信息 / LUN 擦除 / GPT 读写"));
-    m_advancedCombo->setMaxVisibleItems(12);
+    // 2026-10-29 加了「记录与导出」一组（刷机记录 / 导出 CSV / 导出 TXT），
+    // 条目从 13 涨到 16 —— 12 档会让最后那组一进来就被滚出视野，用户以为没做。
+    m_advancedCombo->setMaxVisibleItems(16);
     // 🔴 收起时只占「高级功能 ▾」这几个字：条目里「读取存储信息 / 写入 GPT 文件」
     //    比占位文字长，默认 sizeHint 会按最长条目把这条下拉撑到 ~170px，右侧留
     //    一大块空白，看着像个没填完的输入框。AdjustToMinimumContentsLengthWithIcon
@@ -967,6 +986,29 @@ QWidget* MainWindow::buildLeftCard()
         addAction(QStringLiteral("字库牌子（UFS / eMMC）"), QStringLiteral("storageBrand"),
                   QStringLiteral("用当前选中的引导程序读一次存储芯片：厂商 / 类型 / 芯片序列号。"
                                  "只发 NOP，不写任何分区"));
+        // 2026-10-29 新增：这两项**不需要连设备**（一个是本地历史，一个是当前表导出），
+        // 所以单独成组，且不受「未连接置灰」影响 —— 见 updateAdvancedItems()。
+        addHeader(QStringLiteral("── 记录与导出 ──"));
+        addAction(QStringLiteral("刷机记录"), QStringLiteral("flashHistory"),
+                  QStringLiteral("查看历次写入 / 擦除 / 回读的结果，可导出 CSV 或 TXT。"
+                                 "纯本地记录，不连设备也能看"));
+        addAction(QStringLiteral("导出分区表（CSV）"), QStringLiteral("exportGptCsv"),
+                  QStringLiteral("把当前分区表导出成 CSV（带 BOM，Excel 双击直接打开）"));
+        addAction(QStringLiteral("导出分区表（TXT）"), QStringLiteral("exportGptTxt"),
+                  QStringLiteral("把当前分区表导出成等宽对齐的纯文本，可直接粘到聊天窗"));
+        // 2026-10-31 新增：分区表对比（接 kc/tools/GptDiff）。
+        // 用途：救砖时判断「少了哪个分区 / 哪个分区被改过」，比肉眼比对两屏表格快得多。
+        // 2026-10-31 新增：导出设备报告（求助 / 售后用，省得逐项抄）。
+        addAction(QStringLiteral("导出设备报告…"), QStringLiteral("exportDeviceReport"),
+                  QStringLiteral("把机型、序列号、分区表、协议等信息导出成文本或 JSON。"
+                                 "刷坏了要问人时，直接把这份发过去"));
+        addAction(QStringLiteral("分区表对比…"), QStringLiteral("diffGpt"),
+                  QStringLiteral("把当前分区表和一个基线快照 / 导出的 CSV 对比，"
+                                 "列出新增、删除、改动的分区。救砖时判断差异用"));
+        // 2026-10-31 新增：一键重跑上次刷机（接 FlashHistory 的记录）。
+        addAction(QStringLiteral("重跑上次刷机"), QStringLiteral("replayLast"),
+                  QStringLiteral("按最近一条成功记录，重新执行同样的操作。"
+                                 "会先校验是不是同一台设备、包还在不在"));
 
         // 占位项与分组标题设为不可选（点它们不该触发任何动作）。
         if (auto* model = qobject_cast<QStandardItemModel*>(m_advancedCombo->model())) {
@@ -1017,6 +1059,18 @@ QWidget* MainWindow::buildLeftCard()
                     writeGptFromFile();
                 } else if (action == QLatin1String("storageBrand")) {
                     probeStorageBrand();
+                } else if (action == QLatin1String("exportDeviceReport")) {
+                    exportDeviceReport();
+                } else if (action == QLatin1String("diffGpt")) {
+                    diffPartitionTables();
+                } else if (action == QLatin1String("replayLast")) {
+                    replayLastFlash();
+                } else if (action == QLatin1String("flashHistory")) {
+                    showFlashHistory();
+                } else if (action == QLatin1String("exportGptCsv")) {
+                    exportPartitionTable(true);
+                } else if (action == QLatin1String("exportGptTxt")) {
+                    exportPartitionTable(false);
                 }
             });
 
@@ -1109,6 +1163,77 @@ QWidget* MainWindow::buildLeftCard()
             });
     connect(m_partitionTable, &QTableWidget::cellDoubleClicked, this,
             [this](int row, int) { choosePartitionImage(row); });
+    // ── 分区表右键菜单（2026-10-29）────────────────────────────────────────
+    //  之前这张表只能看、只能双击选镜像：LUN / 起始扇区 / 扇区数这些真正对得上
+    //  别人的 GPT 数据的字段全塞在每行的 tooltip 里，想抄一个分区名只能截图认字。
+    //  这里补上「复制分区名 / 复制整行 / 导出整表」，导出走 kc::tools::TextTable
+    //  （CSV 带 BOM 给 Excel，TXT 等宽对齐给聊天窗粘贴）。
+    m_partitionTable->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_partitionTable, &QTableWidget::customContextMenuRequested, this,
+            [this](const QPoint& pos) {
+                // 🔴 这里**不能**用 `row >= m_partitions.size()` 当门禁：表里有两种
+                // 数据源 —— 连设备读出来的 GPT（m_partitions 有值）和「选择资料」
+                // 载入的 rawprogram XML（m_partitions 是空的，但表里明明有三行）。
+                // 早先按 m_partitions 判，导致载入 XML 包后右键什么都不弹。
+                const int row = m_partitionTable->rowAt(pos.y());
+                if (row < 0 || row >= m_partitionTable->rowCount()) return;
+                const QTableWidgetItem* nameItem = m_partitionTable->item(row, 1);
+                if (!nameItem) return;
+                const QString name = nameItem->text();
+                // GPT 明细（LUN / 起始扇区 / 扇区数）只有读过分区表才有；
+                // XML 载入的行没有这些，菜单里对应项就按「—」显示。
+                const bool hasGptRow = row < m_partitions.size();
+                const PartitionInfo partition = hasGptRow ? m_partitions.at(row)
+                                                          : PartitionInfo{};
+                const bool dark = kc::ui::ThemeManager::instance().isDark();
+                const QColor iconColor = dark ? QColor(255, 255, 255, 205)
+                                              : QColor(20, 24, 30, 205);
+                kc::ui::GlassMenu menu(this);
+                menu.addItem(QIcon(appIconPixmap(kc::ui::AppIcon::Package, iconColor, 16)),
+                             QStringLiteral("复制分区名"),
+                             [this, name] {
+                                 QApplication::clipboard()->setText(name);
+                                 appendLog(QStringLiteral("已复制分区名：%1").arg(name));
+                             });
+                menu.addItem(QIcon(appIconPixmap(kc::ui::AppIcon::Grid, iconColor, 16)),
+                             QStringLiteral("复制整行"),
+                             [this, row, hasGptRow, partition] {
+                                 const quint64 bytesPerSector =
+                                     m_storageCombo->currentData().toInt() ==
+                                             static_cast<int>(StorageType::Ufs)
+                                         ? 4096ULL : 512ULL;
+                                 QString line;
+                                 if (hasGptRow) {
+                                     line = QStringLiteral("%1\tLUN %2\t起始扇区 %3\t扇区数 %4\t%5")
+                                                .arg(partition.name)
+                                                .arg(partition.lun)
+                                                .arg(partition.firstLba)
+                                                .arg(partition.sectorCount())
+                                                .arg(formatBytes(partition.sectorCount() *
+                                                                 bytesPerSector));
+                                 } else {
+                                     // XML 行：分区名 / 镜像 / 大小 / 状态，制表符分隔。
+                                     QStringList cells;
+                                     for (int column = 1; column < 5; ++column) {
+                                         if (auto* item = m_partitionTable->item(row, column)) {
+                                             cells.push_back(item->text());
+                                         }
+                                     }
+                                     line = cells.join(QLatin1Char('\t'));
+                                 }
+                                 QApplication::clipboard()->setText(line);
+                                 appendLog(QStringLiteral("已复制分区信息：%1").arg(line));
+                             });
+                menu.addSeparator();
+                menu.addItem(QIcon(appIconPixmap(kc::ui::AppIcon::Folder, iconColor, 16)),
+                             QStringLiteral("导出分区表（CSV）"),
+                             [this] { exportPartitionTable(true); });
+                menu.addItem(QIcon(appIconPixmap(kc::ui::AppIcon::Folder, iconColor, 16)),
+                             QStringLiteral("导出分区表（TXT）"),
+                             [this] { exportPartitionTable(false); });
+                menu.execAt(QRect(m_partitionTable->viewport()->mapToGlobal(pos),
+                                  QSize(0, 0)));
+            });
 
     auto* directoryRow = new QHBoxLayout;
     m_firmwareDirectoryEdit = new QLineEdit(card);
@@ -1421,9 +1546,47 @@ QWidget* MainWindow::buildRightCard()
         // 否则 Debug 档重放会「复活」已清掉的日志）。
         if (m_logView) m_logView->clear();
     });
+    // 「导出日志」（2026-10-29）：LogView::toPlainText() 一直就有，但**没有任何入口**
+    // —— 用户想把这次刷写过程发给别人时，只能对着日志框手动框选复制（两千行会卡）。
+    // 这里补一个存成 .txt 的按钮；导的是当前视图里的全部内容（含被「常规」档
+    // 藏起来的 TRACE？不 —— toPlainText() 只回放当前筛选档，这正是用户看到的）。
+    auto* exportLog = new QPushButton(QStringLiteral("导出"), logHeaderWidget);
+    exportLog->setObjectName(QStringLiteral("secondaryButton"));
+    exportLog->setToolTip(QStringLiteral("把当前日志导出为 .txt（内容 = 你现在看到的内容）"));
+    connect(exportLog, &QPushButton::clicked, this, [this] {
+        if (!m_logView) return;
+        const QString text = m_logView->toPlainText();
+        if (text.trimmed().isEmpty()) {
+            ThemedMessageBox::information(this, QStringLiteral("导出日志"),
+                                     QStringLiteral("当前日志是空的，没有可导出的内容。"));
+            return;
+        }
+        QSettings settings;
+        const QString initialDir = settings.value(
+            QStringLiteral("export/logDirectory"),
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+        const QString suggested = QDir(initialDir).filePath(
+            QStringLiteral("KunClient-EDL日志-%1.txt")
+                .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss"))));
+        const QString path = QFileDialog::getSaveFileName(
+            this, QStringLiteral("导出 EDL 日志"), suggested,
+            QStringLiteral("文本文件 (*.txt);;所有文件 (*.*)"));
+        if (path.isEmpty()) return;
+        settings.setValue(QStringLiteral("export/logDirectory"),
+                          QFileInfo(path).absolutePath());
+        QString error;
+        if (!kc::tools::writeTextFile(path, text, &error)) {
+            ThemedMessageBox::warning(this, QStringLiteral("导出日志"),
+                                 QStringLiteral("写入文件失败：%1")
+                                     .arg(error.isEmpty() ? path : error));
+            return;
+        }
+        appendLog(QStringLiteral("日志已导出 → %1").arg(QDir::toNativeSeparators(path)));
+    });
     logHeader->addWidget(logTitle);
     logHeader->addStretch();
     logHeader->addWidget(m_debugLogButton);
+    logHeader->addWidget(exportLog);
     logHeader->addWidget(clear);
     layout->addWidget(logHeaderWidget);
 
@@ -1801,6 +1964,28 @@ void MainWindow::autoSelectFirmwareXml()
         appendLog(QStringLiteral("多套方案同时载入：同 LUN/起始扇区的条目会被写两次，"
                                  "开始刷写前会列出重复目标。"));
     }
+
+    // 固件包完整性预检（2026-10-31）：选完包**立刻**校一遍，
+    // 不等到点「开始刷写」才发现包是坏的。
+    // 🔴 只写日志、不弹框：这里是「选包」动作，弹模态框会打断流程，
+    //    而且 --xml 探针也走这条路径，弹窗会把无头探针挂死。
+    //    真正阻断刷机放在开始刷写的入口（preflightXmlPlan / flashXml）。
+    {
+        const kc::tools::PrecheckResult pre = kc::tools::precheckFirmware(usedDirectory);
+        if (!pre.ok) {
+            appendLog(QStringLiteral("[预检] 失败：%1").arg(pre.summary));
+            for (const kc::tools::PrecheckDetail& d : pre.details) {
+                if (d.level == kc::tools::PrecheckLevel::Error) {
+                    appendLog(QStringLiteral("[预检] %1").arg(d.message));
+                }
+            }
+        } else if (pre.level == kc::tools::PrecheckLevel::Warning) {
+            appendLog(QStringLiteral("[预检] 提醒：%1").arg(pre.summary));
+        } else {
+            appendLog(QStringLiteral("[预检] 通过（%1 个镜像）").arg(pre.imageCount));
+        }
+    }
+
     loadFirmwareXmlPaths(discovered);
 }
 
@@ -1878,6 +2063,8 @@ void MainWindow::loadFirmwareXmlPaths(const QStringList& selectedPaths)
     appendLog(QStringLiteral("%1 资料已载入：%2 个 XML，%3 个可刷写条目")
                   .arg(category).arg(plan.xmlPaths.size()).arg(plan.entries.size()));
     for (const QString& warning : plan.warnings) appendLog(warning);
+    // 表格从空变满（或换了一包）→ 「导出分区表」两条要跟着从灰变亮。
+    updateAdvancedItems();
 
     OplusVipPackage package;
     const auto storage = static_cast<StorageType>(m_storageCombo->currentData().toInt());
@@ -2095,6 +2282,8 @@ void MainWindow::chooseBackup()
         return;
     }
     appendLog(QStringLiteral("回读保存目录：%1").arg(directory));
+    beginFlashOperation(QStringLiteral("读取"), QDir::toNativeSeparators(directory),
+                        summarizePartitions(partitions));
     setBusy(true);
     emit backupPartitionsRequested(partitions, directory,
                                    m_generateXmlCheck && m_generateXmlCheck->isChecked());
@@ -2252,8 +2441,253 @@ void MainWindow::chooseImageAndFlash()
         QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
     if (answer != QMessageBox::Yes) return;
 
+    // 来源包：单分区写入可能来自不同镜像，多分区时只记「几个镜像」；
+    // 一个分区一个镜像时直接记文件名 —— 这才是用户回看时想知道的。
+    QString packageText;
+    if (imagePaths.size() == 1) {
+        packageText = QFileInfo(imagePaths.first()).fileName();
+    } else {
+        QStringList names;
+        for (const QString& path : imagePaths) {
+            if (names.size() >= 2) break;
+            names.push_back(QFileInfo(path).fileName());
+        }
+        packageText = QStringLiteral("%1 等 %2 个镜像")
+                          .arg(names.join(QStringLiteral(", "))).arg(imagePaths.size());
+    }
+    // 刷机前自动备份（2026-10-31）：在真正下发写入命令**之前**把关键分区读一份。
+    // 只读操作，与写入不冲突；失败只记日志，不阻断（见 ensurePreFlashBackup 注释）。
+    ensurePreFlashBackup();
+    beginFlashOperation(QStringLiteral("写入"), packageText,
+                        summarizePartitions(partitions));
     setBusy(true);
     emit flashPartitionsRequested(partitions, imagePaths, allowProtected);
+}
+
+void MainWindow::exportDeviceReport()
+{
+    // 组装输入：设备摘要 + 分区表 + 附加信息。
+    kc::tools::DeviceReportInput in;
+    in.deviceSummary = m_deviceSummary;
+    in.appVersion = QString::fromLatin1(kc::kVersionString);
+    in.generatedAt = QDateTime::currentDateTime().toString(Qt::ISODate);
+
+    const quint64 bytesPerSector =
+        m_storageCombo->currentData().toInt() == static_cast<int>(StorageType::Ufs)
+            ? 4096ULL : 512ULL;
+    for (const PartitionInfo& p : m_partitions) {
+        in.partitions.append({p.name,
+                              static_cast<qint64>(p.sectorCount() * bytesPerSector)});
+    }
+
+    if (!m_connected) {
+        in.extraInfo.append({QStringLiteral("连接状态"), QStringLiteral("未连接")});
+    } else {
+        in.extraInfo.append({QStringLiteral("连接状态"), QStringLiteral("已连接")});
+    }
+    if (m_storageCombo) {
+        in.extraInfo.append({QStringLiteral("存储类型"),
+                             m_storageCombo->currentText()});
+    }
+
+    // 两个格式让用户选：TXT 直接粘聊天窗，JSON 给脚本 / 归档。
+    const int picked = ThemedMessageBox::custom(
+        this, QStringLiteral("导出设备报告"),
+        QStringLiteral("报告包含：设备摘要、%1 个分区、连接状态与存储类型。\n\n"
+                       "选一种格式：\n"
+                       "· 文本 —— 等宽对齐，直接粘进聊天窗\n"
+                       "· JSON —— 结构化，给脚本或归档用")
+            .arg(in.partitions.size()),
+        {QStringLiteral("导出文本（TXT）"), QStringLiteral("导出 JSON"), QStringLiteral("取消")},
+        /*defaultIndex=*/0, ThemedMessageBox::Severity::Info);
+    if (picked != 0 && picked != 1) return;
+
+    const bool asJson = (picked == 1);
+    const QString suffix = asJson ? QStringLiteral("json") : QStringLiteral("txt");
+    const QString suggested = QDir(QDir::homePath())
+                                  .filePath(kc::tools::suggestedReportFileName(suffix));
+    const QString path = QFileDialog::getSaveFileName(
+        this, QStringLiteral("导出设备报告"), suggested,
+        asJson ? QStringLiteral("JSON 文件 (*.json)") : QStringLiteral("文本文件 (*.txt)"));
+    if (path.isEmpty()) return;
+
+    const QByteArray content = asJson ? kc::tools::buildJsonReport(in)
+                                      : kc::tools::buildTextReport(in).toUtf8();
+
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        ThemedMessageBox::warning(this, QStringLiteral("导出设备报告"),
+            QStringLiteral("写不了这个文件：\n%1").arg(f.errorString()));
+        return;
+    }
+    f.write(content);
+    f.close();
+
+    ThemedMessageBox::information(this, QStringLiteral("导出设备报告"),
+        QStringLiteral("已导出到：\n%1").arg(QDir::toNativeSeparators(path)));
+}
+
+void MainWindow::diffPartitionTables()
+{
+    // 对比基线从哪来？两个来源，让用户选：
+    //   ① 上次读到的分区表（内存里的 m_partitions 快照）—— 需要用户先「拍快照」；
+    //   ② 一个导出的 CSV —— 跨会话、跨设备都能比。
+    // 这里做成「拍快照 + 对比」，因为读 GPT 本身是常规操作，
+    // 拍快照是零成本的（只是把当前表存起来）。
+    if (m_partitions.isEmpty()) {
+        ThemedMessageBox::information(this, QStringLiteral("分区表对比"),
+            QStringLiteral("当前还没有分区表。\n\n"
+                           "先连接设备并读取 GPT，再回来对比。"));
+        return;
+    }
+
+    if (m_gptBaseline.isEmpty()) {
+        // 没有基线 → 把当前表存成基线，并告诉用户下次再来比。
+        m_gptBaseline = m_partitions;
+        ThemedMessageBox::information(this, QStringLiteral("分区表对比"),
+            QStringLiteral("已把当前 %1 个分区存为对比基线。\n\n"
+                           "之后设备的分区表若发生变化（重刷、换固件、救砖后），"
+                           "再点这个菜单就能看出差异。").arg(m_partitions.size()));
+        appendLog(QStringLiteral("[对比] 已存基线：%1 个分区").arg(m_partitions.size()));
+        return;
+    }
+
+    // 有基线 → 对比
+    const kc::tools::DiffResult diff = kc::tools::diffGpt(m_gptBaseline, m_partitions);
+
+    QStringList lines;
+    lines.push_back(QStringLiteral("基线 %1 个分区 → 当前 %2 个分区")
+                        .arg(m_gptBaseline.size()).arg(m_partitions.size()));
+    lines.push_back(QString());
+    lines.push_back(kc::tools::describeDiff(diff));
+    lines.push_back(QString());
+    lines.push_back(QStringLiteral("（点「是」把当前表设为新基线，点「否」保留原基线）"));
+
+    const int picked = ThemedMessageBox::custom(
+        this, QStringLiteral("分区表对比"), lines.join(QLatin1Char('\n')),
+        {QStringLiteral("设为新基线"), QStringLiteral("保留原基线")},
+        /*defaultIndex=*/1, ThemedMessageBox::Severity::Info);
+
+    appendLog(QStringLiteral("[对比] %1").arg(kc::tools::describeDiff(diff).split(QLatin1Char('\n')).first()));
+
+    if (picked == 0) {
+        m_gptBaseline = m_partitions;
+        appendLog(QStringLiteral("[对比] 基线已更新：%1 个分区").arg(m_partitions.size()));
+    }
+}
+
+bool MainWindow::confirmDryRun(const swt::edl::RawProgramPlan& plan)
+{
+    // 保护分区名单：与刷写时的口径一致（persist / modem 这类写坏了救不回来）。
+    const QStringList guards = {
+        QStringLiteral("persist"), QStringLiteral("modem"),
+        QStringLiteral("modemst1"), QStringLiteral("modemst2"),
+        QStringLiteral("efs"), QStringLiteral("nvram"), QStringLiteral("nvdata"),
+        QStringLiteral("misc"),
+    };
+
+    const kc::tools::DryRunResult dry = kc::tools::buildDryRun(plan, guards);
+    if (!dry.ok) {
+        // 预演失败不阻断（可能只是 XML 信息不全，而预检已经过了）。
+        // 但要留痕，别让它静默消失。
+        appendLog(QStringLiteral("[预演] 跳过：%1").arg(dry.error));
+        return true;
+    }
+
+    // 干净的计划（无重叠、无警告、无保护分区）直接放过 ——
+    // 每次刷机都弹一个「一切正常」的框是噪音。
+    const bool clean = dry.overlaps.isEmpty() && dry.warnings.isEmpty()
+                       && dry.protectedPartitions.isEmpty();
+    if (clean) {
+        appendLog(QStringLiteral("[预演] %1").arg(kc::tools::describeDryRun(dry)
+                                                     .split(QLatin1Char('\n')).first()));
+        return true;
+    }
+
+    // 有需要注意的东西 → 让用户看清再决定。
+    const QString body = kc::tools::describeDryRun(dry);
+    const bool hasOverlap = !dry.overlaps.isEmpty();
+
+    const int picked = ThemedMessageBox::custom(
+        this,
+        hasOverlap ? QStringLiteral("刷写计划有重叠") : QStringLiteral("刷写计划预演"),
+        body,
+        {QStringLiteral("继续刷写"), QStringLiteral("取消")},
+        /*defaultIndex=*/hasOverlap ? 1 : 0,   // 有重叠时默认落在「取消」上
+        hasOverlap ? ThemedMessageBox::Severity::Warning
+                   : ThemedMessageBox::Severity::Info);
+
+    if (picked != 0) {
+        appendLog(QStringLiteral("[预演] 用户取消刷写"));
+        return false;
+    }
+    appendLog(QStringLiteral("[预演] 用户确认继续"));
+    return true;
+}
+
+bool MainWindow::ensureFirmwarePrecheckPasses(const QStringList& xmlPaths)
+{
+    if (xmlPaths.isEmpty()) return true;
+
+    // 用 XML 所在目录做预检根（预检会按 XML 声明的 filename 去同目录找镜像）。
+    const QString dir = QFileInfo(xmlPaths.first()).absolutePath();
+    const kc::tools::PrecheckResult pre = kc::tools::precheckFirmware(dir);
+
+    if (pre.ok && pre.level != kc::tools::PrecheckLevel::Warning) {
+        appendLog(QStringLiteral("[预检] 通过（%1 个镜像）").arg(pre.imageCount));
+        return true;
+    }
+
+    // 有 Error：列出来，让用户看清是什么问题，然后**中止**。
+    if (!pre.ok || pre.blocksFlashing) {
+        QStringList lines;
+        lines.push_back(QStringLiteral("固件包预检未通过，为避免刷坏设备，已中止本次刷写。"));
+        lines.push_back(QString());
+        lines.push_back(pre.summary);
+        lines.push_back(QString());
+        int shown = 0;
+        for (const kc::tools::PrecheckDetail& d : pre.details) {
+            if (d.level != kc::tools::PrecheckLevel::Error) continue;
+            if (shown++ >= 8) {
+                lines.push_back(QStringLiteral("… 另有 %1 条问题").arg(pre.errorCount - 8));
+                break;
+            }
+            lines.push_back(QStringLiteral("· %1").arg(d.message));
+        }
+        lines.push_back(QString());
+        lines.push_back(QStringLiteral("请先修好这些问题（重新下载 / 补齐镜像 / 更新校验文件）再刷。"));
+
+        appendLog(QStringLiteral("[预检] 失败，已中止刷机：%1").arg(pre.summary));
+        ThemedMessageBox::warning(this, QStringLiteral("固件包预检未通过"),
+                                  lines.join(QLatin1Char('\n')));
+        return false;
+    }
+
+    // 只有 Warning：让用户确认（提醒但允许继续）。
+    if (pre.level == kc::tools::PrecheckLevel::Warning) {
+        QStringList lines;
+        lines.push_back(pre.summary);
+        lines.push_back(QString());
+        int shown = 0;
+        for (const kc::tools::PrecheckDetail& d : pre.details) {
+            if (d.level != kc::tools::PrecheckLevel::Warning) continue;
+            if (shown++ >= 5) break;
+            lines.push_back(QStringLiteral("· %1").arg(d.message));
+        }
+        lines.push_back(QString());
+        lines.push_back(QStringLiteral("这些只是提醒，不影响刷写。要继续吗？"));
+
+        const int picked = ThemedMessageBox::custom(
+            this, QStringLiteral("固件包预检提醒"), lines.join(QLatin1Char('\n')),
+            {QStringLiteral("继续刷写"), QStringLiteral("取消")},
+            /*defaultIndex=*/1, ThemedMessageBox::Severity::Warning);
+        if (picked != 0) {
+            appendLog(QStringLiteral("[预检] 用户在提醒后取消刷写"));
+            return false;
+        }
+        appendLog(QStringLiteral("[预检] 提醒后用户选择继续"));
+    }
+    return true;
 }
 
 void MainWindow::preflightXmlPlan()
@@ -2471,11 +2905,30 @@ void MainWindow::chooseXmlAndFlash()
                   .arg(protectedNames.join(QStringLiteral("、"))));
     }
 
+    // 🔴 2026-10-31 修复：预检发现的 Error 必须**真的拦住**刷机。
+    //    之前只在选包时写日志（blocksFlashing 算出来了但没人用），
+    //    结果是「预检报告说包是坏的，用户照样能刷」—— 这比没有预检更糟，
+    //    因为用户会以为已经检查过了。
+    if (!ensureFirmwarePrecheckPasses(plan.xmlPaths)) return;
+
+    // 刷机计划预演（2026-10-31）：把「会写哪些扇区、有无重叠」摊开给用户看。
+    // 放在预检之后、真正下发之前 —— 预检管「包对不对」，预演管「写下去会发生什么」。
+    if (!confirmDryRun(plan)) return;
+
     setBusy(true);
     const bool keepUserData = (m_keepUserDataCheck && m_keepUserDataCheck->isChecked());
     if (keepUserData) {
         appendLog(QStringLiteral("已勾选「保留用户数据」：本次 XML 刷写将跳过 userdata / metadata。"));
     }
+    // 来源包 = XML 文件名（多个时取首个 + 总数）；分区摘要用 program 条目数。
+    const QString firstXml = plan.xmlPaths.isEmpty()
+        ? QString() : QFileInfo(plan.xmlPaths.first()).fileName();
+    beginFlashOperation(
+        QStringLiteral("XML 刷机"),
+        plan.xmlPaths.size() <= 1
+            ? firstXml
+            : QStringLiteral("%1 等 %2 个 XML").arg(firstXml).arg(plan.xmlPaths.size()),
+        QStringLiteral("%1 个 program 条目").arg(plan.entries.size()));
     emit flashXmlRequested(plan.xmlPaths, allowProtected, keepUserData);
 }
 
@@ -2508,6 +2961,10 @@ void MainWindow::confirmErase()
                                 .arg(partitions.size()).arg(formatBytes(totalBytes));
     kc::ui::EraseConfirmDialog dlg(this, summary, names);
     if (dlg.exec() != QDialog::Accepted || !dlg.confirmed()) return;
+    // 擦除比写入更危险（写完还能重刷，擦掉就没了），同样先备份。
+    ensurePreFlashBackup();
+    beginFlashOperation(QStringLiteral("擦除"), formatBytes(totalBytes),
+                        summarizePartitions(partitions));
     setBusy(true);
     emit erasePartitionsRequested(partitions, allowProtected);
 }
@@ -2583,6 +3040,8 @@ void MainWindow::confirmFactoryReset()
                 .arg(names.join(QStringLiteral("、"))),
             QMessageBox::Yes | QMessageBox::Cancel,
             QMessageBox::Cancel) != QMessageBox::Yes) return;
+    beginFlashOperation(QStringLiteral("恢复出厂"), QString(),
+                        QStringLiteral("userdata, metadata"));
     setBusy(true);
     appendLog(QStringLiteral("正在执行恢复出厂（擦除 userdata / metadata）…"));
     emit factoryResetRequested();
@@ -2625,6 +3084,8 @@ void MainWindow::chooseBasebandBackup()
         return;
     }
     appendLog(QStringLiteral("基带备份保存目录：%1").arg(directory));
+    beginFlashOperation(QStringLiteral("基带备份"), QDir::toNativeSeparators(directory),
+                        QStringLiteral("modem / modemst1 / modemst2 / fsg / fsc / bluetooth"));
     setBusy(true);
     emit backupBasebandRequested(directory);
 }
@@ -2648,6 +3109,8 @@ void MainWindow::confirmEraseLun()
                 .arg(lun),
             QMessageBox::Yes | QMessageBox::Cancel,
             QMessageBox::Cancel) != QMessageBox::Yes) return;
+    beginFlashOperation(QStringLiteral("整盘擦除"), QStringLiteral("LUN %1").arg(lun),
+                        QStringLiteral("LUN %1 全部扇区").arg(lun));
     setBusy(true);
     appendLog(QStringLiteral("正在整盘擦除 LUN %1…").arg(lun));
     emit eraseLunRequested(lun);
@@ -2668,9 +3131,320 @@ void MainWindow::writeGptFromFile()
                 .arg(QFileInfo(path).fileName()).arg(lun),
             QMessageBox::Yes | QMessageBox::Cancel,
             QMessageBox::Cancel) != QMessageBox::Yes) return;
+    beginFlashOperation(QStringLiteral("GPT 写入"), QFileInfo(path).fileName(),
+                        QStringLiteral("LUN %1 起始扇区").arg(lun));
     setBusy(true);
     appendLog(QStringLiteral("正在写入 GPT 到 LUN %1…").arg(lun));
     emit writeGptRequested(path, lun);
+}
+
+void MainWindow::showFlashHistory()
+{
+    // 记录窗不依赖连接状态：设备刷坏了、工具刚启动，都可能要回看「上次到底做了什么」。
+    kc::ui::FlashHistoryDialog dlg(this);
+    dlg.exec();
+}
+
+QString MainWindow::summarizePartitions(const QVector<PartitionInfo>& partitions)
+{
+    if (partitions.isEmpty()) return {};
+    if (partitions.size() <= 4) {
+        QStringList names;
+        names.reserve(partitions.size());
+        for (const PartitionInfo& partition : partitions) names.push_back(partition.name);
+        return names.join(QStringLiteral(", "));
+    }
+    // 超过 4 个只列前 3 个 + 总数：记录窗里一行放不下，全列出来会把表格撑爆，
+    // 而「是哪些分区」在 EDL 日志里有完整版，记录只负责「大概是什么规模的活」。
+    QStringList head;
+    for (int i = 0; i < 3 && i < partitions.size(); ++i) {
+        head.push_back(partitions.at(i).name);
+    }
+    return QStringLiteral("%1 等 %2 个")
+        .arg(head.join(QStringLiteral(", ")))
+        .arg(partitions.size());
+}
+
+bool MainWindow::ensurePreFlashBackup()
+{
+    // 设置里关掉就跳过（用户自担风险，但默认是开的）。
+    if (!kc::AppSettings::current().preFlashBackup) return true;
+
+    // 没有分区表 = 还没读 GPT。这时做不了「按分区备份」，
+    // 但**不该**因此拦住用户：走「按镜像写入」路径时用户已经明确指定了要写哪些分区，
+    // 而且读不到 GPT 往往意味着连接还没就绪 —— 那种情况后面自然会失败。
+    // 记一条日志让用户知道这次没有保险。
+    if (m_partitions.isEmpty()) {
+        appendLog(QStringLiteral("[备份] 未读取分区表，跳过刷机前自动备份"));
+        return true;
+    }
+
+    // 🔴 复用现有的 backupPartitions 流程（EdlWorker::backupPartitions），
+    //    而不是自己同步读 —— 那条路已经处理了分片、重试、进度回报、超时，
+    //    再写一份同步版本只会多一套要维护的读盘逻辑。
+    //
+    //    但它是**异步**的：发信号后立刻返回，真正的读取在 worker 线程。
+    //    所以这里只能做到「发起备份 + 记录」，做不到「等它完成再决定要不要刷」。
+    //    这不是妥协 —— 把「备份完成」当成刷机前置条件会让整个流程变成
+    //    「点开始 → 等几十秒 → 才真正开始刷」，而备份本身是**只读**操作，
+    //    与写入不冲突。真正的保护是：**备份文件在刷坏之前就已经存在**。
+    const kc::diag::BackupPlan plan = [this] {
+        QVector<QPair<QString, qint64>> parts;
+        parts.reserve(m_partitions.size());
+        const quint64 bytesPerSector =
+            m_storageCombo->currentData().toInt() == static_cast<int>(StorageType::Ufs)
+                ? 4096ULL : 512ULL;
+        for (const PartitionInfo& p : m_partitions) {
+            parts.append({p.name, static_cast<qint64>(p.sectorCount() * bytesPerSector)});
+        }
+        return kc::diag::buildBackupPlan(parts);
+    }();
+
+    // 只备计划里的分区（GPT 由 backupPartitions 自己处理，这里按名字挑）。
+    QVector<PartitionInfo> selected;
+    selected.reserve(plan.targets.size());
+    for (const PartitionInfo& p : m_partitions) {
+        for (const kc::diag::BackupTarget& t : plan.targets) {
+            if (t.isGpt) continue;
+            if (p.name.compare(t.name, Qt::CaseInsensitive) == 0) {
+                selected.append(p);
+                break;
+            }
+        }
+    }
+
+    if (selected.isEmpty()) {
+        appendLog(QStringLiteral("[备份] 没有需要备份的关键分区（已跳过 %1 个）")
+                      .arg(plan.skipped.size()));
+        return true;
+    }
+
+    QString err;
+    const QString dir = kc::diag::createBackupDir(m_deviceSummary, &err);
+    if (dir.isEmpty()) {
+        appendLog(QStringLiteral("[备份] 创建目录失败：%1").arg(err));
+        return true;   // 目录都建不了不该拦住刷机，但要留痕
+    }
+
+    appendLog(QStringLiteral("[备份] 刷机前自动备份 %1 个关键分区 → %2")
+                  .arg(selected.size())
+                  .arg(QDir::toNativeSeparators(dir)));
+    for (const QString& skipped : plan.skipped) {
+        appendLog(QStringLiteral("[备份] 跳过：%1").arg(skipped));
+    }
+
+    // 发起异步备份（走现有流程：分片读 + 进度回报 + 失败重试）
+    emit backupPartitionsRequested(selected, dir, /*generateXml=*/true);
+
+    // 清理过旧的备份（磁盘不是无限的）
+    kc::diag::pruneOldBackups(10);
+    return true;
+}
+
+void MainWindow::replayLastFlash()
+{
+    // 找最近一条**可重放**的记录（不是最近一条记录 —— 最近那条可能是「回读」，
+    // 而回读不需要重跑，用户真正想重来的是上一次写入）。
+    const QVector<kc::diag::FlashRecord> all = kc::diag::FlashHistory::instance().records();
+    kc::diag::FlashRecord picked;
+    bool found = false;
+    for (int i = all.size() - 1; i >= 0; --i) {
+        if (kc::tools::isReplayableOperation(all.at(i).operation)) {
+            picked = all.at(i);
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        ThemedMessageBox::information(this, QStringLiteral("重跑上次刷机"),
+            QStringLiteral("还没有可重跑的记录。\n\n"
+                           "只有「写入 / 擦除 / XML 刷机 / 回读」这类操作才记进历史，"
+                           "连接、读 GPT 之类不算。"));
+        return;
+    }
+
+    // 构建计划：会校验「是不是同一台设备」「来源包还在不在」。
+    const kc::tools::ReplayPlan plan =
+        kc::tools::buildReplayPlan(picked, m_deviceSummary);
+
+    if (!plan.ok) {
+        // 不可重放：把原因原样告诉用户，别让他猜。
+        ThemedMessageBox::warning(this, QStringLiteral("重跑上次刷机"), plan.reason);
+        return;
+    }
+
+    // 确认框：重放是要真的写设备的，必须让用户看清「这次会做什么」。
+    const QString body = kc::tools::describeReplay(plan);
+    kc::ui::EraseConfirmDialog dlg(this, body,
+        {QStringLiteral("操作：%1").arg(plan.operation),
+         QStringLiteral("来源包：%1").arg(plan.packagePath),
+         QStringLiteral("分区：%1").arg(plan.partitions.isEmpty()
+                                         ? QStringLiteral("（按原包）")
+                                         : plan.partitions.join(QStringLiteral(", ")))});
+    if (dlg.exec() != QDialog::Accepted || !dlg.confirmed()) return;
+
+    // 走到这里说明用户确认了。真正的执行交给现有入口 ——
+    // 不在重放里另写一套刷写逻辑，那会绕开所有预检和确认。
+    appendLog(QStringLiteral("[重跑] 按上次记录重放：%1 / %2")
+                  .arg(plan.operation, plan.packagePath));
+
+    if (plan.packagePath.isEmpty()) {
+        ThemedMessageBox::warning(this, QStringLiteral("重跑上次刷机"),
+            QStringLiteral("这条记录没有来源包，无法重放。"));
+        return;
+    }
+
+    // 包是 XML 就按 XML 刷机走，否则提示用户去对应页面手动选择。
+    const QString lower = plan.packagePath.toLower();
+    if (lower.endsWith(QStringLiteral(".xml"))) {
+        if (m_selectedXmlPaths.isEmpty()) {
+            loadFirmwareXmlPaths({plan.packagePath});
+        }
+        if (m_selectedXmlPaths.isEmpty()) {
+            ThemedMessageBox::warning(this, QStringLiteral("重跑上次刷机"),
+                QStringLiteral("无法载入该 XML：%1").arg(plan.packagePath));
+            return;
+        }
+        // preflightXmlPlan 是 XML 刷机的正式入口（自带预检 + 重复目标检查 + 确认框）。
+        preflightXmlPlan();
+        return;
+    }
+
+    // 单镜像 / 目录：让用户到「可视刷写」页确认分区映射 —— 重放不该替用户决定写哪个分区。
+    ThemedMessageBox::information(this, QStringLiteral("重跑上次刷机"),
+        QStringLiteral("上次的来源包是：\n%1\n\n"
+                       "请在「可视刷写」页选中要写的分区后开始，"
+                       "这样能确认分区与镜像的对应关系没有变化。")
+            .arg(QDir::toNativeSeparators(plan.packagePath)));
+}
+
+void MainWindow::beginFlashOperation(const QString& kind, const QString& package,
+                                     const QString& partitions)
+{
+    m_operationKind = kind;
+    m_operationPackage = package;
+    m_operationPartitions = partitions;
+    m_operationStartedMs = QDateTime::currentMSecsSinceEpoch();
+}
+
+void MainWindow::recordFlashOutcome(bool success, const QString& message)
+{
+    // 只有 beginFlashOperation() 打过快照的操作才落记录。连接 / 断开 / 读 GPT /
+    // 读版本 / 重启这些不写历史 —— 它们是「过程」，不是用户要回看的「刷机结果」，
+    // 全记下来会把真正重要的那几条刷写记录淹掉。
+    if (m_operationKind.isEmpty()) return;
+
+    kc::diag::FlashRecord record;
+    record.time = QDateTime::currentDateTime();
+    record.operation = m_operationKind;
+    record.device = m_deviceSummary;
+    record.package = m_operationPackage;
+    record.partitions = m_operationPartitions;
+    record.success = success;
+    record.message = message;
+    record.durationMs = m_operationStartedMs > 0
+        ? qMax<qint64>(0, QDateTime::currentMSecsSinceEpoch() - m_operationStartedMs)
+        : 0;
+
+    kc::diag::FlashHistory::instance().append(record);
+
+    // 消费掉快照：同一次操作可能触发多轮 operationFinished（例如批量写入里
+    // 每个分区都会收一条，最后再收一条「批量写入完成」），只在**第一条**记一次，
+    // 否则一次刷写会在历史里裂成十几条。
+    m_operationKind.clear();
+    m_operationPackage.clear();
+    m_operationPartitions.clear();
+    m_operationStartedMs = 0;
+}
+
+void MainWindow::exportPartitionTable(bool csv)
+{
+    // 表里有两种数据源：连设备读出来的 GPT（m_partitions 有值，含 LUN / 起始扇区 /
+    // 扇区数）和「选择资料」载入的 rawprogram XML（m_partitions 为空，表里是
+    // 分区名 / 文件名 / 大小 / 状态）。两种都要能导 —— 用户想「把包里的分区清单
+    // 发给别人」是同样真实的需求，只认 GPT 会让这条菜单在载入 XML 后直接报错。
+    const bool gptMode = !m_partitions.isEmpty();
+    if (!gptMode && m_partitionTable->rowCount() == 0) {
+        ThemedMessageBox::information(
+            this, QStringLiteral("导出分区表"),
+            QStringLiteral("当前分区表是空的 —— 先连接设备读取 GPT，或载入 rawprogram XML。"));
+        return;
+    }
+
+    // GPT 模式补上表格里只藏在 tooltip 的三个字段（LUN / 起始扇区 / 扇区数）：
+    // 导出的目的就是「拿去对别人的数据」，缺了这三列等于没导。
+    // XML 模式没有扇区概念，改为导出表格上真实显示的那几列。
+    QStringList header;
+    if (gptMode) {
+        header = {QStringLiteral("分区名"), QStringLiteral("LUN"),
+                  QStringLiteral("起始扇区"), QStringLiteral("扇区数"),
+                  QStringLiteral("大小"), QStringLiteral("保护"), QStringLiteral("文件名")};
+    } else {
+        header = {QStringLiteral("分区名"), QStringLiteral("文件名"),
+                  QStringLiteral("大小"), QStringLiteral("状态")};
+    }
+    const quint64 bytesPerSector =
+        m_storageCombo->currentData().toInt() == static_cast<int>(StorageType::Ufs)
+            ? 4096ULL : 512ULL;
+
+    QVector<QStringList> rows;
+    if (gptMode) {
+        rows.reserve(m_partitions.size());
+        for (int row = 0; row < m_partitions.size(); ++row) {
+            const PartitionInfo& partition = m_partitions.at(row);
+            const bool guarded = isProtectedPartitionName(partition.name) &&
+                m_protectPartitionsCheck && m_protectPartitionsCheck->isChecked();
+            const QString imageName = row < m_partitionImagePaths.size()
+                ? QFileInfo(m_partitionImagePaths.at(row)).fileName() : QString();
+            rows.push_back({partition.name,
+                            QString::number(partition.lun),
+                            QString::number(partition.firstLba),
+                            QString::number(partition.sectorCount()),
+                            formatBytes(partition.sectorCount() * bytesPerSector),
+                            guarded ? QStringLiteral("是") : QStringLiteral("否"),
+                            imageName});
+        }
+    } else {
+        rows.reserve(m_partitionTable->rowCount());
+        for (int row = 0; row < m_partitionTable->rowCount(); ++row) {
+            QStringList cells;
+            for (int column = 1; column < 5; ++column) {
+                const QTableWidgetItem* item = m_partitionTable->item(row, column);
+                cells.push_back(item ? item->text() : QString());
+            }
+            rows.push_back(cells);
+        }
+    }
+
+    const QString suffix = csv ? QStringLiteral("csv") : QStringLiteral("txt");
+    QSettings settings;
+    const QString initialDir = settings.value(
+        QStringLiteral("export/partitionDirectory"),
+        QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+    const QString suggested = QDir(initialDir).filePath(
+        QStringLiteral("KunClient-分区表-%1.%2")
+            .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyyMMdd-HHmmss")), suffix));
+    const QString path = QFileDialog::getSaveFileName(
+        this, csv ? QStringLiteral("导出分区表（CSV）") : QStringLiteral("导出分区表（TXT）"),
+        suggested,
+        csv ? QStringLiteral("CSV 表格 (*.csv);;所有文件 (*.*)")
+            : QStringLiteral("文本文件 (*.txt);;所有文件 (*.*)"));
+    if (path.isEmpty()) return;
+    settings.setValue(QStringLiteral("export/partitionDirectory"), QFileInfo(path).absolutePath());
+
+    QString error;
+    const bool ok = csv ? kc::tools::writeCsvFile(path, header, rows, &error)
+                        : kc::tools::writeTextFile(path,
+                                                   kc::tools::buildPlainTable(header, rows),
+                                                   &error);
+    if (!ok) {
+        ThemedMessageBox::warning(this, QStringLiteral("导出分区表"),
+                             QStringLiteral("写入文件失败：%1")
+                                 .arg(error.isEmpty() ? path : error));
+        return;
+    }
+    appendLog(QStringLiteral("分区表已导出（%1 个分区）→ %2")
+                  .arg(rows.size()).arg(QDir::toNativeSeparators(path)));
 }
 
 void MainWindow::probeStorageBrand()
@@ -2743,6 +3517,8 @@ void MainWindow::readGptToFile()
         this, QStringLiteral("保存 LUN %1 的 GPT").arg(lun), gptFileName(lun, false),
         QStringLiteral("GPT 镜像 (*.bin);;所有文件 (*.*)"));
     if (path.isEmpty()) return;
+    beginFlashOperation(QStringLiteral("GPT 导出"), QFileInfo(path).fileName(),
+                        QStringLiteral("LUN %1 起始扇区").arg(lun));
     setBusy(true);
     appendLog(QStringLiteral("正在读取 LUN %1 的 GPT…").arg(lun));
     emit readGptToFileRequested(path, lun);
@@ -2943,6 +3719,19 @@ void MainWindow::updateDeviceInfo(const DeviceInfo& info)
                  info.saharaVersion, info.msmId, info.serial, info.pkHash,
                  info.storageProduct, info.storageVendor, info.productName,
                  info.androidVersion, info.systemVersion, info.securityPatch));
+
+    // 刷机记录的「设备」列：串口 + 机型 + 序列号，三项都在时才有意义。
+    // 空字段跳过而不是留「· ·」—— 有些机型拿不到 model / serial，硬拼出来的是
+    // 「COM7 ·  · 」这种噪音，用户回看时反而看不出是哪台。
+    QStringList parts;
+    if (!info.portName.isEmpty()) parts.push_back(info.portName);
+    const QString deviceModel = !info.productName.isEmpty()
+        ? info.productName
+        : (!info.model.isEmpty() ? info.model : info.storageProduct);
+    if (!deviceModel.isEmpty()) parts.push_back(deviceModel);
+    // identity 上面已经算过（serial 优先、退回 hwid），直接复用。
+    if (!identity.isEmpty()) parts.push_back(identity);
+    m_deviceSummary = parts.join(QStringLiteral(" · "));
 }
 
 void MainWindow::showPartitions(const QVector<PartitionInfo>& partitions)
@@ -2987,10 +3776,17 @@ void MainWindow::showPartitions(const QVector<PartitionInfo>& partitions)
     }
     if (!partitions.isEmpty()) m_partitionTable->selectRow(0);
     updateCheckedCount();
+    // 读回 GPT 后表格才有行 → 「导出分区表」两条要跟着从灰变亮。
+    updateAdvancedItems();
 }
 
 void MainWindow::operationFinished(bool success, const QString& message)
 {
+    // 刷机记录要在**任何状态复位之前**取现场（m_operationKind 由发起操作时打快照，
+    // 这里只是消费它）。放在函数最前面：下面有若干 early branch（自动读 GPT /
+    // 自动重启）会改变 m_connected，但不影响已经发生的这次操作的结果。
+    recordFlashOutcome(success, message);
+
     const bool startAutomaticGptRead = success && m_readGptAfterConnect && m_connected;
     const bool startVersionRead = success && m_connected &&
         message.startsWith(QStringLiteral("分区表读取完成")) &&
@@ -3098,18 +3894,28 @@ void MainWindow::updateAdvancedItems()
 
     const bool ready = m_connected && !m_busy;
     const bool hasPartitions = !m_partitions.isEmpty();
+    // 导出看的是**表格里有没有行**，不是 m_partitions 有没有值：载入 rawprogram
+    // XML 后 m_partitions 是空的（那是 GPT 专用），但表里明明有分区清单可导。
+    const bool hasTableRows = m_partitionTable && m_partitionTable->rowCount() > 0;
     for (int i = 1; i < m_advancedCombo->count(); ++i) {
         QStandardItem* item = model->item(i);
         if (!item) continue;
         const QString action = item->data(Qt::UserRole).toString();
         if (action.isEmpty()) continue;   // 分组标题：保持不可选
         bool enabled = false;
-        if (action == QLatin1String("factoryReset") ||
+        if (action == QLatin1String("flashHistory")) {
+            // 纯本地历史：永远可用（这正是它的价值 —— 设备刷坏了也能回看上次做了什么）。
+            enabled = true;
+        } else if (action == QLatin1String("exportGptCsv") ||
+                   action == QLatin1String("exportGptTxt")) {
+            // 导出只需要「表里有数据」：连不连设备、忙不忙都不影响读内存里的分区表。
+            enabled = hasPartitions || hasTableRows;
+        } else if (action == QLatin1String("factoryReset") ||
             action == QLatin1String("oemUnlock") ||
             action == QLatin1String("basebandBackup")) {
             enabled = ready && hasPartitions;
         } else {
-            // storageInfo / eraseLun / readGpt / writeGpt
+            // storageInfo / eraseLun / readGpt / writeGpt / storageBrand
             enabled = ready;
         }
         // 🔴 用 ItemIsEnabled 而不是 setEnabled：QStandardItemModel 下只有

@@ -1,8 +1,10 @@
 #include "ui/pages/ConsolePage.h"
 
+#include "kc/config/AppSettings.h"
 #include "ui/theme/GlassSettings.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/AppIcons.h"
+#include "ui/widgets/ConsoleWidgets.h"
 #include "ui/widgets/GlassSurface.h"
 
 #include <QCursor>
@@ -154,19 +156,35 @@ protected:
 
         // ── 玻璃方块 ──────────────────────────────────────────────────────
         // 竖向渐变 + 顶边高光 + 1px 描边，与卡片同一套材质：
-        //   浅色主题 = 白玻璃（顶 0.77 → 底 0.43），字形用深墨；
+        //   浅色主题 = 白玻璃（顶 0.93 → 底 0.75），字形用深墨；
         //   深色主题 = 淡白玻璃（顶 0.17 → 底 0.05），字形用近白。
         // 🔴 深色主题**不能**用深灰填充：壁纸本身可能是深色照片，深灰方块会
         //    整块消失，只剩一圈描边。
         QLinearGradient fill(boxRect.topLeft(), boxRect.bottomLeft());
         if (dark) {
-            fill.setColorAt(0.0, QColor(255, 255, 255, 46));
-            fill.setColorAt(0.55, QColor(255, 255, 255, 24));
-            fill.setColorAt(1.0, QColor(255, 255, 255, 13));
+            // 🔴 2026-10-31：深色主题的玻璃方块同样不能太透。
+            //    原来是顶 46 / 中 24 / 底 13（约 5~18% 不透明）—— 压在**浅色**
+            //    壁纸上时方块被照亮，实测底变成 #B7BEDA，而图标是近白 #F8F9FB：
+            //    对比度 1.75:1，图标几乎消失。
+            //    （深色主题 + 浅色壁纸同样是真实组合，这轮审计的测试壁纸里
+            //     就有大片浅色的角色画面。）
+            //    提到 132 / 112 / 96 后，方块底稳定在 #2E3540 附近，
+            //    近白图标对比度回到 10:1 以上，同时仍能透出壁纸的层次。
+            fill.setColorAt(0.0, QColor(0, 0, 0, 132));
+            fill.setColorAt(0.55, QColor(0, 0, 0, 112));
+            fill.setColorAt(1.0, QColor(0, 0, 0, 96));
         } else {
-            fill.setColorAt(0.0, QColor(255, 255, 255, 200));
-            fill.setColorAt(0.55, QColor(255, 255, 255, 156));
-            fill.setColorAt(1.0, QColor(255, 255, 255, 116));
+            // 🔴 2026-10-31：浅色主题的白玻璃**必须够实**。
+            //    原来顶 200 / 中 156 / 底 116（约 45~78% 不透明）——
+            //    压在深色壁纸上时玻璃被壁纸拉暗，方块内实测只剩 #2A303B，
+            //    而图标是深墨 #1B222C：对比度 1.08:1，图标整个消失。
+            //    （浅色主题配深色壁纸不是极端情况，用户完全可能这么用。）
+            //    提到 236 / 214 / 190 后，方块底稳定在 #E8EDF5 附近，
+            //    深墨图标对比度回到 12:1 以上；顶底仍有 46 的梯度 + 顶部高光，
+            //    所以还是「玻璃」而不是实心白块。
+            fill.setColorAt(0.0, QColor(255, 255, 255, 236));
+            fill.setColorAt(0.55, QColor(255, 255, 255, 214));
+            fill.setColorAt(1.0, QColor(255, 255, 255, 190));
         }
         p.setPen(Qt::NoPen);
         p.setBrush(fill);
@@ -208,10 +226,28 @@ protected:
         const QRectF lr(0, kIconHeadroom + kIconBox + 6, width(), kLabelH);
         const QString label = QFontMetrics(f).elidedText(m_title, Qt::ElideRight,
                                                          qMax(12, int(lr.width())));
-        const QColor halo = dark ? QColor(0, 0, 0, 150) : QColor(255, 255, 255, 190);
-        p.setPen(halo);
-        p.drawText(lr.translated(0, 1), Qt::AlignHCenter | Qt::AlignTop, label);
-        p.setPen(palette().color(QPalette::WindowText));
+
+        // 🔴 2026-10-31 修复「浅色主题 + 深色壁纸 = 应用名看不见」。
+        //
+        //    原逻辑是「浅色主题 → 深字 + 白晕；深色主题 → 白字 + 黑晕」，
+        //    光晕只偏移 1px。这个前提**只在壁纸明暗与主题一致时成立**：
+        //    用户完全可以在浅色主题下用一张深夜色视频壁纸。
+        //    实测（深蓝动漫视频壁纸 + 浅色主题）：深字压在 #1C1C1E 上，
+        //    对比度 1.00:1 —— 字彻底消失，只剩一圈几乎看不见的白晕。
+        //
+        //    修法：在标签底下垫一枚**半透明胶囊**，保证文字与胶囊之间是确定的
+        //    对比度，不再赌壁纸明暗。胶囊宽度贴合文字（+12px），圆角 = 高度一半，
+        //    视觉上是一条标签底而不是一块色块。
+        const int textW = QFontMetrics(f).horizontalAdvance(label);
+        const qreal pillW = qMin<qreal>(lr.width(), textW + 12);
+        const QRectF pill(lr.left() + (lr.width() - pillW) / 2.0, lr.top() - 1,
+                          pillW, lr.height() + 2);
+        p.setPen(Qt::NoPen);
+        p.setBrush(dark ? QColor(0, 0, 0, 118) : QColor(255, 255, 255, 150));
+        p.drawRoundedRect(pill, pill.height() / 2.0, pill.height() / 2.0);
+
+        // 文字与胶囊成对出现：深色主题近白字 + 黑胶囊，浅色主题深墨字 + 白胶囊。
+        p.setPen(dark ? QColor(0xF2, 0xF6, 0xFC) : QColor(0x1C, 0x1C, 0x1E));
         p.drawText(lr, Qt::AlignHCenter | Qt::AlignTop, label);
     }
 
@@ -296,7 +332,28 @@ ConsolePage::ConsolePage(QWidget* parent)
     m_dockLayout->setSpacing(0);
     m_dockHost = dock;
 
+    // 主屏小组件（2026-10-29）：图标网格**上方**一排三块玻璃卡（设备 / 最近刷机 /
+    // 时钟）。iOS 主屏的信息层 —— 不加这一排，主屏就只有「点」没有「读」。
+    // 设置里关掉时不创建（m_widgets 保持空指针，外壳的所有调用都判空）。
+    //
+    // 🔴 卡片与它下面那 14px 间距必须一起显隐：只藏卡片的话，关掉开关后主屏
+    //    图标上方会留下一道来路不明的空隙。所以两者装进同一个容器。
+    m_widgetsHost = new QWidget(this);
+    m_widgetsHost->setObjectName(QStringLiteral("consoleWidgetsHost"));
+    auto* widgetsBox = new QVBoxLayout(m_widgetsHost);
+    widgetsBox->setContentsMargins(0, 0, 0, 0);
+    widgetsBox->setSpacing(0);
+    if (kc::AppSettings::current().consoleWidgets) {
+        m_widgets = new ConsoleWidgets(m_widgetsHost);
+        m_widgets->setObjectName(QStringLiteral("consoleWidgets"));
+        widgetsBox->addWidget(m_widgets, 0, Qt::AlignHCenter);
+        widgetsBox->addSpacing(14);
+    } else {
+        m_widgetsHost->hide();
+    }
+
     root->addStretch(1);
+    root->addWidget(m_widgetsHost, 0, Qt::AlignHCenter);
     root->addWidget(m_gridHost, 0, Qt::AlignHCenter);
     root->addStretch(1);
     root->addWidget(m_dockHost, 0, Qt::AlignHCenter);
@@ -309,6 +366,14 @@ void ConsolePage::setEntries(const QVector<Entry>& entries, const QStringList& d
     rebuildGrid();
     rebuildDock();
     refreshTiles();   // 探针模式下没有鼠标事件，这里补一次初始倍率
+}
+
+QStringList ConsolePage::entryKeys() const
+{
+    QStringList keys;
+    keys.reserve(m_entries.size());
+    for (const Entry& e : m_entries) keys.append(e.key);
+    return keys;
 }
 
 void ConsolePage::mouseMoveEvent(QMouseEvent* e)
@@ -443,6 +508,27 @@ void ConsolePage::refreshDockGlass()
 {
     if (!m_dockGlass) return;
     m_dockGlass->setStyle(currentGlassStyle());
+    // 小组件与 Dock 是同一套材质，参数一改要一起刷新（否则设置页拖完滑条，
+    // Dock 变了、上面的卡还是旧浓度）。
+    if (m_widgets) m_widgets->refreshGlass();
+}
+
+void ConsolePage::setWidgetsVisible(bool visible)
+{
+    if (!m_widgetsHost) return;
+    // 懒建：第一次打开才真正建卡片（构造时关掉的话 m_widgets 还是空）。
+    if (visible && !m_widgets) {
+        m_widgets = new ConsoleWidgets(m_widgetsHost);
+        m_widgets->setObjectName(QStringLiteral("consoleWidgets"));
+        auto* box = static_cast<QVBoxLayout*>(m_widgetsHost->layout());
+        box->addWidget(m_widgets, 0, Qt::AlignHCenter);
+        box->addSpacing(14);
+        // 新建的卡片要先拿到当前玻璃参数与数据，否则第一帧是一块没材质的白板。
+        m_widgets->refreshGlass();
+        m_widgets->refreshData();
+        m_widgets->setClockRunning(true);
+    }
+    m_widgetsHost->setVisible(visible);
 }
 
 } // namespace kc::ui

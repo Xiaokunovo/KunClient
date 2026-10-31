@@ -38,6 +38,7 @@ class QVBoxLayout;
 namespace kc::ui {
 
 class GlassSurface;
+class ConsoleWidgets;
 
 class ConsolePage : public QWidget {
     Q_OBJECT
@@ -54,6 +55,11 @@ public:
     /// 重建主屏：entries 进图标网格，dockKeys 是钉在 Dock 上的 key（顺序即显示顺序）。
     void setEntries(const QVector<Entry>& entries, const QStringList& dockKeys);
 
+    /// 当前主屏图标网格里的 key（按显示顺序）。隐藏页不会出现在这里 ——
+    /// 所以这是「这一页上不上主屏」唯一可靠的问法（页面本身的 isHidden()
+    /// 对 QStackedWidget 里的非当前页恒为 true，拿它判断会误报）。
+    QStringList entryKeys() const;
+
     /// 当前是否有瓦片处于放大态。外壳用它决定「能不能把主屏快照存进缓存」——
     /// 放大中的画面存下来，下次回来转场会闪一下放大的图标。
     bool isMagnifying() const { return m_magnifying; }
@@ -64,6 +70,16 @@ public:
 
     /// Dock 本体（外壳算它在大窗里的位置，用来裁壁纸当玻璃背板）。
     QWidget* dockWidget() const { return m_dockHost; }
+
+    /// 主屏小组件条（2026-10-29）。外壳用它裁壁纸当玻璃背板 / 刷新数据 /
+    /// 控制秒级时钟。可能是空指针（设置里关掉小组件时不创建）。
+    ConsoleWidgets* widgetsBar() const { return m_widgets; }
+
+    /// 开关主屏小组件条（设置页「iOS 玩法」里那一个开关）。
+    /// 🔴 必须能当场生效：设置页的文案是「改完立刻生效」，而小组件是构造时按
+    ///    AppSettings 决定建不建的 —— 没有这个入口，关掉开关得重启才看得见变化。
+    /// 懒建：第一次打开才 new，关掉只是 hide（反复开关不重建，避免反复裁背板）。
+    void setWidgetsVisible(bool visible);
 
     /// 喂 Dock 的液态玻璃背板：**与 Dock 等尺寸**的「它背后那块真实画面」。
     /// 由外壳从壁纸帧裁出来（见 MainShell::updateDockBackdrop）——
@@ -93,6 +109,10 @@ private:
     QWidget* m_gridHost = nullptr;
     QGridLayout* m_grid = nullptr;
     QWidget* m_dockHost = nullptr;
+    /// 主屏小组件条（三块玻璃卡）。nullptr = 设置里关掉了。
+    ConsoleWidgets* m_widgets = nullptr;
+    /// 小组件条 + 它下面那 14px 间距的容器（一起显隐，见 setWidgetsVisible）。
+    QWidget* m_widgetsHost = nullptr;
     /// Dock 的液态玻璃面板（= m_dockHost 本体）。单独存一份是为了调 setRawBackdrop。
     GlassSurface* m_dockGlass = nullptr;
     QVBoxLayout* m_dockLayout = nullptr;

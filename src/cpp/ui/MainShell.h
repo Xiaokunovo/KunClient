@@ -57,6 +57,10 @@ class IslandScrim;
 class MarqueeLabel;
 class PageTransition;
 class ToolProgressBar;
+class AssistiveTouch;
+class StandByOverlay;
+class ShortcutsPage;
+class BatchFlashPage;
 
 class MainShell : public QMainWindow {
     Q_OBJECT
@@ -85,12 +89,27 @@ public:
     /// 重新读 AppSettings 里的灵动岛配置并应用到岛（设置页保存后经 invokeMethod 调用）。
     Q_INVOKABLE void applyIslandSettings();
 
+    /// 重新读 AppSettings 里的「iOS 玩法」六项并应用（设置页保存后经 invokeMethod
+    /// 调用）：辅助触控悬浮球显隐 / 主屏小组件 / 快捷指令入口 /
+    /// 专注模式 / 待机自动进入秒数。
+    Q_INVOKABLE void applyIosFeatures();
+
+    /// 待机模式（StandBy）：整屏大时钟 + 设备读数，点一下任意处回来。
+    /// 探针 --standby 也走这里。
+    Q_INVOKABLE void enterStandby();
+    Q_INVOKABLE void leaveStandby();
+
+
+    /// 专注模式「刷机模式」开关（只显示刷机相关页面）。
+    Q_INVOKABLE void setFocusFlashMode(bool on);
+    bool focusFlashMode() const { return m_focusFlash; }
+
     /// 探针（--swipe-preview <0~1>）：把「主屏 → 控制中心」的横滑**定格**在
     /// 指定进度，供截图取证。跟手转场最容易出的问题是「手指到 30% 画面却
     /// 已经 80%」，无头环境里没手指，只能靠定格帧看几何对不对。
     Q_INVOKABLE void previewSwipe(qreal progress);
 
-    /// 全局单例（液态玻璃菜单 / Toast / 抽屉 / 弹窗要找主壳要背板）。
+    /// 全局单例（液态玻璃菜单 / 抽屉 / 弹窗要找主壳要背板）。
     static MainShell* instance() { return s_instance; }
 
     /// 取「某个**顶层**玻璃控件背后那块真实画面」（壁纸 + 环境色晕），
@@ -184,7 +203,7 @@ private:
     bool feedKonamiKey(int key);
     /// 重置 Konami 累积进度（焦点切到输入框 / 按了无关键时调）。
     void resetKonamiProgress();
-    /// 命中后的演出：主 Toast 立刻弹，另外两条按 400ms 间隔依次跟进。
+    /// 命中后的演出（2026-10-31 起为空实现：Toast 已移除）。
     void triggerKonamiEgg();
 
     // ── 控制中心（左滑那一页）──────────────────────────────────────────────
@@ -199,6 +218,17 @@ private:
     void rebuildIslandPages();
     /// 折叠态左右拖动：按可见页序列前后各走一步（到头绕回）。
     void stepIslandPage(int delta);
+
+    // ── iOS 玩法（2026-10-29）──────────────────────────────────────────────
+    void ensureAssistiveTouch();
+    void ensureStandbyOverlay();
+    /// 悬浮球菜单 / 控制中心 / 待机层的统一动作分派：
+    /// console / control / shortcuts / history / standby / focus / screenshot。
+    void handleQuickAction(const QString& id);
+    /// 待机计时：用户有操作就重置（m_standbyTimer 单发）。
+    void noteUserActivity();
+    /// 专注模式：刷新主屏图标表的可见性（只留刷机 + 设备页）。
+    void refreshFocusFilter();
 
     // ── 横滑手势（主屏 ⇄ 控制中心，跟手）──────────────────────────────────
     /// 按下时判定这一笔有没有可滑的目标；-1 = 不接（当前页没有左右邻居）。
@@ -296,9 +326,6 @@ protected:
     //  焦点在输入框（QLineEdit / QTextEdit / QPlainTextEdit）时整段跳过，
     //  否则用户正常打字会被这套序列吃掉（尤其 B / A 两个字母）。
     int m_konamiProgress = 0;
-    /// 命中后的后续 Toast 计时器（400ms 一条），只留一个在手 —— 重复命中先停旧的。
-    QTimer* m_konamiToastTimer = nullptr;
-    int m_konamiToastStep = 0;
 
     PageTransition* m_transition = nullptr;   // 3D 转场叠层（null = 动画已关）
     QWidget* m_central = nullptr;             // shellRoot：灵动岛的宿主
@@ -358,6 +385,22 @@ protected:
 
     /// 全局单例指针（instance() 返回），在构造函数里置位、析构里清。
     static MainShell* s_instance;
+
+    // ── iOS 玩法（2026-10-29）──────────────────────────────────────────────
+    /// 辅助触控悬浮球（普通子控件，挂 central）。nullptr = 设置里关着 / 还没建。
+    AssistiveTouch* m_assistiveTouch = nullptr;
+    /// 待机模式覆盖层（挂 central，盖满整窗）。懒建。
+    StandByOverlay* m_standby = nullptr;
+    /// 通知中心下拉面板（顶层玻璃浮窗，复用）。懒建。
+    /// 待机自动进入的计时器（单发）。idleSeconds = 0 时不停表。
+    QTimer* m_standbyTimer = nullptr;
+    /// 专注模式「刷机模式」当前是否开启。
+    bool m_focusFlash = false;
+    /// 通知中心面板当前是否展开（顶栏铃铛按钮的高亮态也读它）。
+    /// 快捷指令页（2026-10-29）。页面本身在 m_pages 里，这里留一份指针是为了
+    /// 悬浮球菜单「快捷指令」能直接切过去 / 跑某条指令（不靠 findChild 全树搜）。
+    ShortcutsPage* m_shortcutsPage = nullptr;
+    BatchFlashPage* m_batchFlashPage = nullptr;   // 批量刷机队列页（2026-10-31）
 };
 
 } // namespace kc::ui

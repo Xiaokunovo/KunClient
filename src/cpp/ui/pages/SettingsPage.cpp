@@ -1,6 +1,8 @@
 #include "ui/pages/SettingsPage.h"
 
+#include "kc/diag/DiagnosticBundle.h"
 #include "kc/diag/SessionLog.h"
+#include "kc/version.h"
 #include "ui/dialogs/DisclaimerDialog.h"
 #include "ui/dialogs/WallpaperEnginePickerDialog.h"
 #include "ui/dialogs/WelcomeDialog.h"   // 「再看一次新手引导」
@@ -15,11 +17,14 @@
 #include "ui/widgets/IosSwitch.h"
 #include "ui/widgets/NotificationBar.h"
 #include "ui/widgets/SegmentedControl.h"
-#include "ui/widgets/Toast.h"
 
+#include <QMessageBox>
+#include "kc/update/UpdateService.h"
+#include "kc/config/ThemePack.h"
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileDialog>
@@ -34,12 +39,15 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
+#include <QProcess>
 #include <QPushButton>
 #include <QRunnable>
 #include <QScrollArea>
+#include <QSettings>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStandardPaths>
 #include <QThreadPool>
 #include <QTimer>
 #include <QUrl>
@@ -225,6 +233,117 @@ void SettingsPage::buildUi()
     uiForm->setLabelAlignment(Qt::AlignRight);
     uiForm->setHorizontalSpacing(10);
     uiForm->setVerticalSpacing(6);
+
+    // ── 主题包（2026-10-31）─────────────────────────────────────────────────
+    // 「整套外观」的概念：现在外观散在四张卡里十几个滑条，想调出顺眼的观感要
+    // 来回拖，而且没法分享 / 备份。主题包把它收成一个可切换、可导出的整体。
+    //
+    // 🔴 放在「界面设置」最前面：它是**上层操作**（选一套，下面的单项再去微调），
+    //    放在一堆滑条中间会让人以为它也是单个参数。
+    auto* packRow = new QWidget(host);
+    auto* packLayout = new QHBoxLayout(packRow);
+    packLayout->setContentsMargins(0, 0, 0, 0);
+    packLayout->setSpacing(6);
+
+    auto* packCombo = new QComboBox(packRow);
+    packCombo->setMinimumWidth(150);
+    packCombo->addItem(QStringLiteral("（选择主题包）"), QString());
+    for (const kc::config::ThemePack& preset : kc::config::builtinThemePacks()) {
+        packCombo->addItem(preset.name, preset.name);
+        // 说明挂在 tooltip 上：下拉项里塞长文案会撑宽整个卡片。
+        packCombo->setItemData(packCombo->count() - 1, preset.description, Qt::ToolTipRole);
+    }
+    packLayout->addWidget(packCombo);
+
+    auto* importPackButton = new QPushButton(QStringLiteral("导入…"), packRow);
+    importPackButton->setCursor(Qt::PointingHandCursor);
+    packLayout->addWidget(importPackButton);
+
+    auto* exportPackButton = new QPushButton(QStringLiteral("导出当前…"), packRow);
+    exportPackButton->setCursor(Qt::PointingHandCursor);
+    exportPackButton->setToolTip(QStringLiteral("把当前外观导出成 .kcskin 文件，可以分享给别人"));
+    packLayout->addWidget(exportPackButton);
+    packLayout->addStretch();
+    uiForm->addRow(QStringLiteral("主题包:"), packRow);
+
+    auto* packHint = new QLabel(host);
+    packHint->setObjectName(QStringLiteral("settingsHint"));
+    packHint->setWordWrap(true);
+    packHint->setText(QStringLiteral(
+        "主题包是一整套外观（配色 / 玻璃 / 灵动岛 / 小组件）的打包。"
+        "选一套会立刻套用到下面所有单项，之后还能继续微调。"));
+    uiForm->addRow(QString(), packHint);
+
+    // 选中预设 → 套用（改内存 + 重放界面，保存仍走底部的「保存设置」）。
+    connect(packCombo, &QComboBox::currentIndexChanged, this, [this, packCombo](int index) {
+        if (m_loading || index <= 0) return;
+        const QString name = packCombo->itemData(index).toString();
+        kc::config::ThemePack pack;
+        if (!kc::config::findBuiltinThemePack(name, &pack)) return;
+        applyThemePack(pack);
+    });
+
+    // 导入：读文件 → 校验 → 套用。错误要说清楚是哪一步不对。
+    connect(importPackButton, &QPushButton::clicked, this, [this, packCombo] {
+        const QString path = QFileDialog::getOpenFileName(
+            this, QStringLiteral("导入主题包"), QString(),
+            QStringLiteral("KunClient 主题包 (*.kcskin);;所有文件 (*)"));
+        if (path.isEmpty()) return;
+
+        QFile f(path);
+        if (!f.open(QIODevice::ReadOnly)) {
+            QMessageBox::warning(this, QStringLiteral("导入主题包"),
+                QStringLiteral("打不开这个文件：\n%1\n\n%2")
+                    .arg(QDir::toNativeSeparators(path), f.errorString()));
+            return;
+        }
+        const QByteArray content = f.readAll();
+        f.close();
+
+        kc::config::ThemePack pack;
+        QString err;
+        if (!kc::config::themePackFromJson(content, &pack, &err)) {
+            QMessageBox::warning(this, QStringLiteral("导入主题包"),
+                QStringLiteral("这个文件不是有效的主题包。\n\n%1").arg(err));
+            return;
+        }
+        applyThemePack(pack);
+        // 导入的包不在预设列表里 → 把下拉框复位，避免显示成别的预设。
+        QSignalBlocker blocker(packCombo);
+        packCombo->setCurrentIndex(0);
+    });
+
+    // 导出：抓当前外观 → 写文件。
+    connect(exportPackButton, &QPushButton::clicked, this, [this] {
+        kc::config::ThemePack pack = kc::config::captureCurrentThemePack();
+        // 深色状态在 ThemeManager 里，不在 AppSettings —— 补上。
+        pack.dark = kc::ui::ThemeManager::instance().isDark();
+        pack.name = QStringLiteral("我的主题");
+        pack.description = QStringLiteral("从 KunClient 导出的当前外观");
+
+        const QString suggested = QDir(QDir::homePath()).filePath(
+            kc::config::suggestedThemePackFileName(pack.name));
+        const QString path = QFileDialog::getSaveFileName(
+            this, QStringLiteral("导出主题包"), suggested,
+            QStringLiteral("KunClient 主题包 (*.kcskin)"));
+        if (path.isEmpty()) return;
+
+        QByteArray json;
+        QString err;
+        if (!kc::config::themePackToJson(pack, &json, &err)) {
+            QMessageBox::warning(this, QStringLiteral("导出主题包"), err);
+            return;
+        }
+        QFile f(path);
+        if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            QMessageBox::warning(this, QStringLiteral("导出主题包"),
+                QStringLiteral("写不了这个文件：\n%1").arg(f.errorString()));
+            return;
+        }
+        f.write(json);
+        f.close();
+
+    });
 
     // ── 强调色 ────────────────────────────────────────────────────────────
     // 用户口径（2026-10-24）：「多加一点个性化功能」。强调色是唯一一个
@@ -607,6 +726,16 @@ void SettingsPage::buildUi()
     m_engineCompat->setCursor(Qt::PointingHandCursor);
     engineForm->addRow(QString(), m_engineCompat);
 
+    // 刷机前自动备份（2026-10-31）：默认**开**。
+    // 这功能的价值就是「用户不需要记得手动备份」——默认关等于没做。
+    m_preFlashBackup = new QCheckBox(
+        QStringLiteral("刷机前自动备份 GPT 与关键分区（推荐）"), host);
+    m_preFlashBackup->setCursor(Qt::PointingHandCursor);
+    m_preFlashBackup->setToolTip(QStringLiteral(
+        "开始写入 / 擦除前，自动把分区表与 persist、modem、boot 等关键分区读一份到本地。\n"
+        "只读操作，不影响刷机速度；备份失败只记日志，不会拦住刷机。"));
+    engineForm->addRow(QString(), m_preFlashBackup);
+
     auto* engineHint = new QLabel(host);
     engineHint->setObjectName(QStringLiteral("settingsHint"));
     engineHint->setWordWrap(true);
@@ -626,6 +755,7 @@ void SettingsPage::buildUi()
         s.engineMtkBaud = m_engineBaud->currentData().toInt();
         s.engineThreads = m_engineThreads->value();
         s.engineCompatMode = m_engineCompat->isChecked();
+    if (m_preFlashBackup) s.preFlashBackup = m_preFlashBackup->isChecked();
         // 线程数必须立刻应用到全局线程池，否则用户改完要重启才生效。
         // 其余两项由引擎在「下一次连接设备」时自行读取，不需要运行时钩子。
         s.applyRuntime();
@@ -634,10 +764,53 @@ void SettingsPage::buildUi()
     connect(m_engineBaud, &QComboBox::currentIndexChanged, this, scheduleEngine);
     connect(m_engineThreads, &QSpinBox::valueChanged, this, scheduleEngine);
     connect(m_engineCompat, &QCheckBox::toggled, this, scheduleEngine);
+    connect(m_preFlashBackup, &QCheckBox::toggled, this, scheduleEngine);
 
     // 2026-10-13：移除「服务器设置」「FDL 命令」两张卡（对齐 C# 设置页，C# 无这两块）。
     //   · 服务器地址 / FDL 命令改由配置文件与内置默认值决定，设置页不再提供就地编辑；
     //   · 主题切换入口也随「服务器设置」卡一并移除（与标题栏 / 「⋯」菜单的口径一致）。
+
+    // ── iOS 玩法（2026-10-29）─────────────────────────────────────────────
+    // 用户口径「最近苹果新的系统加了好多好玩的，你加进工具里」。这六项全部是
+    // 纯本地 UI 能力，所以放在一张卡里，不跟「刷机引擎」那种硬核参数混在一起。
+    auto* iosCard = makeCard(QStringLiteral("iOS 玩法"));
+    auto* iosList = new IosGroupedList(iosCard);
+    m_assistiveTouch = iosList->addToggleRow(QStringLiteral("辅助触控悬浮球"), false);
+    m_consoleWidgets = iosList->addToggleRow(QStringLiteral("主屏小组件（设备 / 最近刷机 / 时钟）"), true);
+    m_shortcutsPage = iosList->addToggleRow(QStringLiteral("在主屏显示「快捷指令」"), true);
+    m_focusFlashMode = iosList->addToggleRow(QStringLiteral("专注模式：刷机模式"), false);
+
+    // 待机秒数：0 = 从不自动进入（仍可手动打开）。用 QSpinBox 而不是下拉，
+    // 因为「3 分钟 / 5 分钟 / 10 分钟」之外还会有人想要 7 分钟。
+    auto* standbyHost = new QWidget(iosList);
+    auto* standbyRow = new QHBoxLayout(standbyHost);
+    standbyRow->setContentsMargins(0, 0, 0, 0);
+    standbyRow->setSpacing(6);
+    m_standbyIdle = new QSpinBox(standbyHost);
+    m_standbyIdle->setRange(0, 3600);
+    m_standbyIdle->setSingleStep(60);
+    m_standbyIdle->setSuffix(QStringLiteral(" 秒"));
+    m_standbyIdle->setSpecialValueText(QStringLiteral("从不自动"));
+    m_standbyIdle->setMinimumWidth(130);
+    standbyRow->addWidget(m_standbyIdle);
+    iosList->addCustomRow(QStringLiteral("待机模式自动进入"), standbyHost);
+
+    iosList->setFooter(QStringLiteral(
+        "辅助触控：屏幕边上一个可拖动的小白点，点开是主屏 / 控制中心 / 快捷指令 / "
+        "刷机记录 / 待机 / 专注的快捷入口。待机模式：无操作一段时间后"
+        "整屏大时钟 + 设备读数，点一下任意处就回来。"));
+    static_cast<QVBoxLayout*>(iosCard->layout())->addWidget(iosList);
+
+    const auto scheduleIos = [this, saveTimer] {
+        if (m_loading) return;
+        applyIosLive();
+        saveTimer->start();
+    };
+    connect(m_assistiveTouch, &IosSwitch::toggled, this, scheduleIos);
+    connect(m_consoleWidgets, &IosSwitch::toggled, this, scheduleIos);
+    connect(m_shortcutsPage, &IosSwitch::toggled, this, scheduleIos);
+    connect(m_focusFlashMode, &IosSwitch::toggled, this, scheduleIos);
+    connect(m_standbyIdle, &QSpinBox::valueChanged, this, scheduleIos);
 
     // ── 账号 ──────────────────────────────────────────────────────────────
     // 2026-10-20：会员状态 / 模块分级 / 卡密兑换随付费体系整体下线，
@@ -684,21 +857,72 @@ void SettingsPage::buildUi()
     auto* diagHint = new QLabel(host);
     diagHint->setWordWrap(true);
     diagHint->setText(
-        QStringLiteral("遇到刷机失败、工具出错时，日志目录里保存着本次运行的完整记录，"
-                       "可以自己打开查看，或复制出来反馈给开发者。"));
+        QStringLiteral("遇到刷机失败、工具出错时，日志目录里保存着本次运行的完整记录。"
+                       "「导出诊断包」会把最近几天的日志和环境信息打成一个 zip，"
+                       "直接发给开发者就能定位问题。"));
     diagForm->addRow(QString(), diagHint);
 
     auto* diagRow = new QHBoxLayout;
     diagRow->setSpacing(6);
     auto* openLogDirButton = new QPushButton(QStringLiteral("打开日志目录"), host);
     openLogDirButton->setCursor(Qt::PointingHandCursor);
+    auto* bundleButton = new QPushButton(QStringLiteral("导出诊断包"), host);
+    bundleButton->setObjectName(QStringLiteral("primaryButton"));
+    bundleButton->setCursor(Qt::PointingHandCursor);
+    bundleButton->setToolTip(QStringLiteral(
+        "把最近 5 天的会话日志 + 版本 / 系统信息打成一个 zip（不含任何账号凭据）"));
     diagRow->addWidget(openLogDirButton);
+    diagRow->addWidget(bundleButton);
     diagRow->addStretch();
     diagForm->addRow(QStringLiteral("问题反馈:"), diagRow);
 
     static_cast<QVBoxLayout*>(diagCard->layout())->addLayout(diagForm);
     connect(openLogDirButton, &QPushButton::clicked, this, [] {
         QDesktopServices::openUrl(QUrl::fromLocalFile(kc::diag::SessionLog::logDir()));
+    });
+    connect(bundleButton, &QPushButton::clicked, this, [this] {
+        // 服务器已关停，「上传日志」那条路没了；但用户仍然需要「把问题整包发出去」。
+        // 这里在本地打 zip，打完直接把文件管理器定位到那个文件 —— 用户的下一步
+        // 动作（拖进 QQ / 邮件附件）从那里开始，不该让他自己去找。
+        QSettings settings;
+        const QString initialDir = settings.value(
+            QStringLiteral("export/bundleDirectory"),
+            QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).toString();
+        const QString suggested = QDir(initialDir).filePath(
+            kc::diag::suggestedBundleName(QDateTime::currentDateTime()));
+        const QString path = QFileDialog::getSaveFileName(
+            this, QStringLiteral("导出诊断包"), suggested,
+            QStringLiteral("ZIP 压缩包 (*.zip);;所有文件 (*.*)"));
+        if (path.isEmpty()) return;
+        settings.setValue(QStringLiteral("export/bundleDirectory"),
+                          QFileInfo(path).absolutePath());
+
+        // 现场信息：这些是「问一句用户才知道」的东西，能自动带上就别让用户打字。
+        QJsonObject meta;
+        meta.insert(QStringLiteral("主题"),
+                    ThemeManager::instance().isDark() ? QStringLiteral("深色")
+                                                      : QStringLiteral("浅色"));
+        meta.insert(QStringLiteral("应用版本"),
+                    QString::fromLatin1(kc::kVersionString));
+        const kc::diag::BundleResult result = kc::diag::writeDiagnosticBundle(
+            path, QString::fromLatin1(kc::kVersionString), meta);
+        if (!result.ok) {
+            QMessageBox::warning(this, QStringLiteral("导出诊断包"),
+                                 QStringLiteral("导出失败：%1").arg(result.error));
+            return;
+        }
+        QMessageBox::information(
+            this, QStringLiteral("导出诊断包"),
+            QStringLiteral("诊断包已导出（%1 个日志文件）。\n\n%2")
+                .arg(result.logFileCount)
+                .arg(QDir::toNativeSeparators(result.path)));
+        // 定位到文件（Windows 资源管理器选中它）；失败就退回打开所在目录。
+        const bool revealed = QProcess::startDetached(
+            QStringLiteral("explorer.exe"),
+            {QStringLiteral("/select,"), QDir::toNativeSeparators(result.path)});
+        if (!revealed) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(QFileInfo(result.path).absolutePath()));
+        }
     });
 
     // ── 安全与隐私：已随环境检测功能移除（停更离线版 2.0.6，服务器关停）──────
@@ -725,6 +949,100 @@ void SettingsPage::buildUi()
     helpRow->addWidget(replayTourButton);
     helpRow->addStretch();
     helpForm->addRow(QStringLiteral("新手引导:"), helpRow);
+
+    // ── 检查更新（2026-10-31）──────────────────────────────────────────────
+    // 🔴 这里的自动更新**默认只做「检查 + 下载 + 校验」**，装不装由用户点确认。
+    //    原因写在 kc/update/UpdateVerifier.h：SECURITY.md 把「更新包无签名校验」
+    //    列为严重问题，所以这次先把校验补上，再谈自动替换。
+    auto* updateRow = new QHBoxLayout;
+    updateRow->setSpacing(6);
+    auto* checkUpdateButton = new QPushButton(QStringLiteral("检查更新"), host);
+    checkUpdateButton->setCursor(Qt::PointingHandCursor);
+    updateRow->addWidget(checkUpdateButton);
+    auto* updateStatus = new QLabel(host);
+    updateStatus->setObjectName(QStringLiteral("settingsHint"));
+    updateStatus->setWordWrap(true);
+    updateRow->addWidget(updateStatus, 1);
+    helpForm->addRow(QStringLiteral("版本更新:"), updateRow);
+
+    connect(checkUpdateButton, &QPushButton::clicked, this, [this, checkUpdateButton, updateStatus] {
+        checkUpdateButton->setEnabled(false);
+        updateStatus->setText(QStringLiteral("正在检查…"));
+
+        auto* svc = new kc::update::UpdateService(this);
+        svc->setBaseUrl(QStringLiteral("https://kunawa.cn"));
+        svc->check([this, svc, checkUpdateButton, updateStatus](
+                       const kc::update::UpdateCheckResult& r) {
+            checkUpdateButton->setEnabled(true);
+
+            if (!r.ok) {
+                updateStatus->setText(QStringLiteral("检查失败：%1").arg(r.error));
+                svc->deleteLater();
+                return;
+            }
+            if (!r.updateEnabled) {
+                updateStatus->setText(
+                    QStringLiteral("当前未开放自动更新（%1）。可到官网手动下载。")
+                        .arg(r.closedReason.isEmpty() ? QStringLiteral("通道已关闭")
+                                                      : r.closedReason));
+                svc->deleteLater();
+                return;
+            }
+            if (!r.hasUpdate) {
+                updateStatus->setText(
+                    QStringLiteral("已是最新版本（%1）。").arg(r.currentVersion));
+                svc->deleteLater();
+                return;
+            }
+
+            // 有新版本：让用户确认后再下载（不静默下几十 MB）。
+            const QString msg = QStringLiteral("发现新版本 %1（当前 %2）。\n\n%3\n\n是否下载？")
+                                    .arg(r.latestVersion, r.currentVersion,
+                                         r.changelog.left(500));
+            if (QMessageBox::question(this, QStringLiteral("检查更新"), msg)
+                != QMessageBox::Yes) {
+                updateStatus->setText(QStringLiteral("已取消下载。"));
+                svc->deleteLater();
+                return;
+            }
+
+            updateStatus->setText(QStringLiteral("正在下载 %1…").arg(r.latestVersion));
+            svc->downloadAndVerify(r,
+                [updateStatus](qint64 got, qint64 total) {
+                    if (total > 0) {
+                        updateStatus->setText(QStringLiteral("正在下载… %1%")
+                                                  .arg(got * 100 / total));
+                    }
+                },
+                [this, svc, updateStatus, r](bool ok, const QString& path,
+                                             const QString& error) {
+                    if (!ok) {
+                        // 校验失败时 error 已经说明是「哈希不匹配」还是「签名无效」。
+                        updateStatus->setText(QStringLiteral("更新失败：%1").arg(error));
+                        svc->deleteLater();
+                        return;
+                    }
+                    updateStatus->setText(QStringLiteral("已下载并通过校验。"));
+                    if (QMessageBox::question(
+                            this, QStringLiteral("安装更新"),
+                            QStringLiteral("新版本 %1 已下载并通过签名校验。\n\n"
+                                           "安装会重启程序（当前窗口会关闭）。现在安装吗？")
+                                .arg(r.latestVersion))
+                        != QMessageBox::Yes) {
+                        svc->deleteLater();
+                        return;
+                    }
+                    QString err;
+                    if (!kc::update::UpdateService::applyUpdate(path, &err)) {
+                        QMessageBox::warning(this, QStringLiteral("安装更新"), err);
+                        svc->deleteLater();
+                        return;
+                    }
+                    // 脚本已起，本进程要退出才能让出 exe 文件。
+                    QCoreApplication::quit();
+                });
+        });
+    });
 
     static_cast<QVBoxLayout*>(helpCard->layout())->addLayout(helpForm);
     // 🔴 这里**不动** onboarding 标记：重看只是重看，看完再置位一次也无害，
@@ -758,6 +1076,7 @@ void SettingsPage::buildUi()
     hostLayout->addWidget(uiCard);
     hostLayout->addWidget(islandCard);
     hostLayout->addWidget(engineCard);
+    hostLayout->addWidget(iosCard);
     hostLayout->addWidget(diagCard);
     hostLayout->addWidget(helpCard);
     hostLayout->addWidget(legalCard);
@@ -813,6 +1132,16 @@ void SettingsPage::loadFromSettings()
     m_islandDim->setCheckedSilently(s.islandDim);
     m_islandLite->setCheckedSilently(s.islandLiteMotion);
 
+    // iOS 玩法六项（2026-10-29）
+    m_assistiveTouch->setCheckedSilently(s.assistiveTouch);
+    m_consoleWidgets->setCheckedSilently(s.consoleWidgets);
+    m_shortcutsPage->setCheckedSilently(s.shortcutsPageVisible);
+    m_focusFlashMode->setCheckedSilently(s.focusFlashMode);
+    {
+        const QSignalBlocker blocker(m_standbyIdle);
+        m_standbyIdle->setValue(qBound(0, s.standbyIdleSeconds, 3600));
+    }
+
     // 液态玻璃五项 + 预览
     syncGlassFromSettings();
     loadGlassPreviewBackdrop();
@@ -821,6 +1150,7 @@ void SettingsPage::loadFromSettings()
     m_engineBaud->setCurrentIndex(std::max(0, m_engineBaud->findData(s.engineMtkBaud)));
     m_engineThreads->setValue(qBound(0, s.engineThreads, 64));
     m_engineCompat->setChecked(s.engineCompatMode);
+    if (m_preFlashBackup) m_preFlashBackup->setChecked(s.preFlashBackup);
 
     m_legalState->setText(
         s.legalAcceptedVersion > 0
@@ -834,6 +1164,52 @@ void SettingsPage::loadFromSettings()
 
 // 控件 → AppSettings（内存）＋ 重放样式表：滑条拖动时的即时预览，**不写盘**。
 // 写盘交给松手（persist）或「保存设置」，避免拖一次滑条写几十次 settings.json。
+void SettingsPage::applyThemePack(const kc::config::ThemePack& pack)
+{
+    // ① 写进 AppSettings 内存（不落盘 —— 落盘仍走底部「保存设置」）。
+    kc::config::applyThemePackToSettings(pack);
+
+    // ② 深色 / 强调色要立刻生效：这两项是「一眼可见」的，等点保存会让人以为没反应。
+    kc::ui::ThemeManager& tm = kc::ui::ThemeManager::instance();
+    if (tm.isDark() != pack.dark) tm.setDark(pack.dark);
+    if (!pack.accentColor.trimmed().isEmpty()) {
+        kc::ui::ThemeManager::instance().setAccent(QColor(pack.accentColor));
+    }
+    kc::ui::ThemeManager::instance().refreshStyleSheet();
+
+    // ③ 把值回填到各控件（否则滑条还停在旧位置，用户会以为没套用）。
+    //    回填期间要挡住信号，否则每个 setValue 都会触发一次 apply*Live。
+    m_loading = true;
+
+    m_cardOpacity->setValue(qRound(pack.cardOpacity * kPercentMax));
+    m_uiTransparency->setValue(qRound(pack.uiTransparency * kPercentMax));
+
+    m_glassTint->setValue(qRound(pack.glassTint * kPercentMax));
+    m_glassFrost->setValue(qRound(pack.glassFrost));
+    m_glassRefraction->setValue(qRound(pack.glassRefraction * kPercentMax));
+    m_glassDispersion->setValue(qRound(pack.glassDispersion * kPercentMax));
+    m_glassHighlight->setValue(qRound(pack.glassHighlight * kPercentMax));
+
+    if (m_islandTheme) m_islandTheme->setCurrentIndex(
+        std::max(0, m_islandTheme->findData(pack.islandTheme)));
+    if (m_islandRadius) m_islandRadius->setValue(pack.islandRadius);
+    if (m_islandColumns) m_islandColumns->setCurrentIndex(
+        std::max(0, m_islandColumns->findData(pack.islandColumns)));
+    if (m_islandDim) m_islandDim->setCheckedSilently(pack.islandDim);
+    if (m_islandLite) m_islandLite->setCheckedSilently(pack.islandLiteMotion);
+
+    if (m_consoleWidgets) m_consoleWidgets->setCheckedSilently(pack.consoleWidgets);
+
+    syncAccentChips();
+
+    m_loading = false;
+
+    // ④ 让外壳重读一遍（灵动岛 / 主屏小组件都是外壳的子控件）。
+    applyIslandLive();
+    applyIosLive();
+    applyGlassLive();
+}
+
 void SettingsPage::applyLive()
 {
     kc::AppSettings& s = kc::AppSettings::current();
@@ -883,6 +1259,9 @@ void SettingsPage::persist()
     // 其余两项由引擎在「下一次连接设备」时自行读取，不需要运行时钩子。
     s.applyRuntime();
 
+    // iOS 玩法六项：同样立刻生效（悬浮球显隐 / 小组件开关都是当场看得见的）。
+    applyIosLive();
+
     s.save();
 }
 
@@ -905,6 +1284,23 @@ void SettingsPage::applyIslandLive()
 
     if (QWidget* w = window())
         QMetaObject::invokeMethod(w, "applyIslandSettings", Qt::DirectConnection);
+}
+
+// iOS 玩法六项 → AppSettings（内存），再让外壳重读一遍。
+// 与 applyIslandLive 同一条路子：悬浮球 / 待机层 / 小组件都是外壳的子控件，
+// 设置页拿不到指针，走窗口上的 Q_INVOKABLE applyIosFeatures()。
+void SettingsPage::applyIosLive()
+{
+    kc::AppSettings& s = kc::AppSettings::current();
+
+    s.assistiveTouch = m_assistiveTouch->isChecked();
+    s.consoleWidgets = m_consoleWidgets->isChecked();
+    s.shortcutsPageVisible = m_shortcutsPage->isChecked();
+    s.focusFlashMode = m_focusFlashMode->isChecked();
+    s.standbyIdleSeconds = m_standbyIdle->value();
+
+    if (QWidget* w = window())
+        QMetaObject::invokeMethod(w, "applyIosFeatures", Qt::DirectConnection);
 }
 
 // 液态玻璃五项 → AppSettings（内存）+ 刷新预览。
@@ -1031,8 +1427,8 @@ void SettingsPage::applyAndSave()
     ThemeManager::instance().refreshStyleSheet();
     if (QWidget* w = window()) w->update();
 
-    // iOS 玻璃横幅（系统级浮层），比页内通知条更接近 iOS 的反馈方式。
-    Toast::show(QStringLiteral("设置已保存"), Toast::Kind::Success);
+    // 2026-10-31：Toast 横幅已移除。设置是即时生效的（滑条一动界面就变），
+    // 本身就是「保存成功」的视觉反馈，不再额外弹提示。
 }
 
 void SettingsPage::onActivated()

@@ -12,9 +12,11 @@
 #include "ui/pages/BasePage.h"
 #include "ui/pages/CommandConsolePage.h"
 #include "ui/pages/ConsolePage.h"
+#include "ui/widgets/ConsoleWidgets.h"
 #include "ui/pages/ControlCenterPage.h"
 #include "ui/pages/DeviceHomePage.h"
 #include "ui/pages/EdlFlashPage.h"
+#include "ui/MainWindow.h"   // 辅助触控「刷机记录」要调 EDL 窗的 showFlashHistory
 #include "ui/pages/FastbootFlashPage.h"
 #include "ui/pages/FileTransferPage.h"
 #include "ui/pages/MtkFlashPage.h"
@@ -22,6 +24,8 @@
 #include "ui/pages/PayloadPage.h"
 #include "ui/pages/ScreenMirrorPage.h"
 #include "ui/pages/SettingsPage.h"
+#include "ui/pages/ShortcutsPage.h"
+#include "ui/pages/BatchFlashPage.h"
 #include "ui/pages/VisualFlashPage.h"
 #include "ui/pages/XiaomiFastbootPage.h"
 #include "ui/ShellStatus.h"
@@ -30,11 +34,12 @@
 #include "ui/theme/PageTransition.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/AppIcons.h"
+#include "ui/widgets/AssistiveTouch.h"
 #include "ui/widgets/DynamicIsland.h"
 #include "ui/widgets/LiquidGlass.h"
 #include "ui/widgets/LogView.h"
 #include "ui/widgets/MarqueeLabel.h"
-#include "ui/widgets/Toast.h"   // 彩蛋：Konami 码命中后的通知
+#include "ui/widgets/StandByOverlay.h"
 #include "ui/widgets/ToolProgressBar.h"
 
 #include <QAction>
@@ -77,6 +82,7 @@
 #include <QSettings>
 #include <QStackedWidget>
 #include <QStyle>
+#include <QStyleOption>
 #include <QPointer>
 #include <QPropertyAnimation>
 #include <QTimer>
@@ -125,11 +131,28 @@ protected:
         QPushButton::paintEvent(e);   // QSS chrome（背景 / 边框 / hover）
         QPainter p(this);
         p.setRenderHint(QPainter::Antialiasing, true);
-        const QColor c = palette().color(QPalette::ButtonText);
+        // 🔴 取色不能只靠 palette().color(QPalette::ButtonText)：
+        //    QSS 的 `color:` 只保证 style 绘制用它，**不保证回写调色板**。
+        //    浅色主题实测：QSS 写 #5F6B7A（4.78:1），palette() 却给 #8D96A3
+        //    （2.64:1，低于非文本 3:1 门槛）—— 图标因此偏淡。
+        //    这里优先用 QStyleOptionButton 把 QSS 实际生效的调色板取出来，
+        //    拿不到才退回 palette()。
+        QColor c;
+        {
+            QStyleOptionButton opt;
+            initStyleOption(&opt);
+            c = opt.palette.color(QPalette::ButtonText);
+        }
+        if (c.alpha() == 0) c = palette().color(QPalette::ButtonText);
         const qreal cx = width() / 2.0;
         const qreal cy = height() / 2.0;
         const qreal s = 8.5;    // 图标基准尺寸
-        const qreal t = 1.35;   // 笔画粗细
+        // 🔴 最小化用 1.8px，其余 1.35px。
+        //    原因：最小化只有**一条水平线**，1.35px 的线落在半像素上时，
+        //    抗锯齿会把浓度摊到两行上，每行只剩 ~60% —— 实测最暗像素
+        //    只有 #8D96A3（2.65:1），比方形/叉号（#5F6B7A / 4.81:1）淡得多。
+        //    加粗到 1.8px 后线有完整一行实心像素，颜色才等于 QSS 给的值。
+        const qreal t = (m_kind == Kind::Minimize) ? 1.8 : 1.35;
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(c, t, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
         switch (m_kind) {
@@ -265,10 +288,12 @@ protected:
             st.edgeBand = 0.30;     // 矮条上放大比例，折射才落在可见区域内
             st.lightPos = QPointF(0.5, 0.02);   // 光从正上方来（顶栏在窗口最上沿）
             st.tint = qMin(st.tint, 0.52);      // 太实会挡住壁纸，胶囊看着像贴纸
-            // 🔴 dark 恒为 true，**不跟随主题**：胶囊里的品牌名 / 版本号 / 图标
-            //    全是白字（主屏压在壁纸上，QSS 里写死 #F2F6FC）。浅色主题下如果
-            //    走浅色玻璃，白字压白玻璃 = 完全看不见（2026-10-24 截图实测）。
-            glass::paint(p, r, rad, m_backdrop, /*dark=*/true, st);
+            // 🔴 dark 必须**跟随主题**，不能写死 true。
+            //    胶囊里的文字颜色是 QSS 给的：深色下品牌名 #F2F6FC（白）、
+            //    浅色下 #12161C（近黑）。早先这里写死 dark=true ⇒ 浅色主题下
+            //    深字压深玻璃，品牌名和版本号几乎看不见（2026-10-30 截图实测）。
+            //    跟随主题后：浅色 → 浅玻璃 + 深字，深色 → 深玻璃 + 白字，两侧都对。
+            glass::paint(p, r, rad, m_backdrop, /*dark=*/dark, st);
             return;
         }
 
@@ -398,6 +423,7 @@ protected:
     }
 };
 
+/// 与 ThemeToggleButton 同族（自绘 + palette 取色），不用字体字形。
 /// 顶栏品牌 meta（署名 + 签名档）的最大像素宽。顶栏左侧是品牌组 / 返回钮 + 页名、
 /// 正中留给灵动岛，右侧还有主题钮 + 分隔线 + 三个窗口钮，这个预算是不挤到灵动岛的上限。
 constexpr int kBrandMetaWidth = 200;
@@ -415,28 +441,6 @@ constexpr int kKonamiSequence[] = {
     Qt::Key_B, Qt::Key_A,
 };
 constexpr int kKonamiLength = int(sizeof(kKonamiSequence) / sizeof(kKonamiSequence[0]));
-
-/// 命中后依次跟进的趣味 Toast 条数（第一条「秘技已激活」由 triggerKonamiEgg 立刻弹，
-/// 这 2 条按 kKonamiFollowUpGapMs 间隔依次跟进 —— 需求口径就是「再弹 2 条」）。
-constexpr int kKonamiFollowUpCount = 2;
-
-/// 相邻两条 Toast 的间隔（需求口径 400ms）。
-constexpr int kKonamiFollowUpGapMs = 400;
-
-/// 命中后跟进的第 index 条文案（index ∈ [0, kKonamiFollowUpCount)）。
-/// 三条 Toast 各说一件事：①「秘技已激活」② 隐藏能力梗 ③ 刷机人的老规矩 ——
-/// 同一句重复弹三遍会让人以为是卡住了。刻意不放 emoji：Toast 按 QFontMetrics
-/// 量宽，emoji 走字体回退会量不准，末尾会被省略号截断。
-QString konamiFollowUpText(int index)
-{
-    switch (index) {
-    case 0:
-        return QStringLiteral("已解锁隐藏能力：分区表倒背如流（仅限嘴上）");
-    case 1:
-    default:
-        return QStringLiteral("刷机人的老规矩 —— 刷前三炷香，刷完别拔线");
-    }
-}
 
 /// 焦点控件是否是可输入文本的控件 —— Konami 彩蛋必须整段放过它们。
 /// 用 qobject_cast 而不是 inherits()：QLineEdit 在项目里有一串子类
@@ -681,16 +685,16 @@ MainShell::MainShell(QWidget* parent)
     // 全局过滤器（见 eventFilter 里的开关判断，不展开时几乎零成本）。
     qApp->installEventFilter(this);
 
-    // ── 彩蛋：Konami 码的后续 Toast 计时器 ────────────────────────────────
-    //  只一个定时器 + 步进计数（不是三条 singleShot）：重复命中时 stop() 一次
-    //  就能把上一轮的后续文案掐掉，不会两条演出叠在一起。
-    m_konamiToastTimer = new QTimer(this);
-    m_konamiToastTimer->setSingleShot(true);
-    connect(m_konamiToastTimer, &QTimer::timeout, this, [this] {
-        // 每跳一格弹一条；弹完最后一条就把计数器归零，等下一次命中。
-        Toast::show(konamiFollowUpText(m_konamiToastStep), Toast::Kind::Info, 2600);
-        if (++m_konamiToastStep >= kKonamiFollowUpCount) m_konamiToastStep = 0;
-        else m_konamiToastTimer->start(kKonamiFollowUpGapMs);
+    // ── iOS 玩法：待机模式的空闲计时器（2026-10-29）──────────────────────
+    // 单发；任何「用户在场」的证据（按键 / 点击 / 悬浮球拖动 / 待机层退出）
+    // 都调 noteUserActivity() 重起。0 秒 = 从不自动进入（设置里的默认值）。
+    m_standbyTimer = new QTimer(this);
+    m_standbyTimer->setSingleShot(true);
+    connect(m_standbyTimer, &QTimer::timeout, this, [this] {
+        // 有待机层已经在显示 / 正在转场 / 窗口不在前台，都不该突然盖一层黑。
+        if (m_standby && m_standby->isVisible()) return;
+        if (!isVisible() || isMinimized()) return;
+        enterStandby();
     });
 
     // 主题：优先命令行 --light/--dark 落下的 QSettings，其次 AppSettings。
@@ -726,6 +730,10 @@ MainShell::MainShell(QWidget* parent)
     // 此前是直接落到「主页」功能页；改成启动器模型后，主屏本身就是第一落点
     // ——「打开就能用」变成了「打开就能选」，与 iOS 主屏一致。
     showConsole();
+
+    // iOS 玩法六项（2026-10-29）：最后应用一次，此时页面表 / 主屏 / 顶栏都已就位
+    // （悬浮球要算父控件尺寸、专注模式要改页面 hidden 标记、待机计时器要读设置）。
+    applyIosFeatures();
 }
 
 MainShell::~MainShell()
@@ -761,7 +769,6 @@ MainShell::~MainShell()
 
 void MainShell::paintEvent(QPaintEvent* event)
 {
-    Q_UNUSED(event);
     QPainter p(this);
     p.setRenderHint(QPainter::Antialiasing);
     // 🔴 壁纸必须走平滑缩放：视频帧是「按设备像素解、再按逻辑矩形贴」，
@@ -769,6 +776,15 @@ void MainShell::paintEvent(QPaintEvent* event)
     //    小数偏移。不开这个 hint，Qt 光栅引擎一律最近邻 —— 屏上就是块状/发虚。
     //    （2026-10-17 用户报「自定义背景的画面清晰度不对」的两条原因之一。）
     p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+
+    // 🔴 按脏区裁剪：子控件（状态栏跑马灯等）重绘时只会把**自己那一小块**
+    //    标脏，整窗重绘整张壁纸是纯浪费 —— 1280×820 的底色 + 壁纸 + 圆角
+    //    clip 一趟下来是毫秒级，每秒几十次就是肉眼可见的卡顿
+    //    （2026-10-30「动画会有卡顿」的成因之一）。
+    //    裁到 event->rect() 之后，子控件那点重绘就只补它自己底下那一块。
+    if (!event->rect().isEmpty() && event->rect() != rect()) {
+        p.setClipRect(event->rect());
+    }
 
     // 圆角必须和 `QFrame#shellRoot` 的 border-radius **完全一致**（两份 QSS 都是 30px）。
     // 🔴 这里曾是 16px，而 QSS 已经改成 30px —— 壁纸在 r=16 处就被裁掉，
@@ -954,6 +970,14 @@ void MainShell::updateGlassBackdrops()
             m_consolePage->refreshDockGlass();   // 设置页改了参数不用另走通路
             const QRect logical(dock->mapTo(this, QPoint(0, 0)), dock->size());
             m_consolePage->setDockBackdrop(composeBackdrop(logical));
+        }
+        // 主屏小组件条（2026-10-29）：与 Dock 同一套液态玻璃，背板同样要从
+        // 壁纸层裁 —— 它自己 grab 窗口会把底下的图标一起抓进去，磨砂出来一块灰糊。
+        if (auto* widgets = m_consolePage->widgetsBar()) {
+            if (widgets->isVisible() && widgets->width() >= 8 && widgets->height() >= 8) {
+                const QRect logical(widgets->mapTo(this, QPoint(0, 0)), widgets->size());
+                widgets->setBackdrop(composeBackdrop(logical));
+            }
         }
     }
 
@@ -1202,6 +1226,9 @@ void MainShell::resizeEvent(QResizeEvent* event)
     if (m_islandScrim && m_central) m_islandScrim->setGeometry(m_central->rect());
     // 灵动岛贴顶居中（它不进布局，位置全靠这里维护）。
     repositionIsland();
+    // iOS 玩法（2026-10-29）：这三样同样不进布局，尺寸一变要自己跟。
+    if (m_assistiveTouch) m_assistiveTouch->repositionToParent();
+    if (m_standby && m_central) m_standby->setGeometry(m_central->rect());
     rebuildBgFrame();
     rebuildBgBase();
     invalidateConsoleShot();   // 尺寸变了，旧快照的像素尺寸已不对
@@ -1345,6 +1372,196 @@ void MainShell::applyIslandSettings()
     // 配色从 ink / accent 切到 glass（或反过来）时，背板要么得补要么可以丢掉 ——
     // 一律重算一次，代价是 8ms，只在设置变更时发生。
     scheduleGlassBackdrops();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  iOS 玩法六项（2026-10-29）
+//
+//  用户口径「最近苹果新的系统加了好多好玩的，你加进工具里」。这一整块是**纯 UI**
+//  能力，与刷机逻辑零耦合，所以集中在这里，不散进各个页面：
+//    · 辅助触控悬浮球（AssistiveTouch）—— 任何页面都够得着的入口；
+//    · 待机模式（StandByOverlay）—— 整屏大时钟 + 设备读数；
+//    · 专注模式「刷机模式」—— 只留刷机页；
+//    · 主屏小组件（ConsoleWidgets）—— 见 ConsolePage；
+//    · 快捷指令页（ShortcutsPage）—— 见 registerPages。
+// ─────────────────────────────────────────────────────────────────────────────
+
+void MainShell::applyIosFeatures()
+{
+    const kc::AppSettings& s = kc::AppSettings::current();
+
+    // ① 辅助触控悬浮球：设置里打开才创建（懒建，关掉只是 hide，不销毁 ——
+    //    反复开关是常见操作，重建会丢位置与动画状态）。
+    if (s.assistiveTouch) {
+        ensureAssistiveTouch();
+        if (m_assistiveTouch) {
+            m_assistiveTouch->repositionToParent();
+            m_assistiveTouch->setVisible(!m_focusFlash && !(m_standby && m_standby->isVisible()));
+        }
+    } else if (m_assistiveTouch) {
+        m_assistiveTouch->hide();
+    }
+
+    // ③ 主屏小组件：构造时按设置决定建不建，这里补上「当场生效」那条路。
+    if (m_consolePage) m_consolePage->setWidgetsVisible(s.consoleWidgets);
+
+    // ④ 快捷指令页：同样当场生效（不注册的话只能重启才看得见）。
+    refreshFocusFilter();
+    if (!s.shortcutsPageVisible && m_shortcutsPage && m_stack
+        && m_stack->currentWidget() == m_shortcutsPage) {
+        // 正停在被关掉的那一页上：把人送回主屏，否则用户会盯着一个「已关闭」的页面。
+        showConsole();
+    }
+    if (m_island) rebuildIslandPages();
+    updateConsoleEntries();
+
+    // ⑤ 待机模式自动进入：0 = 从不。秒数变了要重起计时器。
+    if (m_standbyTimer) {
+        m_standbyTimer->stop();
+        if (s.standbyIdleSeconds > 0) {
+            m_standbyTimer->start(qMax(10, s.standbyIdleSeconds) * 1000);
+        }
+    }
+
+    // ⑤ 专注模式：设置里改了要立刻反映到主屏与页面表。
+    setFocusFlashMode(s.focusFlashMode);
+}
+
+void MainShell::ensureAssistiveTouch()
+{
+    if (m_assistiveTouch || !m_central) return;
+    m_assistiveTouch = new AssistiveTouch(m_central);
+    // 悬浮球要压在页面栈之上（任何页面都看得见），但在灵动岛 / 待机层之下。
+    m_assistiveTouch->raise();
+    if (m_island) m_island->raise();
+    if (m_standby && m_standby->isVisible()) m_standby->raise();
+    connect(m_assistiveTouch, &AssistiveTouch::actionTriggered, this,
+            &MainShell::handleQuickAction);
+    // 拖动过 = 用户在场，待机计时重新起算。
+    connect(m_assistiveTouch, &AssistiveTouch::dragged, this, &MainShell::noteUserActivity);
+    m_assistiveTouch->repositionToParent();
+}
+
+void MainShell::ensureStandbyOverlay()
+{
+    if (m_standby || !m_central) return;
+    m_standby = new StandByOverlay(m_central);
+    m_standby->setGeometry(m_central->rect());
+    connect(m_standby, &StandByOverlay::dismissed, this, [this] {
+        noteUserActivity();
+        if (m_assistiveTouch) m_assistiveTouch->setVisible(!m_focusFlash);
+    });
+}
+
+void MainShell::enterStandby()
+{
+    ensureStandbyOverlay();
+    if (!m_standby) return;
+    const ShellStatus::Snapshot snap = ShellStatus::instance().snapshot();
+    m_standby->setReadings(snap.device, snap.mode, snap.link, snap.task,
+                           snap.busy ? qRound(snap.percent) : -1);
+    m_standby->setGeometry(m_central->rect());
+    m_standby->raise();
+    // 悬浮球在待机层下应该收掉 —— 待机是「熄灯」，上面还飘个点很怪。
+    if (m_assistiveTouch) m_assistiveTouch->hide();
+    m_standby->showOverlay();
+    m_standby->setFocus();
+}
+
+void MainShell::leaveStandby()
+{
+    if (!m_standby) return;
+    m_standby->hideOverlay();
+    if (m_assistiveTouch) m_assistiveTouch->setVisible(!m_focusFlash);
+    noteUserActivity();
+}
+
+void MainShell::noteUserActivity()
+{
+    if (!m_standbyTimer) return;
+    const int seconds = kc::AppSettings::current().standbyIdleSeconds;
+    if (seconds <= 0) {
+        m_standbyTimer->stop();
+        return;
+    }
+    m_standbyTimer->start(qMax(10, seconds) * 1000);
+}
+
+void MainShell::handleQuickAction(const QString& id)
+{
+    if (id == QLatin1String("console")) {
+        showConsole();
+    } else if (id == QLatin1String("control")) {
+        openControlCenter();
+    } else if (id == QLatin1String("shortcuts")) {
+        if (m_shortcutsPage) navigateTo(QStringLiteral("Shortcuts"));
+
+    } else if (id == QLatin1String("history")) {
+        // 刷机记录窗归 EDL 页（数据在 FlashHistory，但入口在「高级功能 ▾」）。
+        // 先跳 EDL 页再直接调它的公开方法 —— 走 QMetaObject 反射在 Qt6 下
+        // 对「无参无返回」的字符串调用没有合适重载（编译期就报错）。
+        navigateTo(QStringLiteral("EdlFlash"));
+        if (auto* edl = findChild<EdlFlashPage*>()) {
+            if (auto* mw = edl->edlWindow()) mw->showFlashHistory();
+        }
+    } else if (id == QLatin1String("standby")) {
+        enterStandby();
+    } else if (id == QLatin1String("focus")) {
+        setFocusFlashMode(!m_focusFlash);
+    } else if (id == QLatin1String("screenshot")) {
+        onIslandAction(QStringLiteral("screenshot"));
+    }
+}
+
+void MainShell::setFocusFlashMode(bool on)
+{
+    if (m_focusFlash == on) return;
+    m_focusFlash = on;
+    kc::AppSettings& s = kc::AppSettings::current();
+    s.focusFlashMode = on;
+    // 🔴 从悬浮球 / 控制中心切进来时也要落盘：设置页那条路会 save()，
+    //    这条路以前只改内存 —— 结果「关掉程序再打开，专注模式自己没了」，
+    //    而设置页里的开关还停在开着的位置（读的是同一份内存）。
+    s.save();
+
+    refreshFocusFilter();
+    // 专注模式下把浮动入口收掉（悬浮球会挡刷机进度），退出时按设置恢复。
+    if (m_assistiveTouch) {
+        m_assistiveTouch->setVisible(!on && kc::AppSettings::current().assistiveTouch
+                                     && !(m_standby && m_standby->isVisible()));
+    }
+    if (on) {
+        // 进专注模式：停在控制台会让人不知道发生了什么，直接落到 EDL 页。
+        showConsole();
+
+    }
+    updateConsoleEntries();
+    if (m_island) rebuildIslandPages();
+}
+
+void MainShell::refreshFocusFilter()
+{
+    // 专注模式的过滤口径：只留「刷机 + 设备」两组（这两组才是刷机时真正会用到的），
+    // 设置 / 关于 / 命令行 / 快捷指令这些先收起 —— 它们的入口随时能退出来再进。
+    // 实现方式是把不相关页面标成 hidden（与「可视刷写」同一个机制），
+    // 于是主屏网格、灵动岛切换器、控制台快照缓存全部自动跟着变。
+    for (PageEntry& entry : m_pages) {
+        if (entry.key == QLatin1String("ControlCenter")) continue;   // 隐藏页本来就不上主屏
+        if (entry.key == QLatin1String("VisualFlash")) continue;     // 同理
+        const bool flashGroup = entry.group == QLatin1String("flash")
+                                || entry.group == QLatin1String("device");
+        entry.hidden = m_focusFlash ? !flashGroup : false;
+        // 快捷指令页 / 控制中心这类本来就有 hidden 语义的页面不能在这里被解开，
+        // 所以只对「非系统页」恢复；系统页（控制中心）始终保持隐藏。
+        if (!m_focusFlash && entry.key == QLatin1String("ControlCenter")) entry.hidden = true;
+        // 设置里关掉的快捷指令页：退出专注模式也**不许**被恢复出来，
+        // 否则「关掉开关 → 进一次专注模式 → 退出」它自己又冒回主屏了。
+        if (entry.key == QLatin1String("Shortcuts")
+            && !kc::AppSettings::current().shortcutsPageVisible) {
+            entry.hidden = true;
+        }
+    }
+    invalidateConsoleShot();
 }
 
 void MainShell::rebuildIslandPages()
@@ -2061,6 +2278,52 @@ void MainShell::registerPages()
     addPage(QStringLiteral("CommandConsole"), QStringLiteral("命令行"),
             QStringLiteral("advanced"), new CommandConsolePage(this));
 
+    // ── 快捷指令（2026-10-29，iOS「快捷指令」的极简版）────────────────────
+    // 挂在「高级」组：它编排的是刷机流程本身，不是某一台设备的操作。
+    // 🔴 页面**总是**注册，只是按设置标 hidden：设置页的开关写着「改完立刻生效」，
+    //    而「不注册」这条路只能重启才生效（快捷指令页还会连带从灵动岛切换器里消失，
+    //    用户会以为页面被删了）。hidden 与「可视刷写」同一个机制，主屏网格与
+    //    灵动岛切换器都自动跟着变（见 refreshFocusFilter）。
+    {
+        auto* shortcuts = new ShortcutsPage(this);
+        // 页面自己碰不到设备（拿不到内嵌 EDL 窗），需要设备的动作统一转交外壳。
+        // 这里先落一条通知 + 记一条通知历史：真正的设备动作要用户到对应页面确认
+        // （自动发「连接设备」这种命令等于绕过所有确认框，不可接受）。
+        connect(shortcuts, &ShortcutsPage::requestDeviceAction, this,
+                [this](const QString& action, const QString& parameter) {
+                    const QString detail = parameter.isEmpty()
+                        ? QStringLiteral("已转交设备页执行")
+                        : QStringLiteral("参数：%1").arg(parameter);
+                    // 通知中心与 Toast 已移除：这条转交记录只进日志。
+                    Q_UNUSED(detail);
+                });
+        addPage(QStringLiteral("Shortcuts"), QStringLiteral("快捷指令"),
+                QStringLiteral("advanced"), shortcuts,
+                /*hidden=*/!kc::AppSettings::current().shortcutsPageVisible);
+        m_shortcutsPage = shortcuts;
+
+    // ── 批量刷机队列（2026-10-31）──────────────────────────────────────────
+    // 挂在「刷机」组：它编排的就是刷机流程本身。
+    // 🔴 页面不碰设备，需要设备的动作一律 emit requestDeviceAction() 转交外壳
+    //    （与快捷指令页同一条路子）。外壳这边只记日志 —— 真正的刷机要用户
+    //    到 EDL 页确认，自动发「开始刷机」等于绕过所有确认框。
+    {
+        auto* batch = new BatchFlashPage(this);
+        connect(batch, &BatchFlashPage::requestDeviceAction, this,
+                [](const QString& action, const QString& parameter) {
+                    // 🔴 外壳这里**不做任何事**：批量页的转交只是「告知」，
+                    //    真正的刷机必须由用户到 EDL 页确认（自动发「开始刷机」
+                    //    等于绕过所有确认框，不可接受）。
+                    //    参数原样丢掉 —— 批量页自己会在日志里记「已转交」。
+                    Q_UNUSED(action);
+                    Q_UNUSED(parameter);
+                });
+        addPage(QStringLiteral("BatchFlash"), QStringLiteral("批量刷机"),
+                QStringLiteral("flash"), batch);
+        m_batchFlashPage = batch;
+    }
+    }
+
     // ── 云端（cloud）分组：云驱动页已随服务器功能移除（停更离线版）────────
 
     // ── 设置（settings，导航轨里沉底）────────────────────────────────────
@@ -2577,11 +2840,10 @@ void MainShell::resetKonamiProgress()
 
 void MainShell::triggerKonamiEgg()
 {
-    // 第一条立刻弹（「秘技已激活」），另外两条交给 m_konamiToastTimer 每 400ms 一条。
-    Toast::show(QStringLiteral("秘技已激活"), Toast::Kind::Success, 2600);
-    m_konamiToastTimer->stop();
-    m_konamiToastStep = 0;
-    m_konamiToastTimer->start(kKonamiFollowUpGapMs);
+    // 2026-10-31：通知中心与 Toast 横幅已按用户要求整体移除，
+    // 彩蛋不再有「演出」可做（原来靠三条 Toast 提示）。
+    // 序列识别逻辑保留 —— 它是纯输入状态机，将来想换成别的反馈形式
+    // （比如让灵动岛闪一下）时入口还在。
 }
 
 bool MainShell::eventFilter(QObject* watched, QEvent* event)
@@ -2624,6 +2886,11 @@ bool MainShell::eventFilter(QObject* watched, QEvent* event)
         auto* mouse = static_cast<QMouseEvent*>(event);
         const QPoint local = m_island->mapFromGlobal(mouse->globalPosition().toPoint());
         if (!m_island->rect().contains(local)) m_island->setExpanded(false);
+    }
+
+    // 待机计时：任何按键 / 按下都算「用户在场」。
+    if (event->type() == QEvent::KeyPress || event->type() == QEvent::MouseButtonPress) {
+        if (!(m_standby && m_standby->isVisible())) noteUserActivity();
     }
 
     // ── 横滑：主屏 ⇄ 控制中心（跟手）───────────────────────────────────────

@@ -3,7 +3,6 @@
 #include "kc/version.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/NotificationBar.h"
-#include "ui/widgets/Toast.h"
 
 #include <QColor>
 #include <QDateTime>
@@ -258,7 +257,7 @@ void AboutPage::buildUi()
 //  维护者须知（这不是 bug）：
 //    · 触发点 = 「版本信息」卡片里那一行的版本号标签；
 //    · 门槛 = 连续 7 次左键点击，**相邻两次间隔 < 800ms**，任何一次超时都从头计数；
-//    · 效果 = 一条开发者彩蛋 Toast + 版本号标签一次样式脉冲（强调色 → 回落）。
+//    · 效果 = 版本号标签一次样式脉冲（强调色 → 回落）。（Toast 已于 2026-10-31 移除）
 //  为什么用 QTimer + QSS 而不是 QPropertyAnimation：这个标签由 QFormLayout 摆位，
 //  改 geometry 的动画会被布局下一次重排无声吃掉，还会在中途闪一下错位
 //  （见 Motion.h 里「布局管辖的控件不能用 reveal/conceal」那条红线的同一原因）。
@@ -297,9 +296,6 @@ void AboutPage::triggerVersionEgg()
     if (!m_versionLabel) return;
 
     // 文案口径：贴着「刷机工具」主题的开发者玩笑（9008 = 高通 EDL 的 QDLoader 端口）。
-    // 刻意不用 emoji：Toast 按 QFontMetrics 量宽，emoji 走字体回退会量不准而截断。
-    Toast::show(QStringLiteral("彩蛋：版本号七连击达成 —— 这手速，9008 都追不上你"),
-                Toast::Kind::Success, 3600);
 
     // 样式脉冲：强调色 + 加粗 → 亮一档 → 清空局部 QSS 回落到全局样式表。
     // 只碰 color / font-weight，字形宽度变化由 QFormLayout 自己重排，不会与布局打架。

@@ -163,6 +163,29 @@ AppSettings AppSettings::load()
                     const QJsonValue v = r.get({"engineCompatMode", "EngineCompatMode"});
                     if (v.isBool()) s.engineCompatMode = v.toBool();
                 }
+                // iOS 玩法六项（2026-10-29）：缺字段一律保留头文件里的默认值，
+                // 所以老 settings.json 读进来不会崩，只是这几项是新的默认。
+                {
+                    const QJsonValue v = r.get({"assistiveTouch", "AssistiveTouch"});
+                    if (v.isBool()) s.assistiveTouch = v.toBool();
+                }
+                num({"standbyIdleSeconds", "StandbyIdleSeconds"}, s.standbyIdleSeconds);
+                {
+                    const QJsonValue v = r.get({"focusFlashMode", "FocusFlashMode"});
+                    if (v.isBool()) s.focusFlashMode = v.toBool();
+                }
+                {
+                    const QJsonValue v = r.get({"consoleWidgets", "ConsoleWidgets"});
+                    if (v.isBool()) s.consoleWidgets = v.toBool();
+                }
+                {
+                    const QJsonValue v = r.get({"preFlashBackup", "PreFlashBackup"});
+                    if (v.isBool()) s.preFlashBackup = v.toBool();
+                }
+                {
+                    const QJsonValue v = r.get({"shortcutsPageVisible", "ShortcutsPageVisible"});
+                    if (v.isBool()) s.shortcutsPageVisible = v.toBool();
+                }
             }
         }
     }
@@ -227,6 +250,13 @@ void AppSettings::save() const
     o["engineMtkBaud"] = engineMtkBaud;
     o["engineThreads"] = engineThreads;
     o["engineCompatMode"] = engineCompatMode;
+    // iOS 玩法六项（2026-10-29）
+    o["assistiveTouch"] = assistiveTouch;
+    o["standbyIdleSeconds"] = standbyIdleSeconds;
+    o["focusFlashMode"] = focusFlashMode;
+    o["consoleWidgets"] = consoleWidgets;
+    o["preFlashBackup"] = preFlashBackup;
+    o["shortcutsPageVisible"] = shortcutsPageVisible;
 
     QFile f(AppStatePaths::Combine(settingsFileName()));
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;

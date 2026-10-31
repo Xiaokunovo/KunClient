@@ -13,9 +13,16 @@
 //   · 只有 x 偏移在动，文本用 QPainter 画两遍（首尾相接）实现无缝循环；不用
 //     QTimer + move()，那是 QLabel 跑马灯的老做法，滚动时整控件重排、性能差。
 //   · 文本比可用宽度短时**不滚**（静态左对齐）—— 短签名滚起来像故障。
-//   · 尾部留一段空白再接回开头，读起来不赶；步进 1px / 30ms ≈ 33px/s。
+//   · 尾部留一段空白再接回开头，读起来不赶；步进 2px / 50ms ≈ 40px/s。
 //   · 动画总开关关掉时（Motion::animationsEnabled() 为假）退化为静态显示 —— 与
 //     全项目其余动效同一口径。
+//
+//  🔴 2026-10-30 卡顿修复（用户口径「动画会有卡顿」）：
+//     滚动期间每 tick 一次 update()，默认会让 Qt 把**整条父链**标脏 →
+//     MainShell::paintEvent 整窗重绘壁纸 → 再连带所有玻璃子控件重新磨砂 + 折射。
+//     --fps-probe 实测：主屏常驻帧率从 6/s 飙到 900~1500/s，肉眼就是持续卡顿。
+//     修法是把本控件做成**不透明子控件**（WA_OpaquePaintEvent），paintEvent 里
+//     自己把背景铺满，Qt 就不必再让父控件兜底 —— 滚动只剩这一条 22px 高的区域在刷。
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include <QLabel>
@@ -48,6 +55,8 @@ protected:
 private:
     void measure();
     void applyTimerState();
+    /// 铺底用的实色画刷（见 .cpp 里为什么不能用 palette().window()）。
+    QBrush backgroundBrush() const;
 
     QString m_text;
     QTimer* m_timer = nullptr;

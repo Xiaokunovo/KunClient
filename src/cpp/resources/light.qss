@@ -47,7 +47,8 @@ QFrame#titleBar, QFrame#navigation {
 /* 标题栏品牌徽标：不带底板 —— 直接用 logo 图形本身（用户口径：logo 不需要背景） */
 QLabel#appBadge { background: transparent; border: 0; color: #12161C; font-size: 12px; font-weight: 700; }
 QLabel#appTitle { color: #12161C; font-size: 18px; font-weight: 700; letter-spacing: .01em; }
-QLabel#appVersion, QLabel#titleMeta { color: #7A8794; }
+/* 2026-10-30 对比度修复：#7A8794 在浅色顶栏玻璃（#ECF1F9）上只有 3.24:1。 */
+QLabel#appVersion, QLabel#titleMeta { color: #55616F; }
 QPushButton#windowButton, QPushButton#closeButton {
     background: transparent; border: 0; border-radius: 10px; padding: 0; color: #5F6B7A;
 }
@@ -87,8 +88,8 @@ QLabel#groupHeader { color: #12161C; font-size: 13px; font-weight: 600; }
 QLabel#strongLabel { color: #2A3441; font-weight: 600; }
 /* 更新弹窗：v2.0.4 → v2.0.5 里的「新版本号」，大一号 + 强调色，一眼看到落点。 */
 QLabel#updateVersionTo { color: %ACCENT_DEEP%; font-size: 18px; font-weight: 700; }
-QLabel#emptyState { color: #7A8794; }
-QLabel#infoKey { color: #74818F; }
+QLabel#emptyState { color: #55616F; }
+QLabel#infoKey { color: #5A6674; }
 QLabel#infoValue { color: #12161C; font-size: 14px; font-weight: 600; }
 
 /* ── 主页仪表盘（2026-10-16 重做）────────────────────────────────────────
@@ -119,6 +120,12 @@ QScrollArea#infoScroll QWidget { background: transparent; }
 QLineEdit, QComboBox {
     background: rgba(255, 255, 255, .78); border: 1px solid #D8E1EE; border-radius: 12px;
     padding: 7px 11px; selection-background-color: %ACCENT%; selection-color: #ffffff; min-height: 18px;
+    /* 🔴 2026-10-30 对比度修复：placeholder 之前没有规则，走 Qt 默认灰
+       （实测 #8C8C8E 压在 #FDFDFF 上只有 3.30:1）。而 FastbootFlash 的
+       「选择线刷包 / 固件目录，自动匹配 boot.img 等分区镜像」是**操作指引**，
+       淡到看不清等于没写。#5F6B7A ≈ 4.8:1，仍是提示层级但读得清。
+       （Qt 6.5+ 支持这个属性；本项目 Qt 6.11.2。） */
+    placeholder-text-color: #5F6B7A;
 }
 QLineEdit:hover, QComboBox:hover { border-color: #B9C6D8; }
 QLineEdit:focus, QComboBox:focus { border-color: %ACCENT%; background: #ffffff; }
@@ -326,7 +333,7 @@ QHeaderView::section:last  { border-top-right-radius: 15px; }
    虚线描边，跟卡片一起跟着「卡片不透明度」走。 */
 QLabel#dropZone {
     background: rgba(255, 255, 255, %GLASS_CARD%);
-    border: 1px dashed #B9C6D8; border-radius: 16px; color: #7A8794;
+    border: 1px dashed #B9C6D8; border-radius: 16px; color: #55616F;
 }
 /* LogView（ui/widgets/LogView.*）的正文是 QTextEdit#logTextEdit —— 所有日志面板统一走这里 */
 QTextEdit#logTextEdit {
@@ -345,10 +352,10 @@ QLabel#speedText { color: #5F6B7A; }
 
 QFrame#footer { background: rgba(240, 244, 251, %GLASS_PANEL%); border-top: 1px solid #E4EAF4; }
 QLabel#footerWarning { color: #D92C20; }
-QLabel#protocolStatus { color: #1A8F3C; }
+QLabel#protocolStatus { color: #11722E; }
 QLabel#protocolStatus[failed="true"] { color: #D92C20; }
-QLabel#footerStatus { color: #74818F; }
-QLabel#footerStatus[connected="true"] { color: #1A8F3C; }
+QLabel#footerStatus { color: #5A6674; }
+QLabel#footerStatus[connected="true"] { color: #11722E; }
 QLabel#footerStatus[failed="true"] { color: #D92C20; }
 
 QScrollBar:vertical { background: transparent; width: 10px; margin: 2px; }
@@ -385,8 +392,14 @@ QFrame#shellTopBar {
 }
 QLabel#pageTitle { color: #12161C; font-size: 16px; font-weight: 700; letter-spacing: .01em; }
 QLabel#shellBrandName { color: #12161C; font-size: 15px; font-weight: 700; letter-spacing: .01em; }
-QLabel#shellBrandVersion { color: #8E9AA7; font-size: 10px; font-weight: 600; }
-QLabel#shellBrandMeta { color: #98A2AE; font-size: 11px; }
+/* 🔴 顶栏这一组压在**液态玻璃**上，底色不是纯白而是壁纸磨砂后的浅灰蓝
+   （实测采样区间 #C8D2E0 ~ #F4F7FB，随壁纸明暗浮动）。
+   原来的 #8E9AA7 / #98A2AE 在最暗那一档只有 1.9:1 / 1.7:1，实测几乎看不清
+   （2026-10-30 浅色主题截图）。
+   现在取 #4E5A68 / #4E5967：**最坏情况**（最深玻璃底）也有 4.6:1，
+   过 WCAG AA 正文门槛，正常壁纸下约 6:1。 */
+QLabel#shellBrandVersion { color: #4E5A68; font-size: 10px; font-weight: 600; }
+QLabel#shellBrandMeta { color: #4E5967; font-size: 11px; }
 /* 品牌组（NavPill）：胶囊底由 C++ 自绘（主屏压着壁纸才染），这里不给背景。 */
 
 /* 返回钮：30×30 圆形玻璃片（尺寸在 C++ 里定，这里只管皮）。 */
@@ -470,14 +483,21 @@ QFrame#shellStatusBar {
     border-bottom-left-radius: 30px;
     border-bottom-right-radius: 30px;
 }
-QLabel#statusLabel { color: #93A0AD; }
+/* 🔴 2026-10-30 对比度修复：原来是 #93A0AD，压在本条 #ECF1F9 的底上只有
+   **2.35:1** —— 比 WCAG AA 的 4.5 门槛差了一半，「设备: / 模式: / 任务:」
+   这些标签在浅色主题下基本读不出来（自动化对比度审计扫出来的，
+   全 18 个页面都命中同一处）。改成 #5E6A78 = 4.86:1。
+   🔴 注意 #statusValue（读数）是 #2A3441，本来就有 11:1 —— 标签和读数
+   要拉开层级，但不能靠「标签淡到看不见」来拉。 */
+QLabel#statusLabel { color: #5E6A78; }
 QLabel#statusValue { color: #2A3441; }
 /* EDL 链路段（协议 / 状态）：状态: 按 linkState 属性着色。
    🔴 属性选择器是运行时改属性驱动的，改完必须 unpolish/polish 才重绘（代码里已做）。 */
-QLabel#statusValue[linkState="ok"] { color: #1A8F3C; font-weight: 600; }
+QLabel#statusValue[linkState="ok"] { color: #11722E; font-weight: 600; }
 QLabel#statusValue[linkState="failed"] { color: #D92C20; font-weight: 600; }
 QLabel#deviceModeLabel { font-size: 15px; font-weight: 700; }
-QLabel#deviceHintLabel { color: #74818F; }
+/* 2026-10-30 对比度修复：#74818F 只有 3.51:1。 */
+QLabel#deviceHintLabel { color: #5E6A78; }
 /* ── 小米字库牌子（StorageBrandPage）结果卡 ─────────────────────────────
    牌子大字走「一个答案」的层级：26px/700，比页头还大 —— 维修现场是隔着
    半米看屏幕念出来的，不需要第二眼。副行给 loader 原始厂商串，核对用。 */
@@ -488,10 +508,10 @@ QLabel#brandName { color: #4A5765; font-size: 13px; font-weight: 600; }
    按钮 / 弹窗 / 内联面板，所以这一块没有任何 QSS 规则 —— 下拉本身的样式由
    QComboBox 那组规则覆盖。 */
 QLabel#placeholderTitle { color: #12161C; }
-QLabel#placeholderMessage { color: #74818F; }
+QLabel#placeholderMessage { color: #5A6674; }
 /* 状态栏跑马灯（个性签名 / 文案滚动）：一条淡强调底的窄带，读作「装饰层」而非读数槽 */
 QLabel#marqueeLabel { color: %ACCENT_DEEP%; font-size: 12px; background: transparent; }
-QLabel#marqueeLabel[tone="muted"] { color: #74818F; }
+QLabel#marqueeLabel[tone="muted"] { color: #5A6674; }
 QFrame#marqueeBox {
     /* 22px 高的一条字，压在带照片/视频的壁纸上 —— 原来是 8% 的淡蓝底，
        屏上蓝字直接糊进深色背景（2026-10-17 用户截图：「字都看不到了」）。
@@ -556,20 +576,20 @@ QFrame#loginTitleBar { background: transparent; border-bottom: 1px solid #EEF2F8
 QLabel#loginTitleBrand { color: #4A5765; font-size: 12px; font-weight: 700; }
 QPushButton#loginCloseButton {
     background: transparent; border: 0; border-radius: 10px;
-    padding: 2px 9px; min-height: 0; color: #74818F; font-size: 13px;
+    padding: 2px 9px; min-height: 0; color: #5A6674; font-size: 13px;
 }
 QPushButton#loginCloseButton:hover { background: #FF3B30; color: #ffffff; }
 
 QLabel#loginTitle { color: #12161C; font-size: 15px; font-weight: 600; }
 QLabel#loginSubtitle { color: #66727F; font-size: 11.5px; }
-QLabel#loginFieldLabel { color: #74818F; font-size: 11px; }
-QLabel#loginHint { color: #7A8794; font-size: 11px; }
-QLabel#loginFooter { color: #93A0AD; font-size: 10.5px; }
+QLabel#loginFieldLabel { color: #5A6674; font-size: 11px; }
+QLabel#loginHint { color: #55616F; font-size: 11px; }
+QLabel#loginFooter { color: #5E6A78; font-size: 10.5px; }
 
 QFrame#loginTabBar { background: transparent; border-bottom: 1px solid #E6ECF5; }
 QPushButton#loginTab {
     background: transparent; border: 0; border-bottom: 2px solid transparent;
-    border-radius: 0; padding: 6px 0; min-height: 0; color: #74818F; font-size: 12px;
+    border-radius: 0; padding: 6px 0; min-height: 0; color: #5A6674; font-size: 12px;
 }
 QPushButton#loginTab:hover { color: #2A3441; }
 QPushButton#loginTab:checked { color: #12161C; font-weight: 700; border-bottom: 2px solid %ACCENT%; }
@@ -581,7 +601,7 @@ QLabel#loginStatusIcon { font-size: 13px; }
 QLabel#loginStatusText { font-size: 11.5px; }
 QWidget#loginStatus[state="error"] QLabel#loginStatusIcon { color: #D92C20; }
 QWidget#loginStatus[state="error"] QLabel#loginStatusText { color: #B3241A; }
-QWidget#loginStatus[state="ok"] QLabel#loginStatusIcon { color: #1A8F3C; }
+QWidget#loginStatus[state="ok"] QLabel#loginStatusIcon { color: #11722E; }
 QWidget#loginStatus[state="ok"] QLabel#loginStatusText { color: #126C42; }
 
 QPushButton#loginAction {
@@ -592,7 +612,7 @@ QPushButton#loginAction:hover { background: #DCEBFF; border-color: %ACCENT_DEEP%
 QPushButton#loginAction:pressed { background: #CFE2FF; }
 QPushButton#loginAction:disabled { background: rgba(244, 246, 250, .9); border-color: #D8E1EE; color: #A3AEBA; }
 QPushButton#loginAction[variant="success"] {
-    background: #E8F7EE; border-color: #1A8F3C; color: #126C42;
+    background: #E8F7EE; border-color: #1A8F3C; color: #11722E;
 }
 QPushButton#loginAction[variant="success"]:hover { background: #D9F1E4; border-color: #146E2F; }
 QPushButton#loginAction[variant="success"]:disabled { background: rgba(244, 246, 250, .9); border-color: #D8E1EE; color: #A3AEBA; }
@@ -607,7 +627,7 @@ QPushButton#loginSendCode:disabled { background: rgba(244, 246, 250, .9); border
 /* 登录双重验证页的「返回登录」：纯文字链接钮 */
 QPushButton#loginBackLink {
     background: transparent; border: 0; border-radius: 6px;
-    padding: 4px 0; min-height: 0; color: #74818F; font-size: 12px;
+    padding: 4px 0; min-height: 0; color: #5A6674; font-size: 12px;
     text-decoration: underline;
 }
 QPushButton#loginBackLink:hover { color: #2A3441; }
@@ -620,7 +640,7 @@ QFrame#msgTitleBar { background: transparent; border-bottom: 1px solid #EEF2F8; 
 QLabel#msgTitle { color: #12161C; font-size: 13px; font-weight: 600; }
 QPushButton#msgClose {
     background: transparent; border: 0; border-radius: 10px;
-    padding: 2px 9px; min-height: 0; color: #74818F; font-size: 13px;
+    padding: 2px 9px; min-height: 0; color: #5A6674; font-size: 13px;
 }
 QPushButton#msgClose:hover { background: #FF3B30; color: #ffffff; }
 QFrame#msgBody { background: transparent; }
@@ -631,7 +651,7 @@ QFrame#msgBody { background: transparent; }
    （2026-10-18 用户「有些按钮没有圆角」指的就是这类）。半径必须 ≤ 边长÷2。 */
 QLabel#msgIcon { border-radius: 15px; font-size: 15px; font-weight: 700; }
 QLabel#msgIcon[variant="info"]     { background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; border: 1px solid #B9D5F5; }
-QLabel#msgIcon[variant="warning"]  { background: #FEF4E4; color: #B5750A; border: 1px solid #EBCB8E; }
+QLabel#msgIcon[variant="warning"]  { background: #FEF4E4; color: #8F5C06; border: 1px solid #EBCB8E; }
 QLabel#msgIcon[variant="critical"] { background: #FDECEA; color: #D92C20; border: 1px solid #F5C2BD; }
 QLabel#msgIcon[variant="question"] { background: %ACCENT_SUBTLE%; color: %ACCENT_DEEP%; border: 1px solid #B9D5F5; }
 
@@ -679,15 +699,15 @@ QListWidget#partitionList::item:alternate { background: rgba(240, 244, 251, .8);
    卡片 / 标题栏 / 底部按钮复用上面的 #msg*，这里只加正文控件。
    与 dark.qss 同名规则一一对应；改一边必须同步改另一边。 */
 QLabel#fdlLabel { color: #2A3441; font-size: 12px; font-weight: 600; }
-QLabel#fdlHint { color: #74818F; font-size: 11.5px; }
+QLabel#fdlHint { color: #5A6674; font-size: 11.5px; }
 QLabel#fdlHint[error="true"] { color: #D92C20; }
 
 /* 设置页：卡片内的说明文字 / 模块权限行（2026-10-18「刷机引擎」「账号与会员」两张卡）
    [included="false"] 是**属性选择器**：属性在 new 出来之后、显示之前设置，
    QLabel 是普通控件（非自绘），属性选择器对它可靠（对照 #fdlHint[error="true"]）。 */
-QLabel#settingsHint { color: #74818F; font-size: 11.5px; }
+QLabel#settingsHint { color: #5A6674; font-size: 11.5px; }
 QLabel#moduleRow { color: #2A3441; font-size: 12px; }
-QLabel#moduleRow[included="false"] { color: #8A95A3; }
+QLabel#moduleRow[included="false"] { color: #5A6674; }
 
 QPlainTextEdit#fdlBlob, QPlainTextEdit#fdlSig {
     background: rgba(247, 250, 254, .9);
@@ -745,9 +765,9 @@ QLabel#preloadStepState[state="pending"] { color: #A3AEBA; }
 QLabel#preloadStepIcon[state="active"],
 QLabel#preloadStepState[state="active"] { color: %ACCENT_DEEP%; }
 QLabel#preloadStepIcon[state="done"],
-QLabel#preloadStepState[state="done"] { color: #1A8F3C; }
+QLabel#preloadStepState[state="done"] { color: #11722E; }
 QLabel#preloadStepIcon[state="failed"],
-QLabel#preloadStepState[state="failed"] { color: #B5750A; }
+QLabel#preloadStepState[state="failed"] { color: #8F5C06; }
 
 QFrame#preloadPercentRow { background: transparent; }
 QLabel#preloadPercent { color: %ACCENT_DEEP%; font-size: 12px; font-weight: 700; }
@@ -821,7 +841,7 @@ QPushButton#ccNav:hover {
     color: %ACCENT_DEEP%;
 }
 
-QLabel#ccHint { color: #8A95A3; font-size: 11.5px; }
+QLabel#ccHint { color: #5A6674; font-size: 11.5px; }
 
 /* ─────────────────────────────────────────────────────────────────────────
    使用条款 / 隐私说明弹窗（ui/dialogs/DisclaimerDialog.cpp）
@@ -860,8 +880,8 @@ QLabel#legalSummaryText { color: #4C4331; font-size: 12px; }
 
 QLabel#legalSectionTitle { color: %ACCENT_DEEP%; font-size: 13px; font-weight: 700; }
 QLabel#legalBody { color: #3A4450; font-size: 12px; }
-QLabel#dialogFooter { color: #98A2AE; font-size: 11px; }
-QLabel#dialogHint { color: #7A8794; font-size: 11px; }
+QLabel#dialogFooter { color: #5E6A78; font-size: 11px; }
+QLabel#dialogHint { color: #55616F; font-size: 11px; }
 
 QFrame#legalFooter {
     background: rgba(255, 255, 255, 0.86);
@@ -895,7 +915,7 @@ QPushButton#welcomeSkip {
     border: 0;
     border-radius: 10px;
     padding: 6px 12px;
-    color: #8A96A4;
+    color: #5A6674;
     font-size: 12.5px;
 }
 QPushButton#welcomeSkip:hover { background: rgba(15, 23, 42, .06); color: #2A3441; }

@@ -107,7 +107,16 @@ private:
     std::atomic_bool& m_cancelled;
     LogCallback m_log;
     ProgressCallback m_progress;
-    quint64 m_maximumPayload = 1024 * 1024;
+    /// 首次 configure 向设备申请的 payload 上限。
+    ///
+    /// 🔴 这里必须「往大了要」，不能按设备常见的 1 MB 保守取值：Firehose 的
+    /// 协商规则是「设备取 min(你申请的, 它支持的)」，你申请 1 MB，loader 就算
+    /// 支持 8 MB 也只会给你 1 MB。RAW 传输按这个值切片，1 MB 一片意味着 8 GB
+    /// 镜像要 8192 次 USB 批量事务，8 MB 一片只要 1024 次 —— 分片大小是刷写
+    /// 速率的第一影响项，比内存搬运高一个量级。
+    /// 设备真不支持时会在 NAK 日志里报 MaxPayloadSizeToTargetInBytesSupported，
+    /// configure 会据此降档重试（见 parseSupportedPayload），所以往大了要是安全的。
+    quint64 m_maximumPayload = 8 * 1024 * 1024;
     bool m_oplusVip = false;
     /// getstorageinfo 正在查询的 LUN（-1 = 当前不在查询）。
     /// storage_info 里的标量形态（total_blocks / lun_size 单值）只有靠这个

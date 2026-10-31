@@ -35,7 +35,12 @@ SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 #    不是 MSYS2 的 mingw64 —— 所以一律用绝对路径 /e/msys64/mingw64。
 MSYS_ROOT="${MSYS_ROOT:-/e/msys64}"
 MINGW_BIN="$MSYS_ROOT/mingw64/bin"
-export PATH="$MINGW_BIN:/usr/bin:/bin"
+# 🔴 PATH 里必须**保留 Windows 系统目录**（System32 等），不能只留 mingw64 + /usr/bin：
+#    windres 编译 app.rc 时是用 popen 起一个外部预处理器的，而 popen 走的是
+#    CreateProcess + shell —— 找不到 cmd.exe 就直接报
+#    `can't popen ... : No error`，整个构建卡死在 app.rc.obj 上。
+#    （实测：只留 /usr/bin 时连 /bin/true 都 popen 不起来，换 --preprocessor 也不行。）
+export PATH="$MINGW_BIN:/usr/bin:/bin:/c/Windows/System32:/c/Windows"
 export MSYSTEM=MINGW64
 
 # 用**独立的** release 构建目录，避免和日常 debug 构建（build/）互相踩：
@@ -126,9 +131,15 @@ while [ ${#queue[@]} -gt 0 ]; do
             copied=$((copied + 1))
             queue+=("$DIST_DIR/$base")
         fi
-    done < <(ldd "$cur" 2>/dev/null | awk -v b="$MINGW_BIN" '$3 ~ b"/" {print $3}')
+    # 🔴 不能用 `$3 ~ b"/"` 比对路径：本机 ldd 把 mingw64 的 DLL 报成
+    #    `/mingw64/bin/Qt6Core.dll`（MSYS 挂载点），而 $MINGW_BIN 是
+    #    `/e/msys64/mingw64/bin` —— 两者永远匹配不上，闭包会拷 0 个 DLL，
+    #    产物缺 Qt6*.dll 直接起不来（退出码 127）。
+    #    这里改成「按文件名去 $MINGW_BIN 里找」，与路径写法解耦。
+    done < <(ldd "$cur" 2>/dev/null | awk '{print $3}' | grep -E '\.dll$')
 done
 log "主程序依赖闭包：拷入 $copied 个 DLL"
+[ "$copied" -gt 0 ] || fail "依赖闭包为空 —— ldd 没解析出任何 mingw64 DLL，产物必然起不来"
 
 # ── [3] Qt 插件（platforms 必须；styles 增强外观；tls **登录必需**；imageformats 壁纸必需）──
 # 🔴 tls 插件是 HTTPS 的后端：漏了它 QSslSocket::supportsSsl() 恒为 false，
